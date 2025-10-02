@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Autorização Pagamento FAEPA – Form 3 Abas
- * Description: Formulário em 3 passos (shortcode [apf_form]) + CPT de submissões. O dashboard está em includes/inbox.php.
- * Version: 0.1.0
+ * Description: Formulário em 3 passos (shortcode [apf_form]) + portal do prestador + dashboard [apf_inbox].
+ * Version: 0.4.0
  * Author: Você
  * License: GPLv2 or later
  */
@@ -17,85 +17,159 @@ add_action('init', function () {
             'singular_name' => 'Submissão FAEPA',
             'menu_name'     => 'FAEPA Submissões',
         ],
-        'public'      => false,
-        'show_ui'     => true,
-        'show_in_menu'=> true,
-        'supports'    => ['title'],
+        'public'       => false,
+        'show_ui'      => true,
+        'show_in_menu' => true,
+        'supports'     => ['title'],
     ]);
 });
 
+/** Retorna a submissão mais recente do usuário (ou 0 se não houver). */
+function apf_get_user_submission_id( $user_id, $email_prest = '' ){
+    $q = new WP_Query([
+        'post_type'      => 'apf_submission',
+        'post_status'    => 'publish',
+        'posts_per_page' => 1,
+        'orderby'        => 'date',
+        'order'          => 'DESC',
+        'author'         => (int) $user_id,
+        'fields'         => 'ids',
+    ]);
+    if ( $q->have_posts() && ! empty($q->posts[0]) ) return (int) $q->posts[0];
+
+    if ( $email_prest ) {
+        $q2 = new WP_Query([
+            'post_type'      => 'apf_submission',
+            'post_status'    => 'publish',
+            'posts_per_page' => 1,
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+            'meta_query'     => [[
+                'key'     => 'apf_email_prest',
+                'value'   => $email_prest,
+                'compare' => 'LIKE',
+            ]],
+            'fields'         => 'ids',
+        ]);
+        if ( $q2->have_posts() && ! empty($q2->posts[0]) ) return (int) $q2->posts[0];
+    }
+    return 0;
+}
+
 /* ====== Shortcode do formulário (3 abas) ====== */
 add_shortcode('apf_form', function () {
+    if ( ! is_user_logged_in() ) {
+        return '<p>Faça login para enviar sua solicitação.</p>';
+    }
+
     $out = '';
 
-    // Processa envio
-    if (!empty($_POST['apf_submit'])) {
-        if (!isset($_POST['apf_nonce']) || !wp_verify_nonce($_POST['apf_nonce'], 'apf_form_nonce')) {
+    // Processa envio (AGORA: sempre cria um novo registro)
+    if ( ! empty($_POST['apf_submit']) ) {
+        if ( ! isset($_POST['apf_nonce']) || ! wp_verify_nonce($_POST['apf_nonce'], 'apf_form_nonce') ) {
             return '<div style="color:#b00020">Falha de segurança. Recarregue a página.</div>';
         }
 
         // Helpers
-        $get       = fn($k) => isset($_POST[$k]) ? wp_unslash($_POST[$k]) : '';
-        $clean_txt = fn($v) => sanitize_text_field($v);
-        $only_num  = fn($v) => preg_replace('/\D+/', '', $v);
+        $only_num = function($v){ return preg_replace('/\D+/', '', (string)$v); };
+        $clean    = function($v){ return sanitize_text_field($v); };
 
+        // ====== CAPTURA E SANITIZA ======
         // Passo 1
-        $nome_diretor   = $clean_txt($get('nome_diretor'));
-        $num_controle   = $only_num($get('num_controle'));
-        $tel_prestador  = $only_num($get('tel_prestador'));
-        $email_prest    = sanitize_email($get('email_prest'));
-        $num_doc_fiscal = $clean_txt($get('num_doc_fiscal'));
-        $valor_bruto    = $get('valor');
-        $valor_norm     = str_replace(['.', ','], ['', '.'], preg_replace('/[^\d,\.]/', '', $valor_bruto));
+        $nome_diretor   = $clean( wp_unslash($_POST['nome_diretor']   ?? '') );
+        $num_controle   = $only_num( wp_unslash($_POST['num_controle']   ?? '') );
+        $tel_prestador  = $only_num( wp_unslash($_POST['tel_prestador']  ?? '') );
+        $email_prest    = sanitize_email( wp_unslash($_POST['email_prest'] ?? '') );
+        $num_doc_fiscal = $clean( wp_unslash($_POST['num_doc_fiscal'] ?? '') );
+        $valor_bruto    = wp_unslash($_POST['valor'] ?? '');
+
+        // normaliza 1.234,56 -> 1234.56
+        $valor_norm = preg_replace('/[^\d,\.]/', '', $valor_bruto);
+        $valor_norm = str_replace(['.', ','], ['', '.'], $valor_norm);
         if ($valor_norm === '') $valor_norm = '0';
 
-        $pessoa_tipo    = $get('pessoa_tipo') === 'pj' ? 'pj' : 'pf';
-        $nome_empresa   = $clean_txt($get('nome_empresa'));
-        $cnpj           = $only_num($get('cnpj'));
-        $nome_prof      = $clean_txt($get('nome_prof'));
-        $cpf            = $only_num($get('cpf'));
+        $pessoa_tipo  = (isset($_POST['pessoa_tipo']) && $_POST['pessoa_tipo']==='pf') ? 'pf' : 'pj';
+        $nome_empresa = $clean( wp_unslash($_POST['nome_empresa'] ?? '') );
+        $cnpj         = $only_num( wp_unslash($_POST['cnpj'] ?? '') );
+        $nome_prof    = $clean( wp_unslash($_POST['nome_prof'] ?? '') );
+        $cpf          = $only_num( wp_unslash($_POST['cpf'] ?? '') );
 
         // Passo 2
-        $prest_contas   = $clean_txt($get('prest_contas'));
-        $data_prest     = $clean_txt($get('data_prest'));
-        $classificacao  = $clean_txt($get('classificacao'));
-        $descricao      = sanitize_textarea_field($get('descricao'));
-        $nome_curto     = $clean_txt($get('nome_curto'));
-        $carga_horaria  = $only_num($get('carga_horaria'));
+        $prest_contas  = $clean( wp_unslash($_POST['prest_contas'] ?? '') );
+        $data_prest    = $clean( wp_unslash($_POST['data_prest'] ?? '') );
+        $classificacao = $clean( wp_unslash($_POST['classificacao'] ?? '') );
+        $descricao     = sanitize_textarea_field( wp_unslash($_POST['descricao'] ?? '') );
+        $nome_curto    = $clean( wp_unslash($_POST['nome_curto'] ?? '') );
+        $carga_horaria = $only_num( wp_unslash($_POST['carga_horaria'] ?? '') );
 
         // Passo 3
-        $banco          = $clean_txt($get('banco'));
-        $agencia        = $only_num($get('agencia'));
-        $conta          = $only_num($get('conta'));
+        $banco   = $clean( wp_unslash($_POST['banco']   ?? '') );
+        $agencia = $only_num( wp_unslash($_POST['agencia'] ?? '') );
+        $conta   = $only_num( wp_unslash($_POST['conta']   ?? '') );
 
-        // Salva
-        $titulo = 'Solicitação - ' . ($pessoa_tipo==='pj' ? ($nome_empresa ?: 'PJ') : ($nome_prof ?: 'PF')) . ' - ' . current_time('Y-m-d H:i');
+        // Fallback e-mail do usuário logado
+        if ( empty($email_prest) ) {
+            $u = wp_get_current_user();
+            if ( $u && ! empty($u->user_email) ) {
+                $email_prest = sanitize_email($u->user_email);
+            }
+        }
+
+        // ====== SEMPRE CRIA NOVO POST ======
+        $user_id   = get_current_user_id();
+        $titulo    = 'Solicitação - ' . ( $pessoa_tipo==='pj'
+                        ? ( $nome_empresa ?: 'PJ' )
+                        : ( $nome_prof    ?: 'PF' )
+                     ) . ' - ' . current_time('Y-m-d H:i');
+
         $post_id = wp_insert_post([
-            'post_type'   => 'apf_submission',
-            'post_title'  => $titulo,
-            'post_status' => 'publish',
+            'post_type'     => 'apf_submission',
+            'post_title'    => $titulo,
+            'post_status'   => 'publish',
+            'post_author'   => $user_id,
+            // força a data "agora" pra subir no topo
+            'post_date'     => current_time('mysql'),
+            'post_date_gmt' => get_gmt_from_date( current_time('mysql') ),
         ]);
 
-        if ($post_id && !is_wp_error($post_id)) {
-            $meta = compact(
+        if ( $post_id && ! is_wp_error($post_id) ) {
+            // Grava metas
+            $meta = [
                 // passo 1
-                'nome_diretor','num_controle','tel_prestador','email_prest','num_doc_fiscal','valor_norm','pessoa_tipo','nome_empresa','cnpj','nome_prof','cpf',
+                'nome_diretor'   => $nome_diretor,
+                'num_controle'   => $num_controle,
+                'tel_prestador'  => $tel_prestador,
+                'email_prest'    => $email_prest,
+                'num_doc_fiscal' => $num_doc_fiscal,
+                'valor'          => $valor_norm,
+                'pessoa_tipo'    => $pessoa_tipo,
+                'nome_empresa'   => $nome_empresa,
+                'cnpj'           => $cnpj,
+                'nome_prof'      => $nome_prof,
+                'cpf'            => $cpf,
                 // passo 2
-                'prest_contas','data_prest','classificacao','descricao','nome_curto','carga_horaria',
+                'prest_contas'   => $prest_contas,
+                'data_prest'     => $data_prest,
+                'classificacao'  => $classificacao,
+                'descricao'      => $descricao,
+                'nome_curto'     => $nome_curto,
+                'carga_horaria'  => $carga_horaria,
                 // passo 3
-                'banco','agencia','conta'
-            );
-            // grava com prefixo apf_
+                'banco'          => $banco,
+                'agencia'        => $agencia,
+                'conta'          => $conta,
+            ];
             foreach ($meta as $k => $v) {
-                $key = $k === 'valor_norm' ? 'valor' : $k;
-                update_post_meta($post_id, 'apf_'.$key, $v);
+                update_post_meta($post_id, 'apf_'.$k, $v);
             }
+
             $out .= '<div style="padding:12px;border:1px solid #cde;border-radius:8px;background:#f7fbff;margin-bottom:16px">Formulário enviado com sucesso.</div>';
         } else {
             $out .= '<div style="padding:12px;border:1px solid #f3c;border-radius:8px;background:#fff5f8;margin-bottom:16px;color:#b00020">Não foi possível enviar agora.</div>';
         }
     }
 
+    // ====== FORM HTML (3 abas) ======
     ob_start(); ?>
     <div class="apf-card">
       <h2>Autorização de Pagamento</h2>
@@ -248,7 +322,7 @@ add_shortcode('apf_form', function () {
 
     <script>
     (function(){
-      const form = document.getElementById('apfForm');
+      const form  = document.getElementById('apfForm');
       const panes = Array.from(form.querySelectorAll('.apf-pane'));
       const steps = Array.from(form.querySelectorAll('.apf-step'));
       let current = 0;
@@ -346,5 +420,7 @@ add_shortcode('apf_form', function () {
     return $out;
 });
 
+/* ====== includes ====== */
 require_once __DIR__ . '/includes/inbox.php';
 require_once __DIR__ . '/includes/admin-meta.php';
+require_once __DIR__ . '/includes/portal.php';

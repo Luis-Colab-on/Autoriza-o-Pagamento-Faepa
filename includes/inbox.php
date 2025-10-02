@@ -128,10 +128,10 @@ add_shortcode('apf_inbox', function () {
       function norm(s){
         return (s || '')
           .toString()
-          .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // sem acentos
+          .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'') // sem acentos
           .toLowerCase().trim();
       }
-      function digits(s){ return (s||'').toString().replace(/\D+/g,''); }
+      function digits(s){ return (s||'').toString().replace(/\\D+/g,''); }
 
       const $ = (sel, ctx)=> (ctx||document).querySelector(sel);
       const $$ = (sel, ctx)=> Array.prototype.slice.call((ctx||document).querySelectorAll(sel));
@@ -161,22 +161,13 @@ add_shortcode('apf_inbox', function () {
           const base = txt; // preserva
           let html = base;
 
-          // highlight por texto normalizado (aproximação: usa regex simples sem acento)
+          // highlight por texto normalizado
           if(qn && norm(base).indexOf(qn) !== -1){
             try{
-              const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              // não temos acentos aqui, então destacamos direto pelo texto original (pode falhar em acentos diferentes)
+              const esc = q.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
               const re = new RegExp(esc, 'ig');
               html = base.replace(re, m=>'<span class="apf-highlight">'+m+'</span>');
             }catch(e){}
-          }
-          // highlight por dígitos (ex.: cpf/cnpj/tel)
-          if(qd && digits(base).indexOf(qd) !== -1){
-            // tenta destacar sequências numéricas iguais
-            const re2 = new RegExp(qd.split('').join('\\D*'), 'i'); // bem permissivo
-            if(re2.test(digits(base))){
-              // para não quebrar muito, não aplicamos highlight numérico adicional
-            }
           }
           td.innerHTML = html;
         });
@@ -208,7 +199,6 @@ add_shortcode('apf_inbox', function () {
         input.value = '';
         rows.forEach(r=>{
           r.classList.remove('apf-hide');
-          // remove highlights
           $$('.apf-highlight', r).forEach(el=>{ el.outerHTML = el.textContent; });
         });
         countEl.textContent = rows.length + ' registro(s)';
@@ -223,7 +213,6 @@ add_shortcode('apf_inbox', function () {
       });
       btnSearch.addEventListener('click', applyFilter);
       btnClear.addEventListener('click', clearFilter);
-      // Enter no input dispara busca
       input.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); applyFilter(); } });
 
       // contador inicial
