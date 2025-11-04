@@ -19,6 +19,31 @@ add_shortcode('apf_portal', function($atts){
     $user_id    = get_current_user_id();
     $user_email = $user && ! empty($user->user_email) ? sanitize_email($user->user_email) : '';
 
+    $apf_directors = get_option('apf_directors', array());
+    if ( ! is_array($apf_directors) ) {
+        $apf_directors = array();
+    }
+    if ( ! empty($apf_directors) ) {
+        usort($apf_directors, function( $a, $b ){
+            $course_a = $a['course'] ?? '';
+            $course_b = $b['course'] ?? '';
+            $by_course = strcasecmp($course_a, $course_b);
+            if ( $by_course !== 0 ) {
+                return $by_course;
+            }
+            return strcasecmp($a['director'] ?? '', $b['director'] ?? '');
+        });
+    }
+    $apf_director_names = array();
+    foreach ( $apf_directors as $entry ) {
+        if ( isset($entry['director']) ) {
+            $name = trim((string) $entry['director']);
+            if ( $name !== '' ) {
+                $apf_director_names[$name] = true;
+            }
+        }
+    }
+
     // ====== PROCESSA SALVAMENTO (POST normal) ======
     if ( ! empty($_POST['apf_portal_submit']) ) {
         if ( ! isset($_POST['apf_portal_nonce']) || ! wp_verify_nonce($_POST['apf_portal_nonce'], 'apf_portal_save') ) {
@@ -228,7 +253,31 @@ add_shortcode('apf_portal', function($atts){
           <section class="apf-pane is-active" id="qe1">
             <div class="apf-grid">
               <label>Nome Completo Diretor Executivo
-                <input type="text" name="nome_diretor" value="<?php echo esc_attr($g('nome_diretor')); ?>">
+                <?php $current_dir = $g('nome_diretor'); ?>
+                <?php if ( ! empty($apf_directors) ) : ?>
+                  <select name="nome_diretor">
+                    <option value="" <?php echo selected($current_dir, '', false); ?>>Selecione um diretor</option>
+                    <?php foreach ( $apf_directors as $dir_entry ) :
+                        $dir_name = isset($dir_entry['director']) ? trim((string) $dir_entry['director']) : '';
+                        if ( $dir_name === '' ) { continue; }
+                        $dir_course = isset($dir_entry['course']) ? trim((string) $dir_entry['course']) : '';
+                        $label = $dir_course ? $dir_course . ' — ' . $dir_name : $dir_name;
+                        $selected = selected($current_dir, $dir_name, false);
+                    ?>
+                      <option value="<?php echo esc_attr($dir_name); ?>" data-course="<?php echo esc_attr($dir_course); ?>" <?php echo $selected; ?>>
+                        <?php echo esc_html($label); ?>
+                      </option>
+                    <?php endforeach; ?>
+                    <?php if ( $current_dir !== '' && empty($apf_director_names[$current_dir]) ) : ?>
+                      <option value="<?php echo esc_attr($current_dir); ?>" selected>
+                        <?php echo esc_html($current_dir . ' (manual)'); ?>
+                      </option>
+                    <?php endif; ?>
+                  </select>
+                <?php else : ?>
+                  <input type="text" name="nome_diretor" value="<?php echo esc_attr($current_dir); ?>">
+                  <span class="apf-field-note">Cadastre diretores no dashboard financeiro para habilitar a seleção.</span>
+                <?php endif; ?>
               </label>
 
               <label>Número de Controle Secretaria
@@ -360,12 +409,14 @@ add_shortcode('apf_portal', function($atts){
       .apf-pane.is-active{display:block}
       .apf-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
       .apf-grid label{display:flex;flex-direction:column;font-size:13px;color:#344054}
-      .apf-grid input,.apf-grid textarea{border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;font-size:14px}
+      .apf-grid input,.apf-grid textarea,.apf-grid select{border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;color:#344054}
+      .apf-grid select{appearance:none;-webkit-appearance:none;background-image:url('data:image/svg+xml;utf8,<svg fill=\"none\" stroke=\"%23475067\" stroke-width=\"1.5\" viewBox=\"0 0 20 20\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M6 8l4 4 4-4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>');background-position:calc(100% - 12px) 50%;background-repeat:no-repeat;padding-right:36px}
       .apf-row{display:flex;gap:16px;border:none;margin:8px 0 0;padding:0}
       .apf-radio{display:flex;align-items:center;gap:6px}
       .apf-actions{display:flex;justify-content:space-between;margin-top:16px}
       .apf-actions button{background:#1f6feb;color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer}
       .apf-actions .apf-prev{background:#a0a7b4}
+      .apf-field-note{display:block;font-size:12px;color:#b42318;margin-top:6px}
       @media(max-width:780px){ .apf-grid{grid-template-columns:1fr} }
     </style>
 
@@ -407,6 +458,23 @@ add_shortcode('apf_portal', function($atts){
       }
       radios.forEach(r => r.addEventListener('change', togglePessoa));
       togglePessoa();
+
+      const directorSelect = form.querySelector('select[name="nome_diretor"]');
+      const courseInput = form.querySelector('input[name="nome_curto"]');
+      if (directorSelect && courseInput) {
+        const syncCourse = () => {
+          const option = directorSelect.options[directorSelect.selectedIndex];
+          if (!option) return;
+          const course = option.getAttribute('data-course') || '';
+          if (course) {
+            courseInput.value = course;
+          }
+        };
+        directorSelect.addEventListener('change', syncCourse);
+        if (!courseInput.value) {
+          syncCourse();
+        }
+      }
 
       // Máscaras
       const onlyNum = v => (v||'').toString().replace(/\D+/g,'');
