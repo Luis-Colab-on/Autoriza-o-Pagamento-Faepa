@@ -12,7 +12,12 @@ add_shortcode('apf_portal', function($atts){
     ], $atts, 'apf_portal');
 
     if ( ! is_user_logged_in() ) {
-        return '<div class="apf-card" style="max-width:720px;margin:16px auto;padding:18px;border:1px solid #e6e9ef;border-radius:12px;background:#fff">Faça login para acessar o portal do prestador.</div>';
+        $redirect = isset($_SERVER['REQUEST_URI']) ? esc_url( $_SERVER['REQUEST_URI'] ) : home_url();
+        return apf_render_login_card(array(
+            'redirect'    => $redirect,
+            'title'       => 'Faça login para acessar o portal',
+            'description' => 'Sua solicitação e histórico ficam salvos na conta. Entre para atualizar seus dados ou criar uma nova solicitação.',
+        ));
     }
 
     $user       = wp_get_current_user();
@@ -91,63 +96,34 @@ add_shortcode('apf_portal', function($atts){
             'conta'          => $only_num($_POST['conta'] ?? ''),
         ];
 
-        // ====== UPSERT no mesmo registro do usuário ======
-        // 1) tenta pelo autor
-        $post_id = function_exists('apf_get_user_submission_id') ? apf_get_user_submission_id( $user_id, $email_prest ) : 0;
+        // ====== cria sempre um novo registro ======
+        $titulo = 'Solicitação - ' . (
+            $pessoa_tipo === 'pj'
+                ? ( $payload['nome_empresa'] ?: 'PJ' )
+                : ( $payload['nome_prof'] ?: 'PF' )
+        ) . ' - ' . current_time('Y-m-d H:i');
 
-        // 2) fallback por e-mail, caso registros antigos sem autor
-        if ( ! $post_id && $email_prest ) {
-            $q = new WP_Query([
-                'post_type'      => 'apf_submission',
-                'post_status'    => 'publish',
-                'posts_per_page' => 1,
-                'orderby'        => 'date',
-                'order'          => 'DESC',
-                'meta_query'     => [[
-                    'key'     => 'apf_email_prest',
-                    'value'   => $email_prest,
-                    'compare' => 'LIKE',
-                ]],
-                'fields'         => 'ids',
-            ]);
-            if ( $q->have_posts() && ! empty($q->posts[0]) ) {
-                $post_id = (int) $q->posts[0];
-                // vincula ao autor atual
-                wp_update_post(['ID'=>$post_id,'post_author'=>$user_id]);
-            }
-        }
+        $post_args = [
+            'post_type'     => 'apf_submission',
+            'post_title'    => $titulo,
+            'post_status'   => 'publish',
+            'post_author'   => $user_id,
+            'post_date'     => current_time('mysql'),
+            'post_date_gmt' => get_gmt_from_date( current_time('mysql') ),
+        ];
 
-        // 3) cria se ainda não existir
-        if ( ! $post_id ) {
-            $post_id = wp_insert_post([
-                'post_type'   => 'apf_submission',
-                'post_title'  => 'Solicitação - ' . current_time('Y-m-d H:i'),
-                'post_status' => 'publish',
-                'post_author' => $user_id,
-            ]);
-        }
+        $post_id = wp_insert_post( $post_args );
 
-        if ( $post_id && ! is_wp_error($post_id) ) {
-            // grava metas (os mesmos campos do Admin)
-            foreach ($payload as $k => $v) {
-                update_post_meta($post_id, 'apf_'.$k, $v);
+        if ( $post_id && ! is_wp_error( $post_id ) ) {
+            foreach ( $payload as $k => $v ) {
+                update_post_meta( $post_id, 'apf_' . $k, $v );
             }
 
-            // atualiza título (sem obrigatoriamente mexer na data)
-            $titulo = 'Solicitação - ' . ( $pessoa_tipo==='pj' ? ($payload['nome_empresa'] ?: 'PJ') : ($payload['nome_prof'] ?: 'PF') ) . ' - ' . get_the_date('Y-m-d H:i', $post_id);
-            wp_update_post([
-                'ID'          => $post_id,
-                'post_title'  => $titulo,
-                'post_author' => $user_id,
-                'post_status' => 'publish',
-            ]);
-
-            // PRG: evita re-envio ao dar refresh e mostra aviso
-            wp_safe_redirect( add_query_arg('apf_updated','1', get_permalink()) . '#apf-portal-root' );
+            wp_safe_redirect( add_query_arg( 'apf_updated', '1', get_permalink() ) . '#apf-portal-root' );
             exit;
-        } else {
-            return '<div style="max-width:720px;margin:16px auto;padding:12px;border:1px solid #fecaca;border-radius:10px;background:#fff5f5;color:#991b1b">Não foi possível salvar agora.</div>';
         }
+
+        return '<div style="max-width:720px;margin:16px auto;padding:12px;border:1px solid #fecaca;border-radius:10px;background:#fff5f5;color:#991b1b">Não foi possível salvar agora.</div>';
     }
 
     // ====== CARREGA O REGISTRO PARA PRÉ-PREENCHER (puxa do Admin) ======
@@ -261,15 +237,15 @@ add_shortcode('apf_portal', function($atts){
                         $dir_name = isset($dir_entry['director']) ? trim((string) $dir_entry['director']) : '';
                         if ( $dir_name === '' ) { continue; }
                         $dir_course = isset($dir_entry['course']) ? trim((string) $dir_entry['course']) : '';
-                        $label = $dir_course ? $dir_course . ' — ' . $dir_name : $dir_name;
+                        $label = $dir_course ? $dir_name . ' — ' . $dir_course : $dir_name;
                         $selected = selected($current_dir, $dir_name, false);
                     ?>
-                      <option value="<?php echo esc_attr($dir_name); ?>" data-course="<?php echo esc_attr($dir_course); ?>" <?php echo $selected; ?>>
+                      <option value="<?php echo esc_attr($dir_name); ?>" data-course="<?php echo esc_attr($dir_course); ?>" data-full-label="<?php echo esc_attr($label); ?>" data-director-label="<?php echo esc_attr($dir_name); ?>" <?php echo $selected; ?>>
                         <?php echo esc_html($label); ?>
                       </option>
                     <?php endforeach; ?>
                     <?php if ( $current_dir !== '' && empty($apf_director_names[$current_dir]) ) : ?>
-                      <option value="<?php echo esc_attr($current_dir); ?>" selected>
+                      <option value="<?php echo esc_attr($current_dir); ?>" data-course="" data-full-label="<?php echo esc_attr($current_dir . ' (manual)'); ?>" data-director-label="<?php echo esc_attr($current_dir); ?>" selected>
                         <?php echo esc_html($current_dir . ' (manual)'); ?>
                       </option>
                     <?php endif; ?>
@@ -461,8 +437,9 @@ add_shortcode('apf_portal', function($atts){
 
       const directorSelect = form.querySelector('select[name="nome_diretor"]');
       const courseInput = form.querySelector('input[name="nome_curto"]');
-      if (directorSelect && courseInput) {
+      if (directorSelect) {
         const syncCourse = () => {
+          if (!courseInput) return;
           const option = directorSelect.options[directorSelect.selectedIndex];
           if (!option) return;
           const course = option.getAttribute('data-course') || '';
@@ -470,10 +447,34 @@ add_shortcode('apf_portal', function($atts){
             courseInput.value = course;
           }
         };
-        directorSelect.addEventListener('change', syncCourse);
-        if (!courseInput.value) {
+        const restoreFullLabels = () => {
+          Array.from(directorSelect.options).forEach(opt => {
+            const fullLabel = opt.getAttribute('data-full-label');
+            if (fullLabel !== null) {
+              opt.textContent = fullLabel;
+            }
+          });
+        };
+        const applyDirectorLabels = () => {
+          restoreFullLabels();
+          const current = directorSelect.options[directorSelect.selectedIndex];
+          if (current) {
+            const directorLabel = current.getAttribute('data-director-label');
+            if (directorLabel) {
+              current.textContent = directorLabel;
+            }
+          }
+        };
+        directorSelect.addEventListener('change', () => {
+          syncCourse();
+          applyDirectorLabels();
+        });
+        directorSelect.addEventListener('focus', restoreFullLabels);
+        directorSelect.addEventListener('blur', applyDirectorLabels);
+        if (!courseInput || !courseInput.value) {
           syncCourse();
         }
+        applyDirectorLabels();
       }
 
       // Máscaras

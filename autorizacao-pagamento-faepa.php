@@ -56,10 +56,90 @@ function apf_get_user_submission_id( $user_id, $email_prest = '' ){
     return 0;
 }
 
+if ( ! function_exists( 'apf_render_login_card' ) ) {
+    /**
+     * Renderiza um cartão de login elegante reutilizado pelo formulário público e portal.
+     */
+    function apf_render_login_card( $args = array() ) {
+        if ( ! function_exists( 'wp_login_form' ) ) {
+            return '<p>Faça login para continuar.</p>';
+        }
+
+        $defaults = array(
+            'redirect'       => isset( $_SERVER['REQUEST_URI'] ) ? esc_url( $_SERVER['REQUEST_URI'] ) : home_url(),
+            'title'          => 'Acesse sua conta',
+            'description'    => 'Use sua conta FAEPA ou cadastre-se rapidamente para continuar o envio.',
+        );
+        $args = wp_parse_args( $args, $defaults );
+
+        $form = wp_login_form( array(
+            'echo'           => false,
+            'redirect'       => $args['redirect'],
+            'remember'       => true,
+            'label_username' => 'Usuário ou e-mail',
+            'label_password' => 'Senha',
+            'label_remember' => 'Manter conectado',
+            'label_log_in'   => 'Entrar',
+            'form_id'        => 'apf-login-form',
+        ) );
+
+        static $printed_css = false;
+        $css = '';
+        if ( ! $printed_css ) {
+            $printed_css = true;
+            $css = '
+            <style>
+              .apf-login-card{max-width:420px;margin:48px auto;border-radius:20px;background:#ffffff;box-shadow: 0 18px 35px rgb(0 0 0 / 65%);;color:#0f172a;padding:36px;}
+              .apf-login-card__inner{padding:0;}
+              .apf-login-card__badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:rgba(25,118,210,.12);color:#0d47a1;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;}
+              .apf-login-card h2{margin:0;font-size:24px;color:#0f172a;}
+              .apf-login-card p{margin:8px 0 0;font-size:13.5px;color:#475467;}
+              .login-remember {width: 13px; white-space: nowrap;}
+              #apf-login-form{margin-top:24px;display:grid;gap:18px;}
+              #apf-login-form p{margin:0;}
+              #apf-login-form label{display:flex;font-size:13px;font-weight:600;color:#1d2939;gap:6px;}
+              #apf-login-form input[type="text"],#apf-login-form input[type="password"]{border:1px solid #d0d5dd;border-radius:12px;padding:12px 14px;font-size:14px;width:100%;transition:border-color .18s ease, box-shadow .18s ease;}
+              #apf-login-form input[type="text"]:focus,#apf-login-form input[type="password"]:focus{border-color:#1976d2;box-shadow:0 0 0 4px rgba(25,118,210,.18);outline:none;}
+              #apf-login-form .forgetmenot{display:flex;align-items:center;gap:8px;font-size:13px;color:#475467;margin-top:4px;}
+              #apf-login-form .forgetmenot label{flex-direction:row;align-items:center;font-size:13px;font-weight:500;gap:8px;margin:0;}
+              #apf-login-form .forgetmenot input{margin:0;}
+              #apf-login-form .submit{margin:0;}
+              #apf-login-form .submit input{width:100%;border:none;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:600;background:#1976d2;color:#fff;cursor:pointer;transition:background .2s ease, box-shadow .2s ease;}
+              #apf-login-form .submit input:hover{background:#0d47a1;box-shadow:0 12px 24px rgba(13,71,161,.28);}
+              .apf-login-card__footer{margin-top:16px;display:flex;justify-content:space-between;gap:12px;font-size:13px;}
+              .apf-login-card__footer a{color:#1976d2;text-decoration:none;font-weight:600;}
+              .apf-login-card__footer a:hover{text-decoration:underline;}
+              @media(max-width:540px){
+                .apf-login-card{margin:32px 16px;padding:30px 26px;}
+                .apf-login-card__inner{padding:28px 22px;}
+                .apf-login-card__footer{flex-direction:column;align-items:flex-start;}
+              }
+            </style>';
+        }
+
+        $register_url = esc_url( wp_registration_url() );
+        $lost_url     = esc_url( wp_lostpassword_url() );
+
+        return $css . '
+        <div class="apf-login-card" aria-live="polite">
+          <div class="apf-login-card__inner">
+            <span class="apf-login-card__badge">Área Restrita</span>
+            <h2>' . esc_html( $args['title'] ) . '</h2>
+            <p>' . esc_html( $args['description'] ) . '</p>
+            ' . $form . '
+            <div class="apf-login-card__footer">
+              <a href="' . $register_url . '">Criar uma conta</a>
+              <a href="' . $lost_url . '">Esqueci minha senha</a>
+            </div>
+          </div>
+        </div>';
+    }
+}
+
 /* ====== Shortcode do formulário (3 abas) ====== */
 add_shortcode('apf_form', function () {
     if ( ! is_user_logged_in() ) {
-        return '<p>Faça login para enviar sua solicitação.</p>';
+        return apf_render_login_card();
     }
 
     $out = '';
@@ -221,15 +301,15 @@ add_shortcode('apf_form', function () {
                       $dir_name = isset($dir_entry['director']) ? trim((string) $dir_entry['director']) : '';
                       if ( $dir_name === '' ) { continue; }
                       $dir_course = isset($dir_entry['course']) ? trim((string) $dir_entry['course']) : '';
-                      $label = $dir_course ? $dir_course . ' — ' . $dir_name : $dir_name;
+                      $label = $dir_course ? $dir_name . ' — ' . $dir_course : $dir_name;
                       $selected = selected($nome_diretor, $dir_name, false);
                   ?>
-                    <option value="<?php echo esc_attr($dir_name); ?>" data-course="<?php echo esc_attr($dir_course); ?>" <?php echo $selected; ?>>
+                    <option value="<?php echo esc_attr($dir_name); ?>" data-course="<?php echo esc_attr($dir_course); ?>" data-full-label="<?php echo esc_attr($label); ?>" data-director-label="<?php echo esc_attr($dir_name); ?>" title="<?php echo esc_attr($label); ?>" <?php echo $selected; ?>>
                       <?php echo esc_html($label); ?>
                     </option>
                   <?php endforeach; ?>
                   <?php if ( $nome_diretor !== '' && empty($apf_director_names[$nome_diretor]) ) : ?>
-                    <option value="<?php echo esc_attr($nome_diretor); ?>" selected>
+                    <option value="<?php echo esc_attr($nome_diretor); ?>" data-course="" data-full-label="<?php echo esc_attr($nome_diretor . ' (manual)'); ?>" data-director-label="<?php echo esc_attr($nome_diretor); ?>" selected title="<?php echo esc_attr($nome_diretor); ?>">
                       <?php echo esc_html($nome_diretor . ' (manual)'); ?>
                     </option>
                   <?php endif; ?>
@@ -360,8 +440,8 @@ add_shortcode('apf_form', function () {
       .apf-pane.is-active{display:block}
       .apf-grid{display:grid;grid-template-columns:1fr;gap:12px}
       .apf-grid label{display:flex;flex-direction:column;font-size:13px;color:#344054}
-      .apf-grid input,.apf-grid textarea,.apf-grid select{border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;color:#344054}
-      .apf-grid select{appearance:none;-webkit-appearance:none;background-image:url('data:image/svg+xml;utf8,<svg fill=\"none\" stroke=\"%23475067\" stroke-width=\"1.5\" viewBox=\"0 0 20 20\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M6 8l4 4 4-4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>');background-position:calc(100% - 12px) 50%;background-repeat:no-repeat;padding-right:36px}
+      .apf-grid input,.apf-grid textarea,.apf-grid select{border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;color:#344054;width:100%;max-width:100%;box-sizing:border-box}
+      .apf-grid select{appearance:none;-webkit-appearance:none;-moz-appearance:none;background-image:linear-gradient(45deg,transparent 50%,#475067 50%),linear-gradient(135deg,#475067 50%,transparent 50%),linear-gradient(to right,transparent,transparent);background-position:calc(100% - 18px) 55%,calc(100% - 13px) 55%,100% 0;background-size:5px 5px,5px 5px,40px 100%;background-repeat:no-repeat;padding-right:42px}
       .apf-row{display:flex;gap:18px;border:none;margin:10px 0 0;padding:0}
       .apf-radio{display:flex;align-items:center;gap:6px;font-size:14px}
       .apf-actions{display:flex;justify-content:space-between;margin-top:16px}
@@ -421,8 +501,9 @@ add_shortcode('apf_form', function () {
 
       const directorSelect = form.querySelector('select[name="nome_diretor"]');
       const courseInput = form.querySelector('input[name="nome_curto"]');
-      if (directorSelect && courseInput) {
+      if (directorSelect) {
         const syncCourse = () => {
+          if (!courseInput) return;
           const option = directorSelect.options[directorSelect.selectedIndex];
           if (!option) return;
           const course = option.getAttribute('data-course') || '';
@@ -430,10 +511,34 @@ add_shortcode('apf_form', function () {
             courseInput.value = course;
           }
         };
-        directorSelect.addEventListener('change', syncCourse);
-        if (!courseInput.value) {
+        const restoreFullLabels = () => {
+          Array.from(directorSelect.options).forEach(opt => {
+            const fullLabel = opt.getAttribute('data-full-label');
+            if (fullLabel !== null) {
+              opt.textContent = fullLabel;
+            }
+          });
+        };
+        const applyDirectorLabels = () => {
+          restoreFullLabels();
+          const current = directorSelect.options[directorSelect.selectedIndex];
+          if (current) {
+            const directorLabel = current.getAttribute('data-director-label');
+            if (directorLabel) {
+              current.textContent = directorLabel;
+            }
+          }
+        };
+        directorSelect.addEventListener('change', () => {
+          syncCourse();
+          applyDirectorLabels();
+        });
+        directorSelect.addEventListener('focus', restoreFullLabels);
+        directorSelect.addEventListener('blur', applyDirectorLabels);
+        if (!courseInput || !courseInput.value) {
           syncCourse();
         }
+        applyDirectorLabels();
       }
 
       // Máscaras
