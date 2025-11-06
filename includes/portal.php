@@ -153,6 +153,53 @@ add_shortcode('apf_portal', function($atts){
 
     $g = function($k) use ($current_id){ return $current_id ? get_post_meta($current_id, 'apf_'.$k, true) : ''; };
 
+    $calendar_events = array();
+    if ( function_exists( 'apf_scheduler_get_events' ) ) {
+        $events = apf_scheduler_get_events();
+        $user_email_lower = $user_email ? strtolower( $user_email ) : '';
+        foreach ( $events as $event ) {
+            $date = isset( $event['date'] ) ? preg_replace( '/[^0-9\-]/', '', (string) $event['date'] ) : '';
+            if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
+                continue;
+            }
+            $title = isset( $event['title'] ) ? sanitize_text_field( $event['title'] ) : '';
+            if ( '' === $title ) {
+                continue;
+            }
+            if ( empty( $event['recipients'] ) || ! is_array( $event['recipients'] ) ) {
+                continue;
+            }
+
+            $visible = false;
+            foreach ( $event['recipients'] as $recipient ) {
+                if ( ! is_array( $recipient ) ) {
+                    continue;
+                }
+                $recipient_user  = isset( $recipient['user_id'] ) ? (int) $recipient['user_id'] : 0;
+                $recipient_email = isset( $recipient['email'] ) ? strtolower( sanitize_email( $recipient['email'] ) ) : '';
+                if ( $recipient_user > 0 && $recipient_user === $user_id ) {
+                    $visible = true;
+                    break;
+                }
+                if ( $user_email_lower && $recipient_email === $user_email_lower ) {
+                    $visible = true;
+                    break;
+                }
+            }
+
+            if ( ! $visible ) {
+                continue;
+            }
+
+            $calendar_events[] = array(
+                'date'  => $date,
+                'title' => $title,
+            );
+        }
+    }
+
+    $portal_calendar_attr = esc_attr( wp_json_encode( $calendar_events, JSON_UNESCAPED_UNICODE ) );
+
     // “Meu último envio” (autor atual) – só para exibir um resumo
     $q = new WP_Query([
         'post_type'      => 'apf_submission',
@@ -209,6 +256,18 @@ add_shortcode('apf_portal', function($atts){
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div class="apf-panel" style="margin-top:16px">
+        <h3 style="margin:0 0 8px">Agenda financeira</h3>
+        <div class="apf-portal-calendar" id="apfPortalCalendar" data-events="<?php echo $portal_calendar_attr; ?>">
+          <div class="apf-portal-calendar__body"></div>
+        </div>
+        <?php if ( empty( $calendar_events ) ) : ?>
+          <p class="apf-portal-calendar__empty">Nenhum aviso programado até o momento.</p>
+        <?php else : ?>
+          <p class="apf-portal-calendar__hint">Passe o mouse sobre os dias destacados para visualizar o aviso.</p>
+        <?php endif; ?>
       </div>
 
       <!-- ====== FORMULÁRIO DE EDIÇÃO (3 abas), PRÉ-PREENCHIDO COM O QUE ESTÁ NO ADMIN ====== -->
@@ -393,11 +452,143 @@ add_shortcode('apf_portal', function($atts){
       .apf-actions button{background:#1f6feb;color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer}
       .apf-actions .apf-prev{background:#a0a7b4}
       .apf-field-note{display:block;font-size:12px;color:#b42318;margin-top:6px}
+      .apf-portal-calendar{border:1px solid #e6e9ef;border-radius:12px;background:#f7f8fb;padding:16px;margin-top:8px}
+      .apf-portal-calendar__body{display:flex;flex-direction:column;gap:12px}
+      .apf-portal-calendar__inner{display:flex;flex-direction:column;gap:12px}
+      .apf-portal-calendar__header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+      .apf-portal-calendar__header h4{margin:0;font-size:16px;font-weight:600;color:#1d2939}
+      .apf-portal-calendar__nav{display:flex;align-items:center;gap:8px}
+      .apf-portal-calendar__btn{width:32px;height:32px;border-radius:50%;border:1px solid #d0d5dd;background:#fff;color:#1d2939;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
+      .apf-portal-calendar__btn:hover,
+      .apf-portal-calendar__btn:focus{border-color:#1f6feb;color:#1f6feb;outline:none}
+      .apf-portal-calendar__weekdays,
+      .apf-portal-calendar__days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+      .apf-portal-calendar__weekday{text-align:center;font-size:12px;font-weight:600;color:#5f6b7a;text-transform:uppercase}
+      .apf-portal-calendar__day{position:relative;height:44px;border-radius:10px;border:1px solid #d0d5dd;background:#fff;color:#1d2939;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center}
+      .apf-portal-calendar__day--muted{opacity:.35}
+      .apf-portal-calendar__day--has-event{border-color:#1f6feb;background:rgba(31,111,235,.12)}
+      .apf-portal-calendar__tooltip{position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:6px 10px;border-radius:8px;font-size:12px;white-space:nowrap;box-shadow:0 10px 20px rgba(15,23,42,.18);pointer-events:none;opacity:0;transition:opacity .15s ease}
+      .apf-portal-calendar__day--has-event:hover .apf-portal-calendar__tooltip{opacity:1}
+      .apf-portal-calendar__empty{margin:10px 0 0;font-size:13px;color:#667085}
+      .apf-portal-calendar__hint{margin:10px 0 0;font-size:12px;color:#5f6b7a}
       @media(max-width:780px){ .apf-grid{grid-template-columns:1fr} }
     </style>
 
     <script>
     (function(){
+      const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+      const WEEKDAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+
+      const calendarNode = document.getElementById('apfPortalCalendar');
+      if (calendarNode) {
+        let monthDate = new Date();
+        monthDate.setDate(1);
+        let events = [];
+        const eventsByDate = new Map();
+
+        try {
+          const raw = JSON.parse(calendarNode.getAttribute('data-events') || '[]');
+          if (Array.isArray(raw)) {
+            events = raw;
+          }
+        } catch (_e) {}
+
+        events.forEach(evt => {
+          if (!evt || !evt.date || !evt.title) { return; }
+          const iso = evt.date;
+          if (!eventsByDate.has(iso)) {
+            eventsByDate.set(iso, []);
+          }
+          eventsByDate.get(iso).push(evt);
+        });
+
+        const body = calendarNode.querySelector('.apf-portal-calendar__body');
+
+        function renderCalendar() {
+          if (!body) { return; }
+          const container = document.createElement('div');
+          container.className = 'apf-portal-calendar__inner';
+
+          const header = document.createElement('div');
+          header.className = 'apf-portal-calendar__header';
+
+          const title = document.createElement('h4');
+          const monthIndex = monthDate.getMonth();
+          const year = monthDate.getFullYear();
+          title.textContent = MONTH_NAMES[monthIndex] + ' ' + year;
+
+          const nav = document.createElement('div');
+          nav.className = 'apf-portal-calendar__nav';
+
+          const prev = document.createElement('button');
+          prev.type = 'button';
+          prev.className = 'apf-portal-calendar__btn';
+          prev.innerHTML = '&larr;';
+          prev.addEventListener('click', () => {
+            monthDate.setMonth(monthDate.getMonth() - 1, 1);
+            renderCalendar();
+          });
+
+          const next = document.createElement('button');
+          next.type = 'button';
+          next.className = 'apf-portal-calendar__btn';
+          next.innerHTML = '&rarr;';
+          next.addEventListener('click', () => {
+            monthDate.setMonth(monthDate.getMonth() + 1, 1);
+            renderCalendar();
+          });
+
+          nav.appendChild(prev);
+          nav.appendChild(next);
+          header.appendChild(title);
+          header.appendChild(nav);
+
+          const weekdays = document.createElement('div');
+          weekdays.className = 'apf-portal-calendar__weekdays';
+          WEEKDAYS.forEach(day => {
+            const span = document.createElement('span');
+            span.className = 'apf-portal-calendar__weekday';
+            span.textContent = day;
+            weekdays.appendChild(span);
+          });
+
+          const daysGrid = document.createElement('div');
+          daysGrid.className = 'apf-portal-calendar__days';
+          const firstWeekday = (monthDate.getDay() + 6) % 7;
+          const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+          const totalCells = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
+
+          for (let cell = 0; cell < totalCells; cell++) {
+            const dayNumber = cell - firstWeekday + 1;
+            const div = document.createElement('div');
+            div.className = 'apf-portal-calendar__day';
+
+            if (dayNumber < 1 || dayNumber > daysInMonth) {
+              div.classList.add('apf-portal-calendar__day--muted');
+              div.textContent = '';
+            } else {
+              div.textContent = String(dayNumber);
+              const iso = year + '-' + String(monthIndex + 1).padStart(2, '0') + '-' + String(dayNumber).padStart(2, '0');
+              if (eventsByDate.has(iso)) {
+                div.classList.add('apf-portal-calendar__day--has-event');
+                const tooltip = document.createElement('span');
+                tooltip.className = 'apf-portal-calendar__tooltip';
+                tooltip.textContent = eventsByDate.get(iso).map(evt => evt.title).join(', ');
+                div.appendChild(tooltip);
+              }
+            }
+            daysGrid.appendChild(div);
+          }
+
+          body.innerHTML = '';
+          body.appendChild(header);
+          body.appendChild(weekdays);
+          body.appendChild(daysGrid);
+        }
+
+        renderCalendar();
+      }
+
       const form  = document.getElementById('apfEditForm');
       const panes = Array.from(form.querySelectorAll('.apf-pane'));
       const tabs  = Array.from(form.querySelectorAll('.apf-tabs button'));
