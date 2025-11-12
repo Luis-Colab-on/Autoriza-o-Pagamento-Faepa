@@ -18,7 +18,7 @@ add_action('add_meta_boxes', function () {
 function apf_render_meta_box( $post ){
     // lista dos campos salvos pelo form
     $fields = array(
-        'nome_diretor'   => 'Nome Diretor',
+        'nome_diretor'   => 'Nome Coordenador',
         'num_controle'   => 'Nº Controle Secretaria',
         'tel_prestador'  => 'Telefone do Prestador',
         'email_prest'    => 'E-mail do Prestador',

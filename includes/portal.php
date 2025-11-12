@@ -23,11 +23,17 @@ add_shortcode('apf_portal', function($atts){
     $user       = wp_get_current_user();
     $user_id    = get_current_user_id();
     $user_email = $user && ! empty($user->user_email) ? sanitize_email($user->user_email) : '';
+    $collab_alias_email = apf_get_user_channel_email( $user_id, 'collab' );
 
-    $apf_directors = get_option('apf_directors', array());
-    if ( ! is_array($apf_directors) ) {
-        $apf_directors = array();
+    if ( function_exists( 'apf_get_directors_list' ) ) {
+        $apf_directors = apf_get_directors_list();
+    } else {
+        $apf_directors = get_option('apf_directors', array());
+        if ( ! is_array($apf_directors) ) {
+            $apf_directors = array();
+        }
     }
+    $apf_directors = apf_filter_approved_directors( $apf_directors );
     if ( ! empty($apf_directors) ) {
         usort($apf_directors, function( $a, $b ){
             $course_a = $a['course'] ?? '';
@@ -62,11 +68,12 @@ add_shortcode('apf_portal', function($atts){
         // coleta e normaliza
         $email_prest    = sanitize_email( wp_unslash($_POST['email_prest'] ?? '') );
         if ( empty($email_prest) ) $email_prest = $user_email;
+        if ( $email_prest ) {
+            apf_set_user_channel_email( $user_id, 'collab', $email_prest );
+        }
 
         $valor_bruto    = wp_unslash($_POST['valor'] ?? '');
-        $valor_norm     = preg_replace('/[^\d,\.]/', '', $valor_bruto);
-        $valor_norm     = str_replace(['.', ','], ['', '.'], $valor_norm);
-        if ($valor_norm === '') $valor_norm = '0';
+        $valor_norm     = apf_normalize_currency_value( $valor_bruto );
 
         $pessoa_tipo    = ( isset($_POST['pessoa_tipo']) && $_POST['pessoa_tipo']==='pf' ) ? 'pf' : 'pj';
 
@@ -153,10 +160,16 @@ add_shortcode('apf_portal', function($atts){
 
     $g = function($k) use ($current_id){ return $current_id ? get_post_meta($current_id, 'apf_'.$k, true) : ''; };
 
+    $saved_contact_email = $g('email_prest');
+    $portal_contact_email = $collab_alias_email ?: $saved_contact_email;
+    if ( '' === $portal_contact_email ) {
+        $portal_contact_email = $user_email;
+    }
+
     $calendar_events = array();
     if ( function_exists( 'apf_scheduler_get_events' ) ) {
         $events = apf_scheduler_get_events();
-        $user_email_lower = $user_email ? strtolower( $user_email ) : '';
+        $user_email_lower = $portal_contact_email ? strtolower( $portal_contact_email ) : '';
         foreach ( $events as $event ) {
             $date = isset( $event['date'] ) ? preg_replace( '/[^0-9\-]/', '', (string) $event['date'] ) : '';
             if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
@@ -173,6 +186,20 @@ add_shortcode('apf_portal', function($atts){
             $visible = false;
             foreach ( $event['recipients'] as $recipient ) {
                 if ( ! is_array( $recipient ) ) {
+                    continue;
+                }
+                $recipient_group = isset( $recipient['group'] ) ? sanitize_key( $recipient['group'] ) : '';
+                if ( ! in_array( $recipient_group, array( 'providers', 'coordinators' ), true ) ) {
+                    $recipient_group = 'providers';
+                }
+                if ( 'coordinators' === $recipient_group ) {
+                    continue;
+                }
+                $recipient_group = isset( $recipient['group'] ) ? sanitize_key( $recipient['group'] ) : '';
+                if ( ! in_array( $recipient_group, array( 'providers', 'coordinators' ), true ) ) {
+                    $recipient_group = 'providers';
+                }
+                if ( 'coordinators' === $recipient_group ) {
                     continue;
                 }
                 $recipient_user  = isset( $recipient['user_id'] ) ? (int) $recipient['user_id'] : 0;
@@ -287,11 +314,11 @@ add_shortcode('apf_portal', function($atts){
 
           <section class="apf-pane is-active" id="qe1">
             <div class="apf-grid">
-              <label>Nome Completo Diretor Executivo
+              <label>Nome Completo Coordenador Executivo
                 <?php $current_dir = $g('nome_diretor'); ?>
                 <?php if ( ! empty($apf_directors) ) : ?>
                   <select name="nome_diretor">
-                    <option value="" <?php echo selected($current_dir, '', false); ?>>Selecione um diretor</option>
+                    <option value="" <?php echo selected($current_dir, '', false); ?>>Selecione um coordenador</option>
                     <?php foreach ( $apf_directors as $dir_entry ) :
                         $dir_name = isset($dir_entry['director']) ? trim((string) $dir_entry['director']) : '';
                         if ( $dir_name === '' ) { continue; }
@@ -299,19 +326,19 @@ add_shortcode('apf_portal', function($atts){
                         $label = $dir_course ? $dir_name . ' — ' . $dir_course : $dir_name;
                         $selected = selected($current_dir, $dir_name, false);
                     ?>
-                      <option value="<?php echo esc_attr($dir_name); ?>" data-course="<?php echo esc_attr($dir_course); ?>" data-full-label="<?php echo esc_attr($label); ?>" data-director-label="<?php echo esc_attr($dir_name); ?>" <?php echo $selected; ?>>
+                      <option value="<?php echo esc_attr($dir_name); ?>" data-course="<?php echo esc_attr($dir_course); ?>" data-full-label="<?php echo esc_attr($label); ?>" data-coordinator-label="<?php echo esc_attr($dir_name); ?>" <?php echo $selected; ?>>
                         <?php echo esc_html($label); ?>
                       </option>
                     <?php endforeach; ?>
                     <?php if ( $current_dir !== '' && empty($apf_director_names[$current_dir]) ) : ?>
-                      <option value="<?php echo esc_attr($current_dir); ?>" data-course="" data-full-label="<?php echo esc_attr($current_dir . ' (manual)'); ?>" data-director-label="<?php echo esc_attr($current_dir); ?>" selected>
+                      <option value="<?php echo esc_attr($current_dir); ?>" data-course="" data-full-label="<?php echo esc_attr($current_dir . ' (manual)'); ?>" data-coordinator-label="<?php echo esc_attr($current_dir); ?>" selected>
                         <?php echo esc_html($current_dir . ' (manual)'); ?>
                       </option>
                     <?php endif; ?>
                   </select>
                 <?php else : ?>
                   <input type="text" name="nome_diretor" value="<?php echo esc_attr($current_dir); ?>">
-                  <span class="apf-field-note">Cadastre diretores no dashboard financeiro para habilitar a seleção.</span>
+                  <span class="apf-field-note">Cadastre coordenadores no dashboard financeiro para habilitar a seleção.</span>
                 <?php endif; ?>
               </label>
 
@@ -324,7 +351,7 @@ add_shortcode('apf_portal', function($atts){
               </label>
 
               <label>E-mail do Prestador
-                <input type="email" name="email_prest" value="<?php echo esc_attr($g('email_prest') ?: $user_email); ?>">
+                <input type="email" name="email_prest" value="<?php echo esc_attr( $portal_contact_email ); ?>">
               </label>
 
               <label>Número do Documento Fiscal
@@ -332,7 +359,7 @@ add_shortcode('apf_portal', function($atts){
               </label>
 
               <label>Valor (R$)
-                <input type="text" name="valor" placeholder="0,00" value="<?php echo esc_attr($g('valor')); ?>">
+                <input type="text" name="valor" placeholder="0,00" value="<?php echo esc_attr( apf_format_currency_for_input( $g('valor') ) ); ?>">
               </label>
             </div>
 
@@ -428,41 +455,83 @@ add_shortcode('apf_portal', function($atts){
       .apf-notice{margin:10px 0;padding:10px 12px;border-radius:10px}
       .apf-notice-success{background:#f0f9ff;border:1px solid #b6e0fe;color:#055160}
 
-      .apf-hero{display:flex;gap:16px;justify-content:space-between;align-items:center;background:#fff;border:1px solid #e6e9ef;border-radius:12px;padding:18px 20px;box-shadow:0 8px 24px rgba(0,0,0,.04)}
+      .apf-hero{
+        display:flex;
+        flex-wrap:wrap;
+        gap:18px;
+        justify-content:space-between;
+        align-items:center;
+        background:#fff;
+        border:1px solid #e6e9ef;
+        border-radius:12px;
+        padding:18px 20px;
+        box-shadow:0 8px 24px rgba(0,0,0,.04);
+      }
+      .apf-hero > div:first-child{flex:1 1 260px;min-width:0}
+      .apf-hero .apf-actions{flex:0 0 auto;justify-content:flex-end}
       .apf-actions{display:flex;gap:10px;flex-wrap:wrap}
-      .apf-btn{background:#eef2f7;color:#344054;text-decoration:none;border:none;border-radius:10px;padding:10px 14px;display:inline-block;cursor:pointer}
+      .apf-btn{background:#eef2f7;color:#344054;text-decoration:none;border:none;border-radius:10px;padding:10px 14px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-weight:600;min-height:44px}
       .apf-btn.apf-primary{background:#1f6feb;color:#fff}
       .apf-panel{background:#fff;border:1px solid #e6e9ef;border-radius:12px;padding:14px 16px}
       .apf-table-wrap{overflow:auto;border:1px solid #e6e9ef;border-radius:12px}
-      .apf-table{width:100%;border-collapse:collapse}
+      .apf-table{width:100%;min-width:640px;border-collapse:collapse}
       .apf-table thead th{background:#f7f8fb;text-align:left;padding:10px 12px;border-bottom:1px solid #e6e9ef;font-weight:600;color:#475467}
       .apf-table tbody td{padding:10px 12px;border-bottom:1px solid #f0f2f5}
       .apf-tabs{display:flex;gap:8px;padding:8px 0 10px}
-      .apf-tabs button{border:1px solid #e6e9ef;background:#f7f8fb;border-radius:10px;padding:8px 10px;cursor:pointer}
+      .apf-tabs button{border:1px solid #e6e9ef;background:#f7f8fb;border-radius:10px;padding:8px 10px;cursor:pointer;flex:1 1 auto;min-width:140px}
       .apf-tabs button.is-active{background:#e8f1ff;border-color:#bcd4ff;color:#1849a9;font-weight:600}
       .apf-pane{display:none}
       .apf-pane.is-active{display:block}
-      .apf-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-      .apf-grid label{display:flex;flex-direction:column;font-size:13px;color:#344054}
-      .apf-grid input,.apf-grid textarea,.apf-grid select{border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;color:#344054}
-      .apf-grid select{appearance:none;-webkit-appearance:none;background-image:url('data:image/svg+xml;utf8,<svg fill=\"none\" stroke=\"%23475067\" stroke-width=\"1.5\" viewBox=\"0 0 20 20\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M6 8l4 4 4-4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>');background-position:calc(100% - 12px) 50%;background-repeat:no-repeat;padding-right:36px}
-      .apf-row{display:flex;gap:16px;border:none;margin:8px 0 0;padding:0}
+      .apf-grid{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+        gap:clamp(10px,2vw,18px);
+      }
+      .apf-grid label{display:flex;flex-direction:column;font-size:13px;color:#344054;gap:6px}
+      .apf-grid input,
+      .apf-grid textarea,
+      .apf-grid select{
+        border:1px solid #d0d5dd;
+        border-radius:10px;
+        padding:10px 12px;
+        font-size:14px;
+        background:#fff;
+        color:#344054;
+      }
+      .apf-grid select{
+        appearance:none;
+        -webkit-appearance:none;
+        background-image:url('data:image/svg+xml;utf8,<svg fill="none" stroke="%23475067" stroke-width="1.5" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+        background-position:calc(100% - 12px) 50%;
+        background-repeat:no-repeat;
+        padding-right:36px;
+      }
+      .apf-row{display:flex;gap:16px;border:none;margin:8px 0 0;padding:0;flex-wrap:wrap}
       .apf-radio{display:flex;align-items:center;gap:6px}
-      .apf-actions{display:flex;justify-content:space-between;margin-top:16px}
-      .apf-actions button{background:#1f6feb;color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer}
-      .apf-actions .apf-prev{background:#a0a7b4}
+      .apf-panel .apf-actions{justify-content:space-between;margin-top:16px}
+      .apf-panel .apf-actions button{
+        background:#1f6feb;
+        color:#fff;
+        border:none;
+        border-radius:10px;
+        padding:10px 14px;
+        cursor:pointer;
+        min-height:44px;
+        flex:1 1 160px;
+      }
+      .apf-panel .apf-actions .apf-prev{background:#a0a7b4}
       .apf-field-note{display:block;font-size:12px;color:#b42318;margin-top:6px}
       .apf-portal-calendar{border:1px solid #e6e9ef;border-radius:12px;background:#f7f8fb;padding:16px;margin-top:8px}
       .apf-portal-calendar__body{display:flex;flex-direction:column;gap:12px}
       .apf-portal-calendar__inner{display:flex;flex-direction:column;gap:12px}
-      .apf-portal-calendar__header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+      .apf-portal-calendar__header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
       .apf-portal-calendar__header h4{margin:0;font-size:16px;font-weight:600;color:#1d2939}
       .apf-portal-calendar__nav{display:flex;align-items:center;gap:8px}
       .apf-portal-calendar__btn{width:32px;height:32px;border-radius:50%;border:1px solid #d0d5dd;background:#fff;color:#1d2939;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
       .apf-portal-calendar__btn:hover,
       .apf-portal-calendar__btn:focus{border-color:#1f6feb;color:#1f6feb;outline:none}
       .apf-portal-calendar__weekdays,
-      .apf-portal-calendar__days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+      .apf-portal-calendar__days{display:grid;grid-template-columns:repeat(7,minmax(32px,1fr));gap:6px}
       .apf-portal-calendar__weekday{text-align:center;font-size:12px;font-weight:600;color:#5f6b7a;text-transform:uppercase}
       .apf-portal-calendar__day{position:relative;height:44px;border-radius:10px;border:1px solid #d0d5dd;background:#fff;color:#1d2939;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center}
       .apf-portal-calendar__day--muted{opacity:.35}
@@ -471,7 +540,33 @@ add_shortcode('apf_portal', function($atts){
       .apf-portal-calendar__day--has-event:hover .apf-portal-calendar__tooltip{opacity:1}
       .apf-portal-calendar__empty{margin:10px 0 0;font-size:13px;color:#667085}
       .apf-portal-calendar__hint{margin:10px 0 0;font-size:12px;color:#5f6b7a}
-      @media(max-width:780px){ .apf-grid{grid-template-columns:1fr} }
+      @media(max-width:900px){
+        .apf-hero{flex-direction:column;align-items:flex-start}
+        .apf-hero .apf-actions{width:100%;justify-content:flex-start}
+      }
+      @media(max-width:720px){
+        .apf-tabs{overflow:auto;padding-bottom:12px}
+        .apf-tabs button{flex:0 0 auto}
+        .apf-table{min-width:100%}
+        .apf-table thead{display:none}
+        .apf-table tbody tr{display:flex;flex-direction:column;gap:6px;padding:12px;border-bottom:1px solid #e6e9ef}
+        .apf-table tbody td{border:0;padding:0}
+        .apf-table tbody td::before{content:attr(data-label);display:block;font-size:12px;color:#667085;font-weight:600;margin-bottom:2px}
+        .apf-table tbody td:nth-child(1)::before{content:'Data'}
+        .apf-table tbody td:nth-child(2)::before{content:'Tipo'}
+        .apf-table tbody td:nth-child(3)::before{content:'Nome/Empresa'}
+        .apf-table tbody td:nth-child(4)::before{content:'Valor (R$)'}
+        .apf-table tbody td:nth-child(5)::before{content:'Curso'}
+      }
+      @media(max-width:640px){
+        .apf-panel .apf-actions{flex-direction:column;align-items:stretch}
+        .apf-panel .apf-actions button{width:100%}
+        .apf-grid{grid-template-columns:1fr}
+      }
+      @media(max-width:520px){
+        .apf-portal-calendar__weekdays,
+        .apf-portal-calendar__days{grid-template-columns:repeat(7,minmax(28px,1fr))}
+      }
     </style>
 
     <script>
@@ -626,12 +721,12 @@ add_shortcode('apf_portal', function($atts){
       radios.forEach(r => r.addEventListener('change', togglePessoa));
       togglePessoa();
 
-      const directorSelect = form.querySelector('select[name="nome_diretor"]');
+      const coordinatorSelect = form.querySelector('select[name="nome_diretor"]');
       const courseInput = form.querySelector('input[name="nome_curto"]');
-      if (directorSelect) {
+      if (coordinatorSelect) {
         const syncCourse = () => {
           if (!courseInput) return;
-          const option = directorSelect.options[directorSelect.selectedIndex];
+          const option = coordinatorSelect.options[coordinatorSelect.selectedIndex];
           if (!option) return;
           const course = option.getAttribute('data-course') || '';
           if (course) {
@@ -639,33 +734,33 @@ add_shortcode('apf_portal', function($atts){
           }
         };
         const restoreFullLabels = () => {
-          Array.from(directorSelect.options).forEach(opt => {
+          Array.from(coordinatorSelect.options).forEach(opt => {
             const fullLabel = opt.getAttribute('data-full-label');
             if (fullLabel !== null) {
               opt.textContent = fullLabel;
             }
           });
         };
-        const applyDirectorLabels = () => {
+        const applyCoordinatorLabels = () => {
           restoreFullLabels();
-          const current = directorSelect.options[directorSelect.selectedIndex];
+          const current = coordinatorSelect.options[coordinatorSelect.selectedIndex];
           if (current) {
-            const directorLabel = current.getAttribute('data-director-label');
-            if (directorLabel) {
-              current.textContent = directorLabel;
+            const coordinatorLabel = current.getAttribute('data-coordinator-label');
+            if (coordinatorLabel) {
+              current.textContent = coordinatorLabel;
             }
           }
         };
-        directorSelect.addEventListener('change', () => {
+        coordinatorSelect.addEventListener('change', () => {
           syncCourse();
-          applyDirectorLabels();
+          applyCoordinatorLabels();
         });
-        directorSelect.addEventListener('focus', restoreFullLabels);
-        directorSelect.addEventListener('blur', applyDirectorLabels);
+        coordinatorSelect.addEventListener('focus', restoreFullLabels);
+        coordinatorSelect.addEventListener('blur', applyCoordinatorLabels);
         if (!courseInput || !courseInput.value) {
           syncCourse();
         }
-        applyDirectorLabels();
+        applyCoordinatorLabels();
       }
 
       // Máscaras

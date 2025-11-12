@@ -9,6 +9,184 @@
 
 if ( ! defined('ABSPATH') ) { exit; }
 
+if ( ! function_exists( 'apf_normalize_currency_value' ) ) {
+    /**
+     * Converte valores monetários informados com ponto ou vírgula para o formato "1234.56".
+     * Remove separadores de milhar e garante duas casas decimais quando necessário.
+     */
+    function apf_normalize_currency_value( $value ) {
+        if ( ! is_scalar( $value ) ) {
+            return '0';
+        }
+
+        $value = trim( (string) $value );
+        if ( '' === $value ) {
+            return '0';
+        }
+
+        $value = preg_replace( '/[^\d,\.]/', '', $value );
+        if ( '' === $value ) {
+            return '0';
+        }
+
+        $has_comma = strpos( $value, ',' ) !== false;
+        $has_dot   = strpos( $value, '.' ) !== false;
+
+        if ( $has_comma && $has_dot ) {
+            $value = str_replace( '.', '', $value );
+            $value = str_replace( ',', '.', $value );
+        } elseif ( $has_comma ) {
+            $value = str_replace( ',', '.', $value );
+        } elseif ( $has_dot && substr_count( $value, '.' ) > 1 ) {
+            // múltiplos pontos sem vírgula => tratamos como separador de milhar
+            $value = str_replace( '.', '', $value );
+            $has_dot = false;
+        }
+
+        if ( '' === $value ) {
+            return '0';
+        }
+
+        if ( $value[0] === '.' ) {
+            $value = '0' . $value;
+        }
+
+        $has_decimal = strpos( $value, '.' ) !== false;
+        $float_value = (float) $value;
+
+        if ( 0.0 === $float_value ) {
+            return '0';
+        }
+
+        if ( $has_decimal ) {
+            return number_format( $float_value, 2, '.', '' );
+        }
+
+        return (string) (int) round( $float_value );
+    }
+}
+
+if ( ! function_exists( 'apf_format_currency_for_input' ) ) {
+    /**
+     * Formata o valor normalizado (1234.56) para exibição em inputs (1.234,56).
+     */
+    function apf_format_currency_for_input( $value ) {
+        if ( ! is_scalar( $value ) ) {
+            return '';
+        }
+        $value = trim( (string) $value );
+        if ( '' === $value || '0' === $value ) {
+            return '';
+        }
+        $float_value = (float) str_replace( ',', '.', $value );
+        if ( 0.0 === $float_value ) {
+            return '';
+        }
+        return number_format( $float_value, 2, ',', '.' );
+    }
+}
+
+if ( ! function_exists( 'apf_normalize_directors_list' ) ) {
+    /**
+     * Garante que cada coordenador possua um status conhecido.
+     *
+     * @param array $directors
+     * @return array
+     */
+    function apf_normalize_directors_list( $directors ) {
+        if ( ! is_array( $directors ) ) {
+            return array();
+        }
+
+        foreach ( $directors as $idx => $entry ) {
+            if ( ! is_array( $entry ) ) {
+                unset( $directors[ $idx ] );
+                continue;
+            }
+            $status = isset( $entry['status'] ) ? strtolower( trim( (string) $entry['status'] ) ) : '';
+            if ( ! in_array( $status, array( 'approved', 'pending', 'rejected' ), true ) ) {
+                $status = 'approved';
+            }
+            $directors[ $idx ]['status'] = $status;
+        }
+
+        return array_values( $directors );
+    }
+}
+
+if ( ! function_exists( 'apf_filter_approved_directors' ) ) {
+    /**
+     * Retorna apenas coordenadores aprovados.
+     *
+     * @param array $directors
+     * @return array
+     */
+    function apf_filter_approved_directors( $directors ) {
+        $directors = apf_normalize_directors_list( $directors );
+        return array_values( array_filter( $directors, function( $entry ) {
+            return isset( $entry['status'] ) && 'approved' === $entry['status'];
+        } ) );
+    }
+}
+
+if ( ! function_exists( 'apf_get_user_channel_email' ) ) {
+    /**
+     * Obtém o e-mail preferencial do usuário para um canal específico.
+     *
+     * @param int    $user_id
+     * @param string $channel collab|coordinator
+     * @return string
+     */
+    function apf_get_user_channel_email( $user_id, $channel = 'collab' ) {
+        $user_id = (int) $user_id;
+        if ( $user_id <= 0 ) {
+            return '';
+        }
+        $channel = ( 'coordinator' === $channel ) ? 'coordinator' : 'collab';
+        $meta_key = 'apf_channel_email_' . $channel;
+        $value = get_user_meta( $user_id, $meta_key, true );
+        $value = is_scalar( $value ) ? sanitize_email( $value ) : '';
+        return $value;
+    }
+}
+
+if ( ! function_exists( 'apf_set_user_channel_email' ) ) {
+    /**
+     * Atualiza ou remove o e-mail preferencial do usuário para um canal.
+     *
+     * @param int    $user_id
+     * @param string $channel
+     * @param string $email
+     */
+    function apf_set_user_channel_email( $user_id, $channel, $email ) {
+        $user_id = (int) $user_id;
+        if ( $user_id <= 0 ) {
+            return;
+        }
+        $channel = ( 'coordinator' === $channel ) ? 'coordinator' : 'collab';
+        $meta_key = 'apf_channel_email_' . $channel;
+        $email    = sanitize_email( $email );
+        if ( '' === $email ) {
+            delete_user_meta( $user_id, $meta_key );
+        } else {
+            update_user_meta( $user_id, $meta_key, $email );
+        }
+    }
+}
+
+if ( ! function_exists( 'apf_resolve_channel_email' ) ) {
+    /**
+     * Resolve o e-mail final a ser usado em um canal, aplicando fallback.
+     */
+    function apf_resolve_channel_email( $user_id, $channel, $fallback = '' ) {
+        $alias = apf_get_user_channel_email( $user_id, $channel );
+        if ( '' !== $alias ) {
+            return $alias;
+        }
+        return sanitize_email( $fallback );
+    }
+}
+
 /* ====== CPT para armazenar as submissões ====== */
 add_action('init', function () {
     register_post_type('apf_submission', [
@@ -149,6 +327,7 @@ add_shortcode('apf_form', function () {
     if ( ! is_array($apf_directors) ) {
         $apf_directors = [];
     }
+    $apf_directors = apf_filter_approved_directors( $apf_directors );
     if ( ! empty($apf_directors) ) {
         usort($apf_directors, function( $a, $b ){
             $course_a = $a['course'] ?? '';
@@ -188,11 +367,7 @@ add_shortcode('apf_form', function () {
         $email_prest    = sanitize_email( wp_unslash($_POST['email_prest'] ?? '') );
         $num_doc_fiscal = $clean( wp_unslash($_POST['num_doc_fiscal'] ?? '') );
         $valor_bruto    = wp_unslash($_POST['valor'] ?? '');
-
-        // normaliza 1.234,56 -> 1234.56
-        $valor_norm = preg_replace('/[^\d,\.]/', '', $valor_bruto);
-        $valor_norm = str_replace(['.', ','], ['', '.'], $valor_norm);
-        if ($valor_norm === '') $valor_norm = '0';
+        $valor_norm     = apf_normalize_currency_value( $valor_bruto );
 
         $pessoa_tipo  = (isset($_POST['pessoa_tipo']) && $_POST['pessoa_tipo']==='pf') ? 'pf' : 'pj';
         $nome_empresa = $clean( wp_unslash($_POST['nome_empresa'] ?? '') );
@@ -597,3 +772,4 @@ add_shortcode('apf_form', function () {
 require_once __DIR__ . '/includes/inbox.php';
 require_once __DIR__ . '/includes/admin-meta.php';
 require_once __DIR__ . '/includes/portal.php';
+require_once __DIR__ . '/includes/portal_coordenador.php';
