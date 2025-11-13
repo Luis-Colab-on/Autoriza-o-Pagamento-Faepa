@@ -215,6 +215,8 @@ add_shortcode( 'apf_portal_coordenador', function () {
     $current_name   = $existing_entry['director'] ?? $user_name;
     $current_email  = $coord_alias_email ?: ( $existing_entry['email'] ?? $user_email );
     $current_course = $existing_entry['course'] ?? '';
+    $current_name_normalized   = strtolower( trim( sanitize_text_field( (string) $current_name ) ) );
+    $current_course_normalized = strtolower( trim( sanitize_text_field( (string) $current_course ) ) );
     $is_manual_course = $current_course && ! in_array( $current_course, $available_courses, true );
 
     $current_status = isset( $existing_entry['status'] ) ? $existing_entry['status'] : '';
@@ -273,11 +275,24 @@ add_shortcode( 'apf_portal_coordenador', function () {
 
                 if ( 'providers' === $recipient_group ) {
                     $dir_matches = false;
-                    if ( $coordinator_key && ! empty( $recipient['director_key'] ) ) {
-                        $recipient_dir_key = sanitize_text_field( $recipient['director_key'] );
-                        if ( $recipient_dir_key === $coordinator_key ) {
+                    $recipient_dir_key = isset( $recipient['director_key'] ) ? sanitize_text_field( $recipient['director_key'] ) : '';
+                    $recipient_course  = isset( $recipient['course'] ) ? sanitize_text_field( $recipient['course'] ) : '';
+                    $recipient_name_raw = isset( $recipient['director_name'] ) ? sanitize_text_field( $recipient['director_name'] ) : '';
+                    $recipient_course_norm = strtolower( trim( $recipient_course ) );
+                    $recipient_name_norm   = strtolower( trim( $recipient_name_raw ) );
+
+                    if ( $coordinator_key && $recipient_dir_key && $recipient_dir_key === $coordinator_key ) {
+                        $dir_matches = true;
+                    }
+
+                    if ( ! $dir_matches && $recipient_course_norm && $current_course_normalized && $recipient_course_norm === $current_course_normalized ) {
+                        if ( ! $current_name_normalized || ! $recipient_name_norm || $recipient_name_norm === $current_name_normalized ) {
                             $dir_matches = true;
                         }
+                    }
+
+                    if ( ! $dir_matches && $recipient_name_norm && $current_name_normalized && $recipient_name_norm === $current_name_normalized ) {
+                        $dir_matches = true;
                     }
 
                     if ( $dir_matches || ( $coord_email_lower && $recipient_email === $coord_email_lower ) ) {

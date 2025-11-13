@@ -276,11 +276,13 @@ if ( ! function_exists( 'apf_scheduler_get_events' ) ) {
                         $recipient_name = $recipient_email;
                     }
 
-                    $recipient_dir_key = '';
-                    $recipient_course  = '';
+                    $recipient_dir_key  = '';
+                    $recipient_course   = '';
+                    $recipient_dir_name = '';
                     if ( is_array( $recipient ) ) {
                         $recipient_dir_key = isset( $recipient['director_key'] ) ? sanitize_text_field( $recipient['director_key'] ) : '';
                         $recipient_course  = isset( $recipient['course'] ) ? sanitize_text_field( $recipient['course'] ) : '';
+                        $recipient_dir_name = isset( $recipient['director_name'] ) ? sanitize_text_field( $recipient['director_name'] ) : '';
                     }
 
                     $recipients[] = array(
@@ -290,6 +292,7 @@ if ( ! function_exists( 'apf_scheduler_get_events' ) ) {
                         'email'        => $recipient_email,
                         'group'        => $recipient_group,
                         'director_key' => $recipient_dir_key,
+                        'director_name'=> $recipient_dir_name,
                         'course'       => $recipient_course,
                     );
                 }
@@ -332,6 +335,81 @@ if ( ! function_exists( 'apf_scheduler_store_events' ) ) {
      */
     function apf_scheduler_store_events( $events ) {
         update_option( 'apf_scheduler_events', $events, false );
+    }
+}
+
+if ( ! function_exists( 'apf_scheduler_build_recipient_payload' ) ) {
+    /**
+     * Normalizes the recipient submission into the payload structure stored in events.
+     *
+     * @param array|string $raw_recipients
+     * @param array        $scheduler_provider_index
+     * @return array<int,array<string,mixed>>
+     */
+    function apf_scheduler_build_recipient_payload( $raw_recipients, $scheduler_provider_index ) {
+        $recipient_tokens = array();
+        if ( is_array( $raw_recipients ) ) {
+            foreach ( $raw_recipients as $token ) {
+                $token = trim( (string) $token );
+                if ( $token !== '' ) {
+                    $recipient_tokens[] = $token;
+                }
+            }
+        } elseif ( is_string( $raw_recipients ) && $raw_recipients !== '' ) {
+            $chunks = array_filter( array_map( 'trim', explode( ',', $raw_recipients ) ) );
+            foreach ( $chunks as $chunk ) {
+                if ( $chunk !== '' ) {
+                    $recipient_tokens[] = $chunk;
+                }
+            }
+        }
+        $recipient_tokens = array_values( array_unique( $recipient_tokens ) );
+
+        $recipient_payload = array();
+        foreach ( $recipient_tokens as $token ) {
+            $raw   = (string) $token;
+            $group = 'providers';
+            $key   = $raw;
+            if ( strpos( $raw, '::' ) !== false ) {
+                list( $maybe_group, $maybe_key ) = explode( '::', $raw, 2 );
+                $maybe_group = sanitize_key( $maybe_group );
+                if ( in_array( $maybe_group, array( 'providers', 'coordinators' ), true ) && $maybe_key !== '' ) {
+                    $group = $maybe_group;
+                    $key   = preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', $maybe_key );
+                }
+            }
+            if ( '' === $key ) {
+                continue;
+            }
+
+            $provider = null;
+            if ( isset( $scheduler_provider_index[ $group ][ $key ] ) ) {
+                $provider = $scheduler_provider_index[ $group ][ $key ];
+            } elseif ( isset( $scheduler_provider_index['providers'][ $key ] ) ) {
+                $provider = $scheduler_provider_index['providers'][ $key ];
+                $group    = $provider['group'] ?? 'providers';
+            } elseif ( isset( $scheduler_provider_index['coordinators'][ $key ] ) ) {
+                $provider = $scheduler_provider_index['coordinators'][ $key ];
+                $group    = 'coordinators';
+            }
+
+            if ( empty( $provider ) ) {
+                continue;
+            }
+
+            $recipient_payload[] = array(
+                'key'           => $provider['key'],
+                'user_id'       => $provider['user_id'],
+                'name'          => $provider['name'],
+                'email'         => $provider['email'],
+                'group'         => $group,
+                'director_key'  => isset( $provider['director_key'] ) ? sanitize_text_field( $provider['director_key'] ) : '',
+                'director_name' => isset( $provider['director_name'] ) ? sanitize_text_field( $provider['director_name'] ) : '',
+                'course'        => isset( $provider['course'] ) ? sanitize_text_field( $provider['course'] ) : '',
+            );
+        }
+
+        return $recipient_payload;
     }
 }
 
@@ -720,6 +798,7 @@ add_shortcode('apf_inbox', function () {
                 'search'         => $concat,
                 'director_key'   => $director_key,
                 'director_label' => $director_label,
+                'director_name'  => sanitize_text_field( $dir ?: '' ),
                 'author_id'      => $author_id,
                 'email'          => $mail,
                 'name'           => $nome ?: ( $mail ?: '' ),
@@ -766,6 +845,7 @@ add_shortcode('apf_inbox', function () {
             'count'         => $total,
             'director_key'  => $latest['director_key'],
             'director_label'=> $latest['director_label'],
+            'director_name' => isset( $latest['director_name'] ) ? sanitize_text_field( $latest['director_name'] ) : '',
             'author_id'     => isset( $latest['author_id'] ) ? (int) $latest['author_id'] : 0,
             'email'         => isset( $latest['email'] ) ? sanitize_email( $latest['email'] ) : '',
             'name'          => isset( $latest['name'] ) ? sanitize_text_field( $latest['name'] ) : '',
@@ -839,6 +919,13 @@ add_shortcode('apf_inbox', function () {
         $label = sanitize_text_field( $label );
 
         $latest_payload = isset( $latest['payload'] ) && is_array( $latest['payload'] ) ? $latest['payload'] : array();
+        $director_name = isset( $bundle['director_name'] ) ? sanitize_text_field( $bundle['director_name'] ) : '';
+        if ( '' === $director_name && isset( $latest_payload['Coordenador'] ) ) {
+            $maybe_dir = sanitize_text_field( $latest_payload['Coordenador'] );
+            if ( '' !== $maybe_dir && '—' !== $maybe_dir ) {
+                $director_name = $maybe_dir;
+            }
+        }
         $record = array(
             'key'          => $key,
             'user_id'      => $author_id,
@@ -847,6 +934,7 @@ add_shortcode('apf_inbox', function () {
             'label'        => $label,
             'group'        => 'providers',
             'director_key' => isset( $latest['director_key'] ) ? sanitize_text_field( $latest['director_key'] ) : '',
+            'director_name'=> $director_name,
             'course'       => isset( $latest_payload['Curso'] ) ? sanitize_text_field( $latest_payload['Curso'] ) : '',
         );
         $scheduler_provider_index['providers'][ $key ] = $record;
@@ -954,7 +1042,16 @@ add_shortcode('apf_inbox', function () {
         $redirect_notice = '';
         $redirect_type   = 'success';
 
-        if ( ! isset( $_POST['apf_scheduler_nonce'] ) || ! wp_verify_nonce( $_POST['apf_scheduler_nonce'], 'apf_scheduler_manage' ) ) {
+        $nonce_valid = false;
+        $nonce_fields = array( 'apf_scheduler_nonce', 'apf_scheduler_nonce_edit', 'apf_scheduler_nonce_delete' );
+        foreach ( $nonce_fields as $nonce_field ) {
+            if ( isset( $_POST[ $nonce_field ] ) && wp_verify_nonce( wp_unslash( $_POST[ $nonce_field ] ), 'apf_scheduler_manage' ) ) {
+                $nonce_valid = true;
+                break;
+            }
+        }
+
+        if ( ! $nonce_valid ) {
             $redirect_notice = 'Não foi possível validar a solicitação. Recarregue a página e tente novamente.';
             $redirect_type   = 'error';
         } else {
@@ -970,66 +1067,7 @@ add_shortcode('apf_inbox', function () {
                 $title = function_exists( 'mb_substr' ) ? trim( mb_substr( $title, 0, 120 ) ) : trim( substr( $title, 0, 120 ) );
 
                 $raw_recipients = isset( $_POST['apf_scheduler_recipients'] ) ? wp_unslash( $_POST['apf_scheduler_recipients'] ) : array();
-                $recipient_tokens = array();
-                if ( is_array( $raw_recipients ) ) {
-                    foreach ( $raw_recipients as $token ) {
-                        $token = trim( (string) $token );
-                        if ( $token !== '' ) {
-                            $recipient_tokens[] = $token;
-                        }
-                    }
-                } elseif ( is_string( $raw_recipients ) && $raw_recipients !== '' ) {
-                    $chunks = array_filter( array_map( 'trim', explode( ',', $raw_recipients ) ) );
-                    foreach ( $chunks as $chunk ) {
-                        if ( $chunk !== '' ) {
-                            $recipient_tokens[] = $chunk;
-                        }
-                    }
-                }
-                $recipient_tokens = array_values( array_unique( $recipient_tokens ) );
-
-                $recipient_payload = array();
-                foreach ( $recipient_tokens as $token ) {
-                    $raw = (string) $token;
-                    $group = 'providers';
-                    $key   = $raw;
-                    if ( strpos( $raw, '::' ) !== false ) {
-                        list( $maybe_group, $maybe_key ) = explode( '::', $raw, 2 );
-                        $maybe_group = sanitize_key( $maybe_group );
-                        if ( in_array( $maybe_group, array( 'providers', 'coordinators' ), true ) && $maybe_key !== '' ) {
-                            $group = $maybe_group;
-                            $key   = preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', $maybe_key );
-                        }
-                    }
-                    if ( '' === $key ) {
-                        continue;
-                    }
-
-                    $provider = null;
-                    if ( isset( $scheduler_provider_index[ $group ][ $key ] ) ) {
-                        $provider = $scheduler_provider_index[ $group ][ $key ];
-                    } elseif ( isset( $scheduler_provider_index['providers'][ $key ] ) ) {
-                        $provider = $scheduler_provider_index['providers'][ $key ];
-                        $group    = $provider['group'] ?? 'providers';
-                    } elseif ( isset( $scheduler_provider_index['coordinators'][ $key ] ) ) {
-                        $provider = $scheduler_provider_index['coordinators'][ $key ];
-                        $group    = 'coordinators';
-                    }
-
-                    if ( empty( $provider ) ) {
-                        continue;
-                    }
-
-                    $recipient_payload[] = array(
-                        'key'          => $provider['key'],
-                        'user_id'      => $provider['user_id'],
-                        'name'         => $provider['name'],
-                        'email'        => $provider['email'],
-                        'group'        => $group,
-                        'director_key' => isset( $provider['director_key'] ) ? sanitize_text_field( $provider['director_key'] ) : '',
-                        'course'       => isset( $provider['course'] ) ? sanitize_text_field( $provider['course'] ) : '',
-                    );
-                }
+                $recipient_payload = apf_scheduler_build_recipient_payload( $raw_recipients, $scheduler_provider_index );
 
                 if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
                     $redirect_notice = 'Selecione uma data válida para o aviso.';
@@ -1051,6 +1089,48 @@ add_shortcode('apf_inbox', function () {
                     );
                     apf_scheduler_store_events( $scheduler_events );
                     $redirect_notice = 'Aviso adicionado ao calendário.';
+                }
+            } elseif ( 'update' === $action ) {
+                $event_id = isset( $_POST['apf_scheduler_event'] )
+                    ? preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', (string) wp_unslash( $_POST['apf_scheduler_event'] ) )
+                    : '';
+                $title = isset( $_POST['apf_scheduler_title'] )
+                    ? sanitize_text_field( wp_unslash( $_POST['apf_scheduler_title'] ) )
+                    : '';
+                $title = function_exists( 'mb_substr' ) ? trim( mb_substr( $title, 0, 120 ) ) : trim( substr( $title, 0, 120 ) );
+                $raw_recipients = isset( $_POST['apf_scheduler_recipients'] ) ? wp_unslash( $_POST['apf_scheduler_recipients'] ) : array();
+                $recipient_payload = apf_scheduler_build_recipient_payload( $raw_recipients, $scheduler_provider_index );
+
+                if ( '' === $event_id ) {
+                    $redirect_notice = 'Aviso inválido para edição.';
+                    $redirect_type   = 'error';
+                } elseif ( '' === $title ) {
+                    $redirect_notice = 'Defina um título para o aviso.';
+                    $redirect_type   = 'error';
+                } elseif ( empty( $recipient_payload ) ) {
+                    $redirect_notice = 'Escolha ao menos um destinatário.';
+                    $redirect_type   = 'error';
+                } else {
+                    $event_index = null;
+                    foreach ( $scheduler_events as $idx => $event ) {
+                        $current_id = isset( $event['id'] ) ? sanitize_text_field( $event['id'] ) : '';
+                        if ( '' !== $current_id && $current_id === $event_id ) {
+                            $event_index = $idx;
+                            break;
+                        }
+                    }
+
+                    if ( null === $event_index ) {
+                        $redirect_notice = 'Não foi possível localizar o aviso selecionado.';
+                        $redirect_type   = 'error';
+                    } else {
+                        $scheduler_events[ $event_index ]['title']      = $title;
+                        $scheduler_events[ $event_index ]['recipients'] = $recipient_payload;
+                        $scheduler_events[ $event_index ]['updated_at'] = time();
+                        $scheduler_events[ $event_index ]['updated_by'] = get_current_user_id();
+                        apf_scheduler_store_events( $scheduler_events );
+                        $redirect_notice = 'Aviso atualizado.';
+                    }
                 }
             } elseif ( 'delete' === $action ) {
                 $event_id = isset( $_POST['apf_scheduler_event'] )
@@ -1112,7 +1192,6 @@ add_shortcode('apf_inbox', function () {
     }
 
     $scheduler_events_json  = array();
-    $scheduler_events_human = array();
 
     foreach ( $scheduler_events as $event ) {
         $event_id    = isset( $event['id'] ) ? sanitize_text_field( $event['id'] ) : '';
@@ -1126,6 +1205,7 @@ add_shortcode('apf_inbox', function () {
         );
 
         $names = array();
+        $recipients_for_json = array();
         foreach ( $recipient_rows as $recipient ) {
             $recipient_name  = isset( $recipient['name'] ) ? sanitize_text_field( $recipient['name'] ) : '';
             $recipient_email = isset( $recipient['email'] ) ? sanitize_email( $recipient['email'] ) : '';
@@ -1145,6 +1225,17 @@ add_shortcode('apf_inbox', function () {
                 $recipient_group = 'providers';
             }
             $event_group_flags[ $recipient_group ] = true;
+
+            $recipients_for_json[] = array(
+                'key'           => isset( $recipient['key'] ) ? sanitize_text_field( $recipient['key'] ) : '',
+                'group'         => $recipient_group,
+                'name'          => $recipient_name,
+                'email'         => $recipient_email,
+                'display'       => $display,
+                'director_key'  => isset( $recipient['director_key'] ) ? sanitize_text_field( $recipient['director_key'] ) : '',
+                'director_name' => isset( $recipient['director_name'] ) ? sanitize_text_field( $recipient['director_name'] ) : '',
+                'course'        => isset( $recipient['course'] ) ? sanitize_text_field( $recipient['course'] ) : '',
+            );
         }
 
         $event_groups = array();
@@ -1162,14 +1253,8 @@ add_shortcode('apf_inbox', function () {
             'date'   => $event_date,
             'title'  => $event_title,
             'groups' => $event_groups,
-        );
-
-        $scheduler_events_human[] = array(
-            'id'         => $event_id,
-            'date'       => $event_date,
-            'title'      => $event_title,
-            'recipients' => $names,
-            'groups'     => $event_groups,
+            'recipients'      => $recipients_for_json,
+            'recipients_text' => $names,
         );
     }
 
@@ -1333,48 +1418,65 @@ add_shortcode('apf_inbox', function () {
             </div>
           </form>
         </div>
-
-        <?php if ( ! empty( $scheduler_events_human ) ) : ?>
-          <div class="apf-scheduler__list">
-            <h3>Próximos avisos</h3>
-            <ul>
-              <?php foreach ( $scheduler_events_human as $event_entry ) :
-                    $groups_attr = array();
-                    if ( ! empty( $event_entry['groups'] ) && is_array( $event_entry['groups'] ) ) {
-                        foreach ( $event_entry['groups'] as $group_value ) {
-                            $group_value = sanitize_key( $group_value );
-                            if ( in_array( $group_value, array( 'providers', 'coordinators' ), true ) ) {
-                                $groups_attr[] = $group_value;
-                            }
-                        }
-                    }
-                    if ( empty( $groups_attr ) ) {
-                        $groups_attr[] = 'providers';
-                    }
-                    $groups_attr_value = implode( ',', $groups_attr );
-              ?>
-                <li data-event-groups="<?php echo esc_attr( $groups_attr_value ); ?>">
-                  <div class="apf-scheduler__list-meta">
-                    <span class="apf-scheduler__list-date"><?php echo esc_html( date_i18n( 'd/m/Y', strtotime( $event_entry['date'] ) ) ); ?></span>
-                    <span class="apf-scheduler__list-title"><?php echo esc_html( $event_entry['title'] ); ?></span>
+        <div class="apf-scheduler-modal" id="apfSchedulerModal" aria-hidden="true">
+          <div class="apf-scheduler-modal__overlay" data-modal-close></div>
+          <div class="apf-scheduler-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="apfSchedulerModalTitle">
+            <div class="apf-scheduler-modal__head">
+              <h3 id="apfSchedulerModalTitle">Avisos do dia</h3>
+              <button type="button" class="apf-scheduler-modal__close" data-modal-close aria-label="Fechar">&times;</button>
+            </div>
+            <div class="apf-scheduler-modal__content">
+              <div class="apf-scheduler-modal__list" data-view="list">
+                <p class="apf-scheduler-modal__empty">Nenhum aviso programado para esta data.</p>
+                <div class="apf-scheduler-modal__items"></div>
+              </div>
+              <div class="apf-scheduler-modal__edit" data-view="edit" hidden>
+                <form method="post" id="apfSchedulerEditForm" class="apf-scheduler-edit">
+                  <?php wp_nonce_field( 'apf_scheduler_manage', 'apf_scheduler_nonce_edit' ); ?>
+                  <input type="hidden" name="apf_scheduler_action" value="update">
+                  <input type="hidden" name="apf_scheduler_event" value="">
+                  <input type="hidden" name="apf_scheduler_date" value="">
+                  <div class="apf-scheduler-edit__section">
+                    <span class="apf-scheduler-edit__date-label">Data selecionada</span>
+                    <strong id="apfSchedulerEditDate">—</strong>
                   </div>
-                  <?php if ( ! empty( $event_entry['recipients'] ) ) : ?>
-                    <p class="apf-scheduler__list-recipients">
-                      <?php echo esc_html( 'Destinatários: ' . implode( '; ', $event_entry['recipients'] ) ); ?>
-                    </p>
-                  <?php endif; ?>
-                  <form method="post" class="apf-scheduler__list-remove">
-                    <?php wp_nonce_field( 'apf_scheduler_manage', 'apf_scheduler_nonce' ); ?>
-                    <input type="hidden" name="apf_scheduler_action" value="delete">
-                    <input type="hidden" name="apf_scheduler_event" value="<?php echo esc_attr( $event_entry['id'] ); ?>">
-                    <button type="submit" class="apf-btn apf-btn--ghost" onclick="return confirm('Remover este aviso do calendário?');">Remover</button>
-                  </form>
-                </li>
-              <?php endforeach; ?>
-            </ul>
-            <p class="apf-scheduler__list-empty" hidden>Nenhum aviso para este público.</p>
+                  <label class="apf-scheduler-edit__field">
+                    <span>Título do aviso</span>
+                    <input type="text" name="apf_scheduler_title" id="apfSchedulerEditTitle" maxlength="120" required>
+                  </label>
+                  <div class="apf-scheduler-edit__chips" id="apfSchedulerEditChips">
+                    <p class="apf-scheduler-edit__chips-empty">Nenhum destinatário selecionado.</p>
+                  </div>
+                  <div class="apf-scheduler-edit__section">
+                    <div class="apf-scheduler-edit__audience">
+                      <span>Adicionar destinatários</span>
+                      <div class="apf-scheduler-edit__tabs" role="tablist">
+                        <button type="button" class="apf-scheduler-edit__tab is-active" data-edit-group="providers">Colaboradores</button>
+                        <button type="button" class="apf-scheduler-edit__tab" data-edit-group="coordinators">Coordenadores</button>
+                      </div>
+                    </div>
+                    <label class="apf-scheduler-edit__field">
+                      <span>Buscar</span>
+                      <input type="search" id="apfSchedulerEditSearch" placeholder="Digite nome ou e-mail">
+                    </label>
+                    <div class="apf-scheduler-edit__providers"></div>
+                  </div>
+                  <div id="apfSchedulerEditRecipientsHolder" aria-hidden="true"></div>
+                  <div class="apf-scheduler-edit__footer">
+                    <button type="button" class="apf-btn apf-btn--ghost" data-edit-cancel>Cancelar</button>
+                    <button type="submit" class="apf-btn apf-btn--primary">Salvar alterações</button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
-        <?php endif; ?>
+        </div>
+        <form method="post" id="apfSchedulerDeleteForm" class="apf-scheduler-hidden-form">
+          <?php wp_nonce_field( 'apf_scheduler_manage', 'apf_scheduler_nonce_delete' ); ?>
+          <input type="hidden" name="apf_scheduler_action" value="delete">
+          <input type="hidden" name="apf_scheduler_event" value="">
+        </form>
+
       </section>
 
       <!-- Toolbar / Busca -->
@@ -1913,60 +2015,227 @@ add_shortcode('apf_inbox', function () {
         flex-wrap:wrap;
         gap:8px;
       }
-      .apf-scheduler__list{
-        border-top:1px solid var(--apf-border);
-        padding-top:16px;
+      .apf-scheduler-modal{
+        position:fixed;
+        inset:0;
+        z-index:1000;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        visibility:hidden;
+        opacity:0;
+        pointer-events:none;
+        transition:opacity .2s ease;
+      }
+      .apf-scheduler-modal[aria-hidden="false"]{
+        visibility:visible;
+        opacity:1;
+        pointer-events:auto;
+      }
+      .apf-scheduler-modal__overlay{
+        position:absolute;
+        inset:0;
+        background:rgba(15,23,42,.55);
+      }
+      .apf-scheduler-modal__dialog{
+        position:relative;
+        width:100%;
+        max-width:760px;
+        max-height:90vh;
+        background:#fff;
+        border-radius:18px;
+        box-shadow:0 24px 60px rgba(15,23,42,.35);
+        display:flex;
+        flex-direction:column;
+        overflow:hidden;
+      }
+      .apf-scheduler-modal__head{
+        padding:16px 20px;
+        border-bottom:1px solid #e4e7ec;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+      }
+      .apf-scheduler-modal__head h3{
+        margin:0;
+        font-size:18px;
+        color:#0f172a;
+      }
+      .apf-scheduler-modal__close{
+        border:none;
+        background:transparent;
+        font-size:24px;
+        line-height:1;
+        cursor:pointer;
+        color:#475467;
+      }
+      .apf-scheduler-modal__content{
+        padding:16px 20px 24px;
+        overflow-y:auto;
+        flex:1;
+      }
+      .apf-scheduler-modal__empty{
+        margin:0;
+        font-size:14px;
+        color:#475467;
+        text-align:center;
+      }
+      .apf-scheduler-modal__items{
         display:flex;
         flex-direction:column;
         gap:12px;
       }
-      .apf-scheduler__list-empty{
-        margin:0;
-        font-size:13px;
-        color:var(--apf-muted);
+      .apf-scheduler-modal__event{
+        border:1px solid #e4e7ec;
+        border-radius:14px;
+        padding:14px;
+        background:#f9fafb;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
       }
-      .apf-scheduler__list h3{
+      .apf-scheduler-modal__event h4{
         margin:0;
         font-size:15px;
+        color:#0f172a;
       }
-      .apf-scheduler__list ul{
-        list-style:none;
-        margin:0;
-        padding:0;
-        display:flex;
-        flex-direction:column;
-        gap:10px;
-      }
-      .apf-scheduler__list li{
-        border:1px solid var(--apf-border);
-        border-radius:10px;
-        padding:12px;
-        background:var(--apf-bg);
-        display:flex;
-        flex-direction:column;
-        gap:10px;
-      }
-      .apf-scheduler__list-meta{
+      .apf-scheduler-modal__event-meta{
         display:flex;
         flex-wrap:wrap;
-        gap:12px;
-        align-items:center;
+        gap:8px;
+        font-size:13px;
+        color:#475467;
       }
-      .apf-scheduler__list-date{
-        font-weight:600;
+      .apf-scheduler-modal__event-actions{
+        display:flex;
+        gap:10px;
+        flex-wrap:wrap;
+      }
+      .apf-scheduler-edit{
+        display:flex;
+        flex-direction:column;
+        gap:16px;
+      }
+      .apf-scheduler-edit__section{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+      }
+      .apf-scheduler-edit__date-label{
+        font-size:12px;
+        text-transform:uppercase;
+        letter-spacing:.02em;
+        color:#475467;
+      }
+      .apf-scheduler-edit__field{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+        font-size:13px;
+        color:#344054;
+      }
+      .apf-scheduler-edit__field input{
+        border:1px solid #d0d5dd;
+        border-radius:10px;
+        padding:9px 12px;
         font-size:14px;
       }
-      .apf-scheduler__list-title{
-        font-size:14px;
+      .apf-scheduler-edit__chips{
+        display:flex;
+        flex-wrap:wrap;
+        gap:8px;
+        min-height:32px;
       }
-      .apf-scheduler__list-recipients{
+      .apf-scheduler-edit__chips-empty{
         margin:0;
         font-size:13px;
-        color:var(--apf-muted);
+        color:#667085;
       }
-      .apf-scheduler__list-remove{
+      .apf-scheduler-edit__chip{
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        background:#e0f2fe;
+        color:#0f172a;
+        border-radius:999px;
+        padding:6px 10px;
+        font-size:12px;
+      }
+      .apf-scheduler-edit__chip button{
+        border:none;
+        background:transparent;
+        color:inherit;
+        cursor:pointer;
+        font-size:12px;
+      }
+      .apf-scheduler-edit__audience{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+      }
+      .apf-scheduler-edit__tabs{
+        display:flex;
+        gap:8px;
+      }
+      .apf-scheduler-edit__tab{
+        flex:1;
+        border:1px solid #d0d5dd;
+        border-radius:999px;
+        padding:8px 12px;
+        background:#fff;
+        font-size:13px;
+        cursor:pointer;
+      }
+      .apf-scheduler-edit__tab.is-active{
+        background:#1f6feb;
+        color:#fff;
+        border-color:#1f6feb;
+      }
+      .apf-scheduler-edit__providers{
+        border:1px solid #e4e7ec;
+        border-radius:12px;
+        padding:8px;
+        background:#fff;
+        max-height:180px;
+        overflow:auto;
+        display:flex;
+        flex-direction:column;
+        gap:4px;
+      }
+      .apf-scheduler-edit__provider{
+        border:1px solid transparent;
+        border-radius:10px;
+        padding:8px 10px;
+        font-size:13px;
+        color:#0f172a;
+        cursor:pointer;
+        display:flex;
+        justify-content:space-between;
+        gap:8px;
+        background:#fff;
+      }
+      .apf-scheduler-edit__provider:hover{
+        border-color:#d0d5dd;
+        background:#f8fafc;
+      }
+      .apf-scheduler-edit__provider.is-selected{
+        border-color:#1d4ed8;
+        background:#eff4ff;
+      }
+      .apf-scheduler-edit__providers-empty{
+        margin:8px 0;
+        text-align:center;
+        font-size:13px;
+        color:#475467;
+      }
+      .apf-scheduler-edit__footer{
         display:flex;
         justify-content:flex-end;
+        gap:12px;
+      }
+      .apf-scheduler-hidden-form{
+        display:none;
       }
       @media(max-width:1080px){
         .apf-scheduler__grid{
@@ -2276,7 +2545,7 @@ add_shortcode('apf_inbox', function () {
         }
       };
       autoCleanNotices();
-      const noticeForms = $$('.apf-directors__form, .apf-directors__item, #apfSchedulerForm');
+      const noticeForms = $$('.apf-directors__form, .apf-directors__item, #apfSchedulerForm, #apfSchedulerEditForm');
       noticeForms.forEach(form=>{
         if(!form){ return; }
         form.addEventListener('submit', dismissNotices);
@@ -2294,10 +2563,21 @@ add_shortcode('apf_inbox', function () {
       const schedulerRecipientsHolder = $('#apfSchedulerRecipientsHolder');
       const schedulerTabs = $$('.apf-scheduler__tab');
       const schedulerPickerLabel = $('#apfSchedulerPickerLabel');
-      const schedulerListContainer = document.querySelector('.apf-scheduler__list');
-      const schedulerListElement = schedulerListContainer ? schedulerListContainer.querySelector('ul') : null;
-      const schedulerListItems = schedulerListElement ? Array.from(schedulerListElement.querySelectorAll('li')) : [];
-      const schedulerListEmpty = schedulerListContainer ? schedulerListContainer.querySelector('.apf-scheduler__list-empty') : null;
+      const schedulerModal = $('#apfSchedulerModal');
+      const schedulerModalListView = schedulerModal ? schedulerModal.querySelector('[data-view="list"]') : null;
+      const schedulerModalEditView = schedulerModal ? schedulerModal.querySelector('[data-view="edit"]') : null;
+      const schedulerModalItems = schedulerModal ? schedulerModal.querySelector('.apf-scheduler-modal__items') : null;
+      const schedulerModalEmpty = schedulerModal ? schedulerModal.querySelector('.apf-scheduler-modal__empty') : null;
+      const schedulerModalCloseTriggers = schedulerModal ? $$('[data-modal-close]', schedulerModal) : [];
+      const schedulerDeleteForm = $('#apfSchedulerDeleteForm');
+      const editForm = $('#apfSchedulerEditForm');
+      const editTitleInput = $('#apfSchedulerEditTitle');
+      const editDateDisplay = $('#apfSchedulerEditDate');
+      const editRecipientsHolder = $('#apfSchedulerEditRecipientsHolder');
+      const editChips = $('#apfSchedulerEditChips');
+      const editSearch = $('#apfSchedulerEditSearch');
+      const editProvidersBox = schedulerModal ? schedulerModal.querySelector('.apf-scheduler-edit__providers') : null;
+      const editTabs = $$('.apf-scheduler-edit__tab', schedulerModal);
       const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
       const WEEKDAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
 
@@ -2314,7 +2594,18 @@ add_shortcode('apf_inbox', function () {
           activeGroup: 'providers',
           providerIndex: new Map(),
           eventsByDate: new Map(),
+          eventsByDateDetail: new Map(),
         };
+        const modalState = {
+          date: '',
+          events: [],
+          editing: null,
+        };
+        const editState = {
+          activeGroup: 'providers',
+          selected: new Map(),
+        };
+        let schedulerModalLastFocus = null;
 
         state.month.setDate(1);
 
@@ -2340,42 +2631,24 @@ add_shortcode('apf_inbox', function () {
 
         function rebuildEventsIndex(){
           state.eventsByDate = new Map();
+          state.eventsByDateDetail = new Map();
           const activeGroup = (state.activeGroup || 'providers').toLowerCase();
           state.events.forEach(evt=>{
             if(!evt || !evt.date){ return; }
             const groups = Array.isArray(evt.groups) && evt.groups.length ? evt.groups : ['providers'];
+            const date = evt.date;
+            if(!state.eventsByDateDetail.has(date)){
+              state.eventsByDateDetail.set(date, []);
+            }
+            state.eventsByDateDetail.get(date).push(evt);
             if(activeGroup && groups.indexOf(activeGroup) === -1){
               return;
             }
-            const date = evt.date;
             if(!state.eventsByDate.has(date)){
               state.eventsByDate.set(date, []);
             }
             state.eventsByDate.get(date).push(evt);
           });
-        }
-
-        function filterSchedulerList(){
-          if(!schedulerListItems.length){
-            if(schedulerListEmpty){
-              schedulerListEmpty.hidden = false;
-            }
-            return;
-          }
-          const activeGroup = (state.activeGroup || 'providers').toLowerCase();
-          let visible = 0;
-          schedulerListItems.forEach(item=>{
-            const attr = (item.getAttribute('data-event-groups') || '').toLowerCase();
-            const groups = attr ? attr.split(',').map(s=>s.trim()).filter(Boolean) : [];
-            const matches = !groups.length || groups.includes(activeGroup);
-            item.style.display = matches ? '' : 'none';
-            if(matches){
-              visible++;
-            }
-          });
-          if(schedulerListEmpty){
-            schedulerListEmpty.hidden = visible > 0;
-          }
         }
 
         try{
@@ -2388,6 +2661,8 @@ add_shortcode('apf_inbox', function () {
                 clone.date = (clone.date || '').toString();
                 clone.title = clone.title || '';
                 clone.groups = normalizeGroups(clone.groups);
+                clone.recipients = Array.isArray(clone.recipients) ? clone.recipients : [];
+                clone.recipients_text = Array.isArray(clone.recipients_text) ? clone.recipients_text : [];
                 return clone;
               })
               .filter(Boolean);
@@ -2406,14 +2681,16 @@ add_shortcode('apf_inbox', function () {
 
         function rebuildProviderIndex(){
           state.providerIndex.clear();
-          const list = state.providerGroups[state.activeGroup] || [];
-          list.forEach(provider=>{
-            if(provider && provider.key){
-              const token = providerToken(provider, state.activeGroup);
-              provider.token = token;
-              provider.group = provider.group || state.activeGroup || 'providers';
-              state.providerIndex.set(token, provider);
-            }
+          ['providers','coordinators'].forEach(group=>{
+            const list = state.providerGroups[group] || [];
+            list.forEach(provider=>{
+              if(provider && provider.key){
+                provider.group = provider.group || group;
+                const token = providerToken(provider, provider.group);
+                provider.token = token;
+                state.providerIndex.set(token, provider);
+              }
+            });
           });
         }
 
@@ -2481,7 +2758,7 @@ add_shortcode('apf_inbox', function () {
           }
           filtered.forEach(provider=>{
             if(!provider || !provider.key){ return; }
-            const token = provider.token || providerToken(provider, state.activeGroup);
+            const token = provider.token || providerToken(provider, provider.group || state.activeGroup);
             const label = document.createElement('label');
             label.className = 'apf-scheduler__provider apf-scheduler__provider--' + (provider.group || state.activeGroup || 'providers');
             if(state.selectedProviders.has(token)){
@@ -2516,7 +2793,6 @@ add_shortcode('apf_inbox', function () {
           updateAudienceCopy();
           renderProviders('');
           renderCalendar();
-          filterSchedulerList();
           schedulerTabs.forEach(tab=>{
             const key = tab.getAttribute('data-scheduler-group');
             tab.classList.toggle('is-active', key === group);
@@ -2540,7 +2816,7 @@ add_shortcode('apf_inbox', function () {
           setActiveGroup(initialGroup);
         }
 
-        function setSelectedDate(iso){
+        function setSelectedDate(iso, openModal = false){
           state.selectedDate = iso;
           if(schedulerDateInput){
             schedulerDateInput.value = iso;
@@ -2549,6 +2825,9 @@ add_shortcode('apf_inbox', function () {
             schedulerSelectedDisplay.textContent = iso ? formatDateBr(iso) : 'Nenhum dia selecionado';
           }
           renderCalendar();
+          if(openModal && schedulerModal && iso && state.eventsByDateDetail.has(iso)){
+            openSchedulerModal(iso);
+          }
         }
 
         function changeMonth(delta){
@@ -2618,14 +2897,19 @@ add_shortcode('apf_inbox', function () {
               if(state.selectedDate === iso){
                 button.classList.add('apf-scheduler__day--selected');
               }
+              const detailEvents = state.eventsByDateDetail.get(iso) || [];
               if(state.eventsByDate.has(iso)){
                 const marker = document.createElement('span');
                 const markerGroup = (state.activeGroup || 'providers').toLowerCase();
                 marker.className = 'apf-scheduler__day-marker apf-scheduler__day-marker--' + markerGroup;
                 button.appendChild(marker);
-                button.title = state.eventsByDate.get(iso).map(evt=>evt.title).join(', ');
               }
-              button.addEventListener('click', ()=>setSelectedDate(iso));
+              if(detailEvents.length){
+                button.title = detailEvents.map(evt=>evt.title || 'Aviso').join(', ');
+              }else{
+                button.removeAttribute('title');
+              }
+              button.addEventListener('click', ()=>setSelectedDate(iso, true));
             }
 
             daysGrid.appendChild(button);
@@ -2638,8 +2922,354 @@ add_shortcode('apf_inbox', function () {
           schedulerEl.appendChild(container);
         }
 
+        function openSchedulerModal(date){
+          if(!schedulerModal){ return; }
+          modalState.date = date;
+          modalState.events = Array.isArray(state.eventsByDateDetail.get(date))
+            ? state.eventsByDateDetail.get(date).slice()
+            : [];
+          modalState.editing = null;
+          exitEditMode(false);
+          renderModalList();
+          schedulerModal.setAttribute('aria-hidden','false');
+          schedulerModalLastFocus = document.activeElement;
+          document.body.style.overflow = 'hidden';
+          const focusTarget = schedulerModal.querySelector('.apf-scheduler-modal__close') || schedulerModal;
+          if(focusTarget){ focusTarget.focus(); }
+        }
+
+        function closeSchedulerModal(){
+          if(!schedulerModal){ return; }
+          schedulerModal.setAttribute('aria-hidden','true');
+          document.body.style.overflow = '';
+          modalState.date = '';
+          modalState.events = [];
+          modalState.editing = null;
+          exitEditMode(false);
+          if(schedulerModalLastFocus){
+            schedulerModalLastFocus.focus();
+          }
+        }
+
+        function recipientsSummary(evt){
+          if(evt && Array.isArray(evt.recipients_text) && evt.recipients_text.length){
+            return evt.recipients_text.join('; ');
+          }
+          if(evt && Array.isArray(evt.recipients) && evt.recipients.length){
+            return evt.recipients
+              .map(rec => (rec && (rec.display || rec.name || rec.email)) || '')
+              .filter(Boolean)
+              .join('; ');
+          }
+          return '';
+        }
+
+        function renderModalList(){
+          if(!schedulerModalItems || !schedulerModalEmpty){ return; }
+          schedulerModalItems.innerHTML = '';
+          const items = Array.isArray(modalState.events) ? modalState.events.slice() : [];
+          items.sort((a,b)=>{
+            const aTitle = (a && a.title) ? a.title.toString().toLowerCase() : '';
+            const bTitle = (b && b.title) ? b.title.toString().toLowerCase() : '';
+            return aTitle.localeCompare(bTitle);
+          });
+          if(!items.length){
+            schedulerModalEmpty.hidden = false;
+            return;
+          }
+          schedulerModalEmpty.hidden = true;
+          items.forEach(evt=>{
+            if(!evt){ return; }
+            const card = document.createElement('article');
+            card.className = 'apf-scheduler-modal__event';
+
+            const heading = document.createElement('h4');
+            heading.textContent = evt.title || 'Aviso sem título';
+
+            const meta = document.createElement('div');
+            meta.className = 'apf-scheduler-modal__event-meta';
+            const dateBadge = document.createElement('span');
+            dateBadge.textContent = 'Data: ' + (evt.date ? formatDateBr(evt.date) : (modalState.date ? formatDateBr(modalState.date) : '—'));
+            meta.appendChild(dateBadge);
+            const summary = recipientsSummary(evt);
+            const recipientsBadge = document.createElement('span');
+            recipientsBadge.textContent = summary ? ('Destinatários: ' + summary) : 'Destinatários indisponíveis.';
+            meta.appendChild(recipientsBadge);
+
+            const actions = document.createElement('div');
+            actions.className = 'apf-scheduler-modal__event-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'apf-btn apf-btn--primary';
+            editBtn.textContent = 'Editar';
+            editBtn.addEventListener('click', ()=>enterEditMode(evt));
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'apf-btn apf-btn--ghost';
+            removeBtn.textContent = 'Remover';
+            removeBtn.addEventListener('click', ()=>confirmDelete(evt));
+
+            actions.appendChild(editBtn);
+            actions.appendChild(removeBtn);
+
+            card.appendChild(heading);
+            card.appendChild(meta);
+            card.appendChild(actions);
+            schedulerModalItems.appendChild(card);
+          });
+        }
+
+        function confirmDelete(evt){
+          if(!schedulerDeleteForm || !evt || !evt.id){ return; }
+          const targetInput = schedulerDeleteForm.querySelector('input[name="apf_scheduler_event"]');
+          if(!targetInput){ return; }
+          const message = evt.title ? ('Remover o aviso "' + evt.title + '"?') : 'Remover este aviso?';
+          if(!window.confirm(message)){
+            return;
+          }
+          targetInput.value = evt.id;
+          schedulerDeleteForm.submit();
+        }
+
+        function enterEditMode(evt){
+          if(!schedulerModalEditView || !schedulerModalListView || !editForm){ return; }
+          modalState.editing = evt;
+          schedulerModalListView.hidden = true;
+          schedulerModalEditView.hidden = false;
+          const eventField = editForm.querySelector('input[name="apf_scheduler_event"]');
+          if(eventField){ eventField.value = evt && evt.id ? evt.id : ''; }
+          const dateField = editForm.querySelector('input[name="apf_scheduler_date"]');
+          if(dateField){ dateField.value = evt && evt.date ? evt.date : ''; }
+          if(editDateDisplay){ editDateDisplay.textContent = evt && evt.date ? formatDateBr(evt.date) : '—'; }
+          if(editTitleInput){ editTitleInput.value = evt && evt.title ? evt.title : ''; }
+          editState.selected = new Map();
+          const recipients = (evt && Array.isArray(evt.recipients)) ? evt.recipients : [];
+          recipients.forEach(rec=>{
+            if(!rec){ return; }
+            const group = (rec.group === 'coordinators') ? 'coordinators' : 'providers';
+            const key = rec.key ? rec.key.toString() : '';
+            if(!key){ return; }
+            const token = providerToken({ key, group }, group);
+            let provider = state.providerIndex.get(token);
+            if(!provider){
+              provider = {
+                key,
+                group,
+                name: rec.name || '',
+                email: rec.email || '',
+                label: rec.display || rec.name || rec.email || '',
+                director_key: rec.director_key || '',
+                director_name: rec.director_name || '',
+                course: rec.course || '',
+              };
+              state.providerIndex.set(token, provider);
+            }
+            if(provider){
+              editState.selected.set(token, provider);
+            }
+          });
+          syncEditRecipients();
+          setEditActiveGroup(editState.activeGroup || 'providers');
+          if(editTitleInput){
+            editTitleInput.focus();
+          }
+        }
+
+        function exitEditMode(renderList = true){
+          if(!schedulerModalEditView || !schedulerModalListView){ return; }
+          schedulerModalEditView.hidden = true;
+          schedulerModalListView.hidden = false;
+          modalState.editing = null;
+          editState.selected.clear();
+          if(editForm){
+            const nonceField = editForm.querySelector('input[name="apf_scheduler_nonce_edit"]');
+            const nonceValue = nonceField ? nonceField.value : '';
+            editForm.reset();
+            if(nonceField && nonceValue){
+              nonceField.value = nonceValue;
+            }
+          }
+          if(editChips){
+            editChips.innerHTML = '<p class="apf-scheduler-edit__chips-empty">Nenhum destinatário selecionado.</p>';
+          }
+          if(editRecipientsHolder){
+            editRecipientsHolder.innerHTML = '';
+          }
+          if(renderList){
+            renderModalList();
+          }
+        }
+
+        function syncEditRecipients(){
+          if(!editRecipientsHolder){ return; }
+          editRecipientsHolder.innerHTML = '';
+          editState.selected.forEach((provider, token)=>{
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'apf_scheduler_recipients[]';
+            input.value = token;
+            editRecipientsHolder.appendChild(input);
+          });
+          renderEditChips();
+        }
+
+        function renderEditChips(){
+          if(!editChips){ return; }
+          editChips.innerHTML = '';
+          if(!editState.selected.size){
+            const emptyMsg = document.createElement('p');
+            emptyMsg.className = 'apf-scheduler-edit__chips-empty';
+            emptyMsg.textContent = 'Nenhum destinatário selecionado.';
+            editChips.appendChild(emptyMsg);
+            return;
+          }
+          editState.selected.forEach((provider, token)=>{
+            const chip = document.createElement('span');
+            chip.className = 'apf-scheduler-edit__chip';
+            const label = provider.label || provider.name || provider.email || token;
+            chip.textContent = label;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.setAttribute('aria-label', 'Remover ' + label);
+            btn.innerHTML = '&times;';
+            btn.addEventListener('click', ()=>{
+              editState.selected.delete(token);
+              syncEditRecipients();
+              renderEditProvidersList(editSearch ? editSearch.value : '');
+            });
+            chip.appendChild(btn);
+            editChips.appendChild(chip);
+          });
+        }
+
+        function setEditActiveGroup(group, skipSearchReset = false){
+          const normalized = (group === 'coordinators') ? 'coordinators' : 'providers';
+          editState.activeGroup = normalized;
+          editTabs.forEach(tab=>{
+            const key = tab.getAttribute('data-edit-group');
+            tab.classList.toggle('is-active', key === normalized);
+          });
+          updateEditSearchPlaceholder();
+          if(!skipSearchReset && editSearch){
+            editSearch.value = '';
+          }
+          renderEditProvidersList(editSearch ? editSearch.value : '');
+        }
+
+        function updateEditSearchPlaceholder(){
+          if(!editSearch){ return; }
+          editSearch.placeholder = (editState.activeGroup === 'coordinators')
+            ? 'Digite nome ou e-mail do coordenador'
+            : 'Digite nome ou e-mail do colaborador';
+        }
+
+        function renderEditProvidersList(filter){
+          if(!editProvidersBox){ return; }
+          const term = (filter || '').toLowerCase();
+          const group = editState.activeGroup || 'providers';
+          editProvidersBox.innerHTML = '';
+          const list = state.providerGroups[group] || [];
+          const results = list.filter(provider=>{
+            const blob = (provider.label + ' ' + (provider.email || '')).toLowerCase();
+            return term ? blob.includes(term) : true;
+          });
+          if(!results.length){
+            const emptyMsg = document.createElement('p');
+            emptyMsg.className = 'apf-scheduler-edit__providers-empty';
+            emptyMsg.textContent = group === 'coordinators'
+              ? 'Nenhum coordenador encontrado.'
+              : 'Nenhum colaborador encontrado.';
+            editProvidersBox.appendChild(emptyMsg);
+            return;
+          }
+          results.slice(0,25).forEach(provider=>{
+            if(!provider || !provider.key){ return; }
+            const token = provider.token || providerToken(provider, provider.group || group);
+            const row = document.createElement('button');
+            row.type = 'button';
+            row.className = 'apf-scheduler-edit__provider';
+            if(editState.selected.has(token)){
+              row.classList.add('is-selected');
+            }
+            const label = document.createElement('span');
+            label.textContent = provider.label || provider.name || provider.email || '';
+            const hint = document.createElement('small');
+            hint.textContent = provider.email || '';
+            hint.style.color = '#475467';
+            row.appendChild(label);
+            if(provider.email){
+              row.appendChild(hint);
+            }
+            row.addEventListener('click', ()=>{
+              toggleEditRecipient(token);
+            });
+            editProvidersBox.appendChild(row);
+          });
+        }
+
+        function toggleEditRecipient(token){
+          if(!token){ return; }
+          if(editState.selected.has(token)){
+            editState.selected.delete(token);
+          }else{
+            const provider = state.providerIndex.get(token);
+            if(!provider){ return; }
+            editState.selected.set(token, provider);
+          }
+          syncEditRecipients();
+          renderEditProvidersList(editSearch ? editSearch.value : '');
+        }
+
         rebuildProviderIndex();
         initTabs();
+        setEditActiveGroup(editState.activeGroup || 'providers', true);
+
+        if(schedulerModalCloseTriggers.length){
+          schedulerModalCloseTriggers.forEach(trigger=>{
+            trigger.addEventListener('click', closeSchedulerModal);
+          });
+        }
+        if(schedulerModal){
+          schedulerModal.addEventListener('keydown', function(e){
+            if(e.key === 'Escape'){
+              e.preventDefault();
+              closeSchedulerModal();
+            }
+          });
+        }
+        document.addEventListener('keydown', function(e){
+          if(e.key === 'Escape' && schedulerModal && schedulerModal.getAttribute('aria-hidden') === 'false'){
+            e.preventDefault();
+            closeSchedulerModal();
+          }
+        });
+        const editCancelButton = schedulerModal ? schedulerModal.querySelector('[data-edit-cancel]') : null;
+        if(editCancelButton){
+          editCancelButton.addEventListener('click', ()=>exitEditMode());
+        }
+        if(editTabs.length){
+          editTabs.forEach(tab=>{
+            tab.addEventListener('click', ()=>{
+              const group = tab.getAttribute('data-edit-group') || 'providers';
+              setEditActiveGroup(group);
+            });
+          });
+        }
+        if(editSearch){
+          editSearch.addEventListener('input', function(){
+            renderEditProvidersList(this.value || '');
+          });
+        }
+        if(editForm){
+          editForm.addEventListener('submit', function(e){
+            if(editState.selected.size === 0){
+              e.preventDefault();
+              alert('Escolha ao menos um destinatário.');
+            }
+          });
+        }
 
         if(schedulerSearch){
           schedulerSearch.addEventListener('input', function(){
