@@ -254,6 +254,8 @@ add_shortcode( 'apf_portal_coordenador', function () {
 
             $matched_providers   = false;
             $matched_coordinators = false;
+            $providers_display = array();
+            $coordinators_display = array();
 
             foreach ( $event['recipients'] as $recipient ) {
                 if ( ! is_array( $recipient ) ) {
@@ -265,10 +267,20 @@ add_shortcode( 'apf_portal_coordenador', function () {
                 }
                 $recipient_user  = isset( $recipient['user_id'] ) ? (int) $recipient['user_id'] : 0;
                 $recipient_email = isset( $recipient['email'] ) ? strtolower( sanitize_email( $recipient['email'] ) ) : '';
+                $recipient_name  = isset( $recipient['name'] ) ? sanitize_text_field( $recipient['name'] ) : '';
+                $recipient_display = $recipient_name;
+                if ( $recipient_email ) {
+                    $recipient_display = $recipient_name
+                        ? $recipient_name . ' <' . $recipient_email . '>'
+                        : $recipient_email;
+                }
 
                 if ( 'coordinators' === $recipient_group ) {
                     if ( ( $recipient_user > 0 && $recipient_user === $user_id ) || ( $coord_email_lower && $recipient_email === $coord_email_lower ) ) {
                         $matched_coordinators = true;
+                        if ( '' !== $recipient_display ) {
+                            $coordinators_display[] = $recipient_display;
+                        }
                     }
                     continue;
                 }
@@ -295,8 +307,13 @@ add_shortcode( 'apf_portal_coordenador', function () {
                         $dir_matches = true;
                     }
 
-                    if ( $dir_matches || ( $coord_email_lower && $recipient_email === $coord_email_lower ) ) {
+                    $email_matches = ( $coord_email_lower && $recipient_email === $coord_email_lower );
+
+                    if ( $dir_matches || $email_matches ) {
                         $matched_providers = true;
+                        if ( '' !== $recipient_display ) {
+                            $providers_display[] = $recipient_display;
+                        }
                     }
                 }
             }
@@ -311,6 +328,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
                         'providers'    => array(),
                         'coordinators' => array(),
                     ),
+                    'events' => array(),
                 );
             }
 
@@ -320,6 +338,26 @@ add_shortcode( 'apf_portal_coordenador', function () {
             if ( $matched_coordinators ) {
                 $calendar_events_map[ $date ]['titles']['coordinators'][] = $title;
             }
+
+            $event_groups = array();
+            if ( $matched_providers ) {
+                $event_groups[] = 'providers';
+            }
+            if ( $matched_coordinators ) {
+                $event_groups[] = 'coordinators';
+            }
+            if ( empty( $event_groups ) ) {
+                $event_groups[] = 'providers';
+            }
+
+            $calendar_events_map[ $date ]['events'][] = array(
+                'title'      => $title,
+                'groups'     => $event_groups,
+                'recipients' => array(
+                    'providers'    => array_values( array_unique( array_map( 'sanitize_text_field', $providers_display ) ) ),
+                    'coordinators' => array_values( array_unique( array_map( 'sanitize_text_field', $coordinators_display ) ) ),
+                ),
+            );
         }
 
         foreach ( $calendar_events_map as $date => $data ) {
@@ -345,6 +383,42 @@ add_shortcode( 'apf_portal_coordenador', function () {
                 continue;
             }
 
+            $events_payload = array();
+            if ( ! empty( $data['events'] ) && is_array( $data['events'] ) ) {
+                foreach ( $data['events'] as $entry ) {
+                    if ( ! is_array( $entry ) ) {
+                        continue;
+                    }
+                    $entry_title = isset( $entry['title'] ) ? sanitize_text_field( $entry['title'] ) : '';
+                    $entry_groups = isset( $entry['groups'] ) && is_array( $entry['groups'] )
+                        ? array_values( array_filter( array_map( 'sanitize_key', $entry['groups'] ), function( $group_key ) {
+                            return in_array( $group_key, array( 'providers', 'coordinators' ), true );
+                        } ) )
+                        : array();
+                    if ( empty( $entry_groups ) ) {
+                        $entry_groups = $groups;
+                    }
+                    $entry_recipients = array(
+                        'providers'    => array(),
+                        'coordinators' => array(),
+                    );
+                    if ( isset( $entry['recipients'] ) && is_array( $entry['recipients'] ) ) {
+                        if ( ! empty( $entry['recipients']['providers'] ) && is_array( $entry['recipients']['providers'] ) ) {
+                            $entry_recipients['providers'] = array_values( array_filter( array_map( 'sanitize_text_field', $entry['recipients']['providers'] ) ) );
+                        }
+                        if ( ! empty( $entry['recipients']['coordinators'] ) && is_array( $entry['recipients']['coordinators'] ) ) {
+                            $entry_recipients['coordinators'] = array_values( array_filter( array_map( 'sanitize_text_field', $entry['recipients']['coordinators'] ) ) );
+                        }
+                    }
+
+                    $events_payload[] = array(
+                        'title'      => $entry_title,
+                        'groups'     => $entry_groups,
+                        'recipients' => $entry_recipients,
+                    );
+                }
+            }
+
             $calendar_events[] = array(
                 'date'   => $date,
                 'groups' => $groups,
@@ -352,6 +426,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
                     'providers'    => $providers_titles,
                     'coordinators' => $coordinator_titles,
                 ),
+                'events' => $events_payload,
             );
         }
 
@@ -476,12 +551,29 @@ add_shortcode( 'apf_portal_coordenador', function () {
 
           <div class="apf-coord-calendar" id="apfCoordCalendar" data-events="<?php echo $coord_calendar_attr; ?>">
             <div class="apf-coord-calendar__body"></div>
+            <div class="apf-coord-calendar__legend" aria-label="Legenda do calendário">
+              <span><span class="apf-coord-calendar__legend-dot apf-coord-calendar__legend-dot--providers" aria-hidden="true"></span> Colaboradores</span>
+              <span><span class="apf-coord-calendar__legend-dot apf-coord-calendar__legend-dot--coordinators" aria-hidden="true"></span> Coordenadores</span>
+            </div>
           </div>
-          <?php if ( empty( $calendar_events ) ) : ?>
-            <p class="apf-coord-calendar__empty">Nenhum aviso programado até o momento.</p>
-          <?php else : ?>
-            <p class="apf-coord-calendar__hint">Use as setas para navegar e veja os dias destacados com avisos do financeiro.</p>
-          <?php endif; ?>
+        <?php if ( empty( $calendar_events ) ) : ?>
+          <p class="apf-coord-calendar__empty">Nenhum aviso programado até o momento.</p>
+        <?php else : ?>
+          <p class="apf-coord-calendar__hint">Use as setas para navegar e clique nos dias destacados para ver os avisos do financeiro.</p>
+        <?php endif; ?>
+        <div class="apf-coord-modal" id="apfCoordModal" aria-hidden="true">
+          <div class="apf-coord-modal__overlay" data-modal-close></div>
+          <div class="apf-coord-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="apfCoordModalTitle">
+            <div class="apf-coord-modal__head">
+              <h4 id="apfCoordModalTitle">Avisos da data</h4>
+              <button type="button" class="apf-coord-modal__close" data-modal-close aria-label="Fechar">&times;</button>
+            </div>
+            <div class="apf-coord-modal__content">
+              <p class="apf-coord-modal__empty">Nenhum aviso programado para esta data.</p>
+              <div class="apf-coord-modal__items"></div>
+            </div>
+          </div>
+        </div>
         <?php elseif ( $blocked_message ) : ?>
           <div class="apf-coord-blocked">
             <p><?php echo esc_html( $blocked_message ); ?></p>
@@ -657,6 +749,27 @@ add_shortcode( 'apf_portal_coordenador', function () {
         flex-direction:column;
         gap:12px;
       }
+      .apf-coord-calendar__legend{
+        margin-top:4px;
+        display:flex;
+        gap:16px;
+        flex-wrap:wrap;
+        font-size:12px;
+        color:#475467;
+      }
+      .apf-coord-calendar__legend-dot{
+        display:inline-block;
+        width:10px;
+        height:10px;
+        border-radius:999px;
+        margin-right:4px;
+      }
+      .apf-coord-calendar__legend-dot--providers{
+        background:#1f6feb;
+      }
+      .apf-coord-calendar__legend-dot--coordinators{
+        background:#f97316;
+      }
       .apf-coord-calendar__inner{
         display:flex;
         flex-direction:column;
@@ -712,11 +825,23 @@ add_shortcode( 'apf_portal_coordenador', function () {
         justify-content:center;
         position:relative;
       }
+      .apf-coord-calendar__day[role="button"]{
+        cursor:pointer;
+      }
       .apf-coord-calendar__day--muted{
         opacity:.35;
       }
       .apf-coord-calendar__day--has-event{
         border-color:#1f6feb;
+      }
+      .apf-coord-calendar__day--group-providers{
+        border-color:#1f6feb;
+      }
+      .apf-coord-calendar__day--group-coordinators{
+        border-color:#f97316;
+      }
+      .apf-coord-calendar__day--group-mixed{
+        border-color:#7c3aed;
       }
       .apf-coord-calendar__markers{
         position:absolute;
@@ -744,6 +869,104 @@ add_shortcode( 'apf_portal_coordenador', function () {
         color:#475467;
         margin:8px 0 0;
       }
+      .apf-coord-modal{
+        position:fixed;
+        inset:0;
+        z-index:1000;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        visibility:hidden;
+        opacity:0;
+        pointer-events:none;
+        transition:opacity .2s ease;
+      }
+      .apf-coord-modal[aria-hidden="false"]{
+        visibility:visible;
+        opacity:1;
+        pointer-events:auto;
+      }
+      .apf-coord-modal__overlay{
+        position:absolute;
+        inset:0;
+        background:rgba(15,23,42,.45);
+      }
+      .apf-coord-modal__dialog{
+        position:relative;
+        width:100%;
+        max-width:640px;
+        max-height:90vh;
+        background:#fff;
+        border-radius:18px;
+        box-shadow:0 30px 60px rgba(15,23,42,.35);
+        display:flex;
+        flex-direction:column;
+        overflow:hidden;
+      }
+      .apf-coord-modal__head{
+        padding:16px 20px;
+        border-bottom:1px solid #e4e7ec;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+      }
+      .apf-coord-modal__head h4{
+        margin:0;
+        font-size:18px;
+        color:#0f172a;
+      }
+      .apf-coord-modal__close{
+        border:none;
+        background:transparent;
+        font-size:24px;
+        line-height:1;
+        cursor:pointer;
+        color:#475467;
+      }
+      .apf-coord-modal__content{
+        padding:16px 20px 24px;
+        overflow-y:auto;
+        flex:1;
+        display:flex;
+        flex-direction:column;
+        gap:16px;
+      }
+      .apf-coord-modal__empty{
+        margin:0;
+        font-size:14px;
+        color:#475467;
+        text-align:center;
+      }
+      .apf-coord-modal__items{
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+      }
+      .apf-coord-modal__event{
+        border:1px solid #e4e7ec;
+        border-radius:14px;
+        padding:14px;
+        background:#f8fafc;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+      }
+      .apf-coord-modal__event h5{
+        margin:0;
+        font-size:15px;
+        color:#0f172a;
+      }
+      .apf-coord-modal__meta{
+        display:flex;
+        flex-direction:column;
+        gap:4px;
+        font-size:13px;
+        color:#475467;
+      }
+      .apf-coord-modal__meta strong{
+        color:#0f172a;
+      }
       @media(max-width:640px){
         .apf-coord-card{
           margin:16px;
@@ -757,6 +980,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
     </style>
     <script>
     (function(){
+      const $$ = (selector, ctx) => Array.from((ctx || document).querySelectorAll(selector));
       const select = document.getElementById('apfCoordCourseSelect');
       const manual = document.getElementById('apfCoordCourseManual');
       const dismissCoordMessages = () => {
@@ -833,6 +1057,14 @@ add_shortcode( 'apf_portal_coordenador', function () {
       }
 
       const calendarNode = document.getElementById('apfCoordCalendar');
+      const coordModal = document.getElementById('apfCoordModal');
+      const coordModalTitle = document.getElementById('apfCoordModalTitle');
+      const coordModalItems = coordModal ? coordModal.querySelector('.apf-coord-modal__items') : null;
+      const coordModalEmpty = coordModal ? coordModal.querySelector('.apf-coord-modal__empty') : null;
+      const coordModalClose = coordModal ? $$('[data-modal-close]', coordModal) : [];
+      let coordModalLastFocus = null;
+      let coordModalDate = '';
+
       if(calendarNode){
         const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
         const WEEKDAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
@@ -845,31 +1077,66 @@ add_shortcode( 'apf_portal_coordenador', function () {
           coordinators: 'Coordenadores',
         };
 
+        const formatDateBr = (value) => {
+          if(!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)){ return value || '—'; }
+          return value.slice(8,10) + '/' + value.slice(5,7) + '/' + value.slice(0,4);
+        };
+
+        const normalizeGroups = (groups) => {
+          if(!Array.isArray(groups)){ return []; }
+          return Array.from(
+            new Set(
+              groups
+                .map(group => (group || '').toString().toLowerCase())
+                .filter(group => group === 'providers' || group === 'coordinators')
+            )
+          );
+        };
+
+        const sanitizeList = (list) => {
+          if(!Array.isArray(list)){ return []; }
+          return list
+            .map(item => (item || '').toString().trim())
+            .filter(Boolean);
+        };
+
         try{
           const raw = JSON.parse(calendarNode.getAttribute('data-events') || '[]');
           if(Array.isArray(raw)){
             raw.forEach(evt=>{
               if(!evt || !evt.date){ return; }
-              const date = evt.date;
-              const groups = Array.isArray(evt.groups) ? evt.groups : [];
-              const normalizedGroups = Array.from(
-                new Set(
-                  groups
-                    .map(group => (group || '').toString().toLowerCase())
-                    .filter(group => group === 'providers' || group === 'coordinators')
-                )
-              );
+              const date = (evt.date || '').toString();
+              if(!date){ return; }
+              const normalizedGroups = normalizeGroups(evt.groups || []);
               const titles = {};
               if(evt.titles && typeof evt.titles === 'object'){
                 Object.keys(evt.titles).forEach(key=>{
                   const normalizedKey = (key || '').toString().toLowerCase();
                   if(normalizedKey !== 'providers' && normalizedKey !== 'coordinators'){ return; }
-                  const list = Array.isArray(evt.titles[key]) ? evt.titles[key] : [];
-                  titles[normalizedKey] = list.filter(item => typeof item === 'string' && item.trim() !== '');
+                  const list = sanitizeList(evt.titles[key]);
+                  if(list.length){
+                    titles[normalizedKey] = list;
+                  }
                 });
               }
 
-              const existing = eventsByDate.get(date) || { date, groups: [], titles: {} };
+              const normalizedEvents = Array.isArray(evt.events)
+                ? evt.events.map(entry=>{
+                    if(!entry){ return null; }
+                    const entryGroups = normalizeGroups(entry.groups || []);
+                    const recipients = (entry.recipients && typeof entry.recipients === 'object') ? entry.recipients : {};
+                    return {
+                      title: (entry.title || '').toString(),
+                      groups: entryGroups.length ? entryGroups : (normalizedGroups.length ? normalizedGroups : ['providers']),
+                      recipients: {
+                        providers: sanitizeList(recipients.providers || []),
+                        coordinators: sanitizeList(recipients.coordinators || []),
+                      },
+                    };
+                  }).filter(item => item && (item.title || item.recipients.providers.length || item.recipients.coordinators.length))
+                : [];
+
+              const existing = eventsByDate.get(date) || { date, groups: [], titles: {}, events: [] };
               const mergedGroups = new Set([ ...(existing.groups || []), ...(normalizedGroups.length ? normalizedGroups : ['providers']) ]);
               existing.groups = Array.from(mergedGroups);
               existing.titles = existing.titles || {};
@@ -877,6 +1144,22 @@ add_shortcode( 'apf_portal_coordenador', function () {
                 const prev = Array.isArray(existing.titles[group]) ? existing.titles[group] : [];
                 existing.titles[group] = prev.concat(titles[group]);
               });
+              if(normalizedEvents.length){
+                existing.events = (existing.events || []).concat(normalizedEvents);
+              }else{
+                const fallbackTitle = (evt.title || '').toString();
+                const fallbackRecipients = {
+                  providers: sanitizeList(titles.providers || []),
+                  coordinators: sanitizeList(titles.coordinators || []),
+                };
+                if(fallbackTitle || fallbackRecipients.providers.length || fallbackRecipients.coordinators.length){
+                  existing.events = (existing.events || []).concat([{
+                    title: fallbackTitle,
+                    groups: normalizedGroups.length ? normalizedGroups : ['providers'],
+                    recipients: fallbackRecipients,
+                  }]);
+                }
+              }
               eventsByDate.set(date, existing);
             });
           }
@@ -898,6 +1181,120 @@ add_shortcode( 'apf_portal_coordenador', function () {
           });
           return parts.join(' | ');
         }
+
+        function renderCoordModal(date, info){
+          if(!coordModalItems || !coordModalEmpty){ return; }
+          coordModalDate = date;
+          if(coordModalTitle){
+            coordModalTitle.textContent = 'Avisos de ' + formatDateBr(date);
+          }
+          coordModalItems.innerHTML = '';
+          const entries = Array.isArray(info.events) ? info.events : [];
+          if(!entries.length){
+            coordModalEmpty.hidden = false;
+            return;
+          }
+          coordModalEmpty.hidden = true;
+          entries.forEach(entry=>{
+            if(!entry){ return; }
+            const card = document.createElement('article');
+            card.className = 'apf-coord-modal__event';
+            const heading = document.createElement('h5');
+            heading.textContent = entry.title || 'Aviso';
+            card.appendChild(heading);
+
+            const meta = document.createElement('div');
+            meta.className = 'apf-coord-modal__meta';
+
+            const audience = document.createElement('div');
+            const audienceLabel = document.createElement('strong');
+            audienceLabel.textContent = 'Público:';
+            audience.appendChild(audienceLabel);
+            audience.append(' ' + ((Array.isArray(entry.groups) && entry.groups.length)
+              ? entry.groups.map(group => groupLabels[group] || group).join(', ')
+              : '—'));
+            meta.appendChild(audience);
+
+            const providersList = entry.recipients && Array.isArray(entry.recipients.providers)
+              ? entry.recipients.providers.filter(Boolean)
+              : [];
+            const coordinatorsList = entry.recipients && Array.isArray(entry.recipients.coordinators)
+              ? entry.recipients.coordinators.filter(Boolean)
+              : [];
+
+            if(providersList.length){
+              const row = document.createElement('div');
+              const label = document.createElement('strong');
+              label.textContent = 'Colaboradores:';
+              row.appendChild(label);
+              row.append(' ' + providersList.join('; '));
+              meta.appendChild(row);
+            }
+            if(coordinatorsList.length){
+              const row = document.createElement('div');
+              const label = document.createElement('strong');
+              label.textContent = 'Coordenadores:';
+              row.appendChild(label);
+              row.append(' ' + coordinatorsList.join('; '));
+              meta.appendChild(row);
+            }
+
+            if(!providersList.length && !coordinatorsList.length){
+              const row = document.createElement('div');
+              const label = document.createElement('strong');
+              label.textContent = 'Destinatários:';
+              row.appendChild(label);
+              row.append(' Sem dados disponíveis.');
+              meta.appendChild(row);
+            }
+
+            card.appendChild(meta);
+            coordModalItems.appendChild(card);
+          });
+        }
+
+        function openCoordModal(date){
+          if(!coordModal){ return; }
+          const info = eventsByDate.get(date);
+          if(!info){ return; }
+          renderCoordModal(date, info);
+          coordModalLastFocus = document.activeElement;
+          coordModal.setAttribute('aria-hidden','false');
+          document.body.style.overflow = 'hidden';
+          const focusTarget = coordModal.querySelector('.apf-coord-modal__close') || coordModal;
+          if(focusTarget){
+            focusTarget.focus();
+          }
+        }
+
+        function closeCoordModal(){
+          if(!coordModal){ return; }
+          coordModal.setAttribute('aria-hidden','true');
+          document.body.style.overflow = '';
+          if(coordModalLastFocus){
+            coordModalLastFocus.focus();
+          }
+        }
+
+        if(coordModalClose.length){
+          coordModalClose.forEach(btn=>{
+            btn.addEventListener('click', closeCoordModal);
+          });
+        }
+        if(coordModal){
+          coordModal.addEventListener('keydown', (e)=>{
+            if(e.key === 'Escape'){
+              e.preventDefault();
+              closeCoordModal();
+            }
+          });
+        }
+        document.addEventListener('keydown', (e)=>{
+          if(e.key === 'Escape' && coordModal && coordModal.getAttribute('aria-hidden') === 'false'){
+            e.preventDefault();
+            closeCoordModal();
+          }
+        });
 
         const body = calendarNode.querySelector('.apf-coord-calendar__body');
 
@@ -964,11 +1361,20 @@ add_shortcode( 'apf_portal_coordenador', function () {
               div.classList.add('apf-coord-calendar__day--muted');
               div.textContent = '';
             }else{
-              div.textContent = String(dayNumber);
               const iso = year + '-' + String(monthIndex + 1).padStart(2,'0') + '-' + String(dayNumber).padStart(2,'0');
+              div.textContent = String(dayNumber);
               if(eventsByDate.has(iso)){
                 const info = eventsByDate.get(iso);
                 div.classList.add('apf-coord-calendar__day--has-event');
+                const hasProviders = (info.groups || []).includes('providers');
+                const hasCoordinators = (info.groups || []).includes('coordinators');
+                if(hasProviders && hasCoordinators){
+                  div.classList.add('apf-coord-calendar__day--group-mixed');
+                }else if(hasCoordinators){
+                  div.classList.add('apf-coord-calendar__day--group-coordinators');
+                }else{
+                  div.classList.add('apf-coord-calendar__day--group-providers');
+                }
                 const markers = document.createElement('div');
                 markers.className = 'apf-coord-calendar__markers';
                 (info.groups || []).forEach(group=>{
@@ -983,6 +1389,18 @@ add_shortcode( 'apf_portal_coordenador', function () {
                 if(tooltip){
                   div.title = tooltip;
                 }
+                div.setAttribute('role','button');
+                div.setAttribute('tabindex','0');
+                div.setAttribute('aria-label', 'Ver avisos de ' + formatDateBr(iso));
+                div.addEventListener('click', ()=>{
+                  openCoordModal(iso);
+                });
+                div.addEventListener('keydown', (event)=>{
+                  if(event.key === 'Enter' || event.key === ' '){
+                    event.preventDefault();
+                    openCoordModal(iso);
+                  }
+                });
               }
             }
 
