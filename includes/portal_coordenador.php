@@ -54,6 +54,14 @@ add_shortcode( 'apf_portal_coordenador', function () {
             $notice_type = 'error';
         }
     }
+    $request_notice      = '';
+    $request_notice_type = 'success';
+    if ( isset( $_GET['apf_coord_req_notice'] ) ) {
+        $request_notice = sanitize_text_field( wp_unslash( $_GET['apf_coord_req_notice'] ) );
+        if ( isset( $_GET['apf_coord_req_status'] ) && 'error' === sanitize_text_field( wp_unslash( $_GET['apf_coord_req_status'] ) ) ) {
+            $request_notice_type = 'error';
+        }
+    }
 
     if ( ! empty( $_POST['apf_coord_submit'] ) ) {
         if ( ! isset( $_POST['apf_coord_nonce'] ) || ! wp_verify_nonce( $_POST['apf_coord_nonce'], 'apf_coord_portal' ) ) {
@@ -229,7 +237,203 @@ add_shortcode( 'apf_portal_coordenador', function () {
     $has_portal_access = ( 'approved' === $current_status && ! empty( $current_course ) );
     $coordinator_key = '';
     if ( ! empty( $existing_entry ) ) {
-        $coordinator_key = apf_inbox_build_director_key( $existing_entry['director'] ?? '', $existing_entry['course'] ?? '' );
+        $key_course = $existing_entry['course'] ?? '';
+        if ( function_exists( 'apf_inbox_normalize_course_value' ) ) {
+            $key_course = apf_inbox_normalize_course_value( $key_course );
+        }
+        $coordinator_key = apf_inbox_build_director_key( $existing_entry['director'] ?? '', $key_course );
+    }
+    $current_email_lower = $current_email ? strtolower( $current_email ) : '';
+    $belongs_to_current_request = function( $entry ) use ( $coordinator_key, $existing_entry, $user_id, $current_email_lower ) {
+        if ( ! is_array( $entry ) ) {
+            return false;
+        }
+        $target_key   = isset( $entry['coordinator_key'] ) ? (string) $entry['coordinator_key'] : '';
+        $target_id    = isset( $entry['coordinator_id'] ) ? (string) $entry['coordinator_id'] : '';
+        $target_user  = isset( $entry['coordinator_user_id'] ) ? (int) $entry['coordinator_user_id'] : 0;
+        $target_email = isset( $entry['coordinator_email'] ) ? strtolower( sanitize_email( $entry['coordinator_email'] ) ) : '';
+
+        if ( $target_key && $coordinator_key && $target_key === $coordinator_key ) {
+            return true;
+        }
+        if ( $target_id && isset( $existing_entry['id'] ) && $target_id === (string) $existing_entry['id'] ) {
+            return true;
+        }
+        if ( $target_user > 0 && $target_user === $user_id ) {
+            return true;
+        }
+        if ( $target_email && $current_email_lower && $target_email === $current_email_lower ) {
+            return true;
+        }
+
+        return false;
+    };
+
+    if ( isset( $_POST['apf_coord_batch_submit'] ) ) {
+        if ( ! isset( $_POST['apf_coord_batch_nonce'] ) || ! wp_verify_nonce( $_POST['apf_coord_batch_nonce'], 'apf_coord_batch' ) ) {
+            $request_notice      = 'Não foi possível enviar o lote ao financeiro. Recarregue a página e tente novamente.';
+            $request_notice_type = 'error';
+        } elseif ( ! $has_portal_access ) {
+            $request_notice      = 'Finalize o cadastro para poder enviar solicitações.';
+            $request_notice_type = 'error';
+        } else {
+            $batch_id = isset( $_POST['apf_coord_batch_id'] ) ? sanitize_text_field( wp_unslash( $_POST['apf_coord_batch_id'] ) ) : '';
+            if ( '' === $batch_id ) {
+                $request_notice      = 'Seleção inválida. Recarregue a página e tente novamente.';
+                $request_notice_type = 'error';
+            } else {
+                $requests = apf_get_coordinator_requests();
+                $batch_entries = array();
+                if ( is_array( $requests ) ) {
+                    foreach ( $requests as $entry ) {
+                        if ( ! is_array( $entry ) || ! isset( $entry['batch_id'] ) ) {
+                            continue;
+                        }
+                        if ( $entry['batch_id'] !== $batch_id ) {
+                            continue;
+                        }
+                        if ( ! $belongs_to_current_request( $entry ) ) {
+                            $batch_entries = array();
+                            break;
+                        }
+                        $batch_entries[] = $entry;
+                    }
+                }
+                if ( empty( $batch_entries ) ) {
+                    $request_notice      = 'Lote não encontrado para este coordenador.';
+                    $request_notice_type = 'error';
+                } elseif ( ! empty( $batch_entries[0]['batch_submitted'] ) ) {
+                    $request_notice      = 'Este lote já foi enviado ao financeiro.';
+                    $request_notice_type = 'error';
+                } else {
+                    $pending = 0;
+                    foreach ( $batch_entries as $entry ) {
+                        if ( isset( $entry['status'] ) && 'pending' === $entry['status'] ) {
+                            $pending++;
+                            break;
+                        }
+                    }
+                    if ( $pending > 0 ) {
+                        $request_notice      = 'Valide ou recuse todos os colaboradores antes de enviar ao financeiro.';
+                        $request_notice_type = 'error';
+                    } else {
+                        $updated = apf_mark_coordinator_batch_submitted( $batch_id, array(
+                            'user_id' => $user_id,
+                        ) );
+                        if ( $updated ) {
+                            $request_notice      = 'Solicitações reenviadas ao financeiro com sucesso.';
+                            $request_notice_type = 'success';
+                        } else {
+                            $request_notice      = 'Não foi possível atualizar este lote. Recarregue a página e tente novamente.';
+                            $request_notice_type = 'error';
+                        }
+                    }
+                }
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_coord_req_notice', 'apf_coord_req_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_coord_req_notice' => $request_notice,
+            'apf_coord_req_status' => ( 'success' === $request_notice_type ) ? 'success' : 'error',
+        ), $target );
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
+    if ( isset( $_POST['apf_coord_request_action'] ) ) {
+        if ( ! isset( $_POST['apf_coord_request_nonce'] ) || ! wp_verify_nonce( $_POST['apf_coord_request_nonce'], 'apf_coord_request' ) ) {
+            $request_notice      = 'Não foi possível registrar sua resposta. Recarregue e tente novamente.';
+            $request_notice_type = 'error';
+        } else {
+            $action     = sanitize_text_field( wp_unslash( $_POST['apf_coord_request_action'] ) );
+            $request_id = isset( $_POST['apf_coord_request_id'] ) ? sanitize_text_field( wp_unslash( $_POST['apf_coord_request_id'] ) ) : '';
+            $allowed    = array( 'approve' => 'approved', 'reject' => 'rejected' );
+            $note_raw   = isset( $_POST['apf_coord_request_note'] ) ? wp_unslash( $_POST['apf_coord_request_note'] ) : '';
+            $note_sanitized = sanitize_textarea_field( $note_raw );
+            if ( '' === $note_sanitized && isset( $_POST['apf_coord_request_note_noscript'] ) ) {
+                $note_sanitized = sanitize_textarea_field( wp_unslash( $_POST['apf_coord_request_note_noscript'] ) );
+            }
+
+            if ( '' === $request_id || ! isset( $allowed[ $action ] ) ) {
+                $request_notice      = 'Seleção inválida. Recarregue a página e tente novamente.';
+                $request_notice_type = 'error';
+            } elseif ( ! $has_portal_access ) {
+                $request_notice      = 'Aguarde a aprovação do financeiro para responder solicitações.';
+                $request_notice_type = 'error';
+            } elseif ( 'reject' === $action && '' === $note_sanitized ) {
+                $request_notice      = 'Informe o motivo da recusa antes de enviar.';
+                $request_notice_type = 'error';
+            } else {
+                $requests = apf_get_coordinator_requests();
+                $target   = null;
+                if ( is_array( $requests ) ) {
+                    foreach ( $requests as $entry ) {
+                        if ( ! is_array( $entry ) || ! isset( $entry['id'] ) ) {
+                            continue;
+                        }
+                        if ( $entry['id'] === $request_id ) {
+                            $target = $entry;
+                            break;
+                        }
+                    }
+                }
+
+                if ( empty( $target ) ) {
+                    $request_notice      = 'Solicitação não encontrada.';
+                    $request_notice_type = 'error';
+                } else {
+                    if ( ! $belongs_to_current_request( $target ) ) {
+                        $request_notice      = 'Esta solicitação não está vinculada ao seu curso.';
+                        $request_notice_type = 'error';
+                    } elseif ( isset( $target['status'] ) && 'pending' !== $target['status'] ) {
+                        $request_notice      = 'Esta solicitação já foi respondida.';
+                        $request_notice_type = 'error';
+                    } elseif ( ! empty( $target['batch_submitted'] ) ) {
+                        $request_notice      = 'Este lote já foi enviado ao financeiro.';
+                        $request_notice_type = 'error';
+                    } else {
+                        $status = $allowed[ $action ];
+                        $extra_payload = array( 'user_id' => $user_id );
+                        if ( 'reject' === $action && '' !== $note_sanitized ) {
+                            $extra_payload['note'] = $note_sanitized;
+                        }
+                        $updated = apf_set_coordinator_request_status( $request_id, $status, $extra_payload );
+                        if ( $updated ) {
+                            $request_notice = ( 'approved' === $status )
+                                ? 'Solicitação aprovada com sucesso.'
+                                : 'Solicitação recusada.';
+                            $request_notice_type = 'success';
+                        } else {
+                            $request_notice      = 'Não foi possível atualizar esta solicitação.';
+                            $request_notice_type = 'error';
+                        }
+                    }
+                }
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_coord_req_notice', 'apf_coord_req_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_coord_req_notice' => $request_notice,
+            'apf_coord_req_status' => ( 'success' === $request_notice_type ) ? 'success' : 'error',
+        ), $target );
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
     }
 
     $calendar_events = array();
@@ -439,6 +643,124 @@ add_shortcode( 'apf_portal_coordenador', function () {
 
     $coord_calendar_attr = esc_attr( wp_json_encode( $calendar_events, JSON_UNESCAPED_UNICODE ) );
 
+    $coordinator_requests       = array();
+    $coordinator_pending_count  = 0;
+    if ( $has_portal_access && function_exists( 'apf_get_coordinator_requests' ) ) {
+        $all_requests = apf_get_coordinator_requests();
+        if ( is_array( $all_requests ) ) {
+            foreach ( $all_requests as $entry ) {
+                if ( ! is_array( $entry ) || empty( $entry['id'] ) ) {
+                    continue;
+                }
+                $entry_key   = isset( $entry['coordinator_key'] ) ? (string) $entry['coordinator_key'] : '';
+                $entry_id    = isset( $entry['coordinator_id'] ) ? (string) $entry['coordinator_id'] : '';
+                $entry_user  = isset( $entry['coordinator_user_id'] ) ? (int) $entry['coordinator_user_id'] : 0;
+                $entry_email = isset( $entry['coordinator_email'] ) ? strtolower( sanitize_email( $entry['coordinator_email'] ) ) : '';
+                $match       = false;
+
+                if ( $coordinator_key && $entry_key && $coordinator_key === $entry_key ) {
+                    $match = true;
+                } elseif ( $entry_id && isset( $existing_entry['id'] ) && $entry_id === (string) $existing_entry['id'] ) {
+                    $match = true;
+                } elseif ( $entry_user > 0 && $entry_user === $user_id ) {
+                    $match = true;
+                } elseif ( $entry_email && $current_email && $entry_email === strtolower( $current_email ) ) {
+                    $match = true;
+                }
+
+                if ( ! $match ) {
+                    continue;
+                }
+
+                if ( isset( $entry['status'] ) && 'pending' === $entry['status'] ) {
+                    $coordinator_pending_count++;
+                }
+                $coordinator_requests[] = $entry;
+            }
+        }
+    }
+
+    if ( ! empty( $coordinator_requests ) ) {
+        usort( $coordinator_requests, function( $a, $b ){
+            $a_ts = isset( $a['created_at'] ) ? (int) $a['created_at'] : 0;
+            $b_ts = isset( $b['created_at'] ) ? (int) $b['created_at'] : 0;
+            if ( $a_ts === $b_ts ) {
+                return 0;
+            }
+            return ( $a_ts > $b_ts ) ? -1 : 1;
+        } );
+    }
+
+    $coordinator_request_groups = array();
+    if ( ! empty( $coordinator_requests ) ) {
+        foreach ( $coordinator_requests as $request ) {
+            $group_id = isset( $request['batch_id'] ) ? sanitize_text_field( (string) $request['batch_id'] ) : '';
+            if ( '' === $group_id ) {
+                $group_id = isset( $request['id'] ) ? sanitize_text_field( (string) $request['id'] ) : uniqid( 'req_' );
+            }
+            if ( ! isset( $coordinator_request_groups[ $group_id ] ) ) {
+                $title  = isset( $request['note_title'] ) ? sanitize_text_field( $request['note_title'] ) : '';
+                $body   = isset( $request['note_body'] ) ? sanitize_textarea_field( $request['note_body'] ) : '';
+                $coordinator_request_groups[ $group_id ] = array(
+                    'id'         => $group_id,
+                    'title'      => $title,
+                    'message'    => $body,
+                    'created_at' => isset( $request['created_at'] ) ? (int) $request['created_at'] : 0,
+                    'items'      => array(),
+                    'pending'    => 0,
+                    'approved'   => 0,
+                    'rejected'   => 0,
+                    'batch_submitted'    => ! empty( $request['batch_submitted'] ),
+                    'batch_submitted_at' => isset( $request['batch_submitted_at'] ) ? (int) $request['batch_submitted_at'] : 0,
+                );
+            }
+
+            $status = isset( $request['status'] ) ? $request['status'] : 'pending';
+            if ( isset( $coordinator_request_groups[ $group_id ][ $status ] ) ) {
+                $coordinator_request_groups[ $group_id ][ $status ]++;
+            }
+
+            $coordinator_request_groups[ $group_id ]['items'][] = array(
+                'entry'   => $request,
+                'details' => apf_coord_build_request_details( $request ),
+            );
+            if ( ! empty( $request['batch_submitted'] ) ) {
+                $coordinator_request_groups[ $group_id ]['batch_submitted'] = true;
+            }
+            if ( isset( $request['batch_submitted_at'] ) ) {
+                $previous = isset( $coordinator_request_groups[ $group_id ]['batch_submitted_at'] )
+                    ? (int) $coordinator_request_groups[ $group_id ]['batch_submitted_at']
+                    : 0;
+                $coordinator_request_groups[ $group_id ]['batch_submitted_at'] = max( $previous, (int) $request['batch_submitted_at'] );
+            }
+        }
+
+        $coordinator_request_groups = array_values( $coordinator_request_groups );
+        usort( $coordinator_request_groups, function( $a, $b ){
+            $a_ts = isset( $a['created_at'] ) ? (int) $a['created_at'] : 0;
+            $b_ts = isset( $b['created_at'] ) ? (int) $b['created_at'] : 0;
+            if ( $a_ts === $b_ts ) {
+                return 0;
+            }
+            return ( $a_ts > $b_ts ) ? -1 : 1;
+        } );
+        foreach ( $coordinator_request_groups as $idx => $group_info ) {
+            $pending_count = isset( $group_info['pending'] ) ? (int) $group_info['pending'] : 0;
+            $items_total   = isset( $group_info['items'] ) ? count( $group_info['items'] ) : 0;
+            $coordinator_request_groups[ $idx ]['can_submit'] = ( 0 === $pending_count && $items_total > 0 && empty( $group_info['batch_submitted'] ) );
+        }
+        unset( $group_info );
+    }
+    $visible_request_groups   = $coordinator_request_groups;
+    $archived_request_groups  = array();
+    $max_visible_request_cards = 3;
+    if ( count( $coordinator_request_groups ) > $max_visible_request_cards ) {
+        $visible_request_groups  = array_slice( $coordinator_request_groups, 0, $max_visible_request_cards );
+        $archived_request_groups = array_slice( $coordinator_request_groups, $max_visible_request_cards );
+    }
+    $has_archived_requests = ! empty( $archived_request_groups );
+    $archive_icon_url = plugins_url( 'imgs/box-archive-svgrepo-com.svg', dirname( __DIR__ ) . '/fomulario_pagamento_faepa.php' );
+
     $status_message = '';
     $status_class   = 'info';
     $blocked_message = '';
@@ -547,6 +869,204 @@ add_shortcode( 'apf_portal_coordenador', function () {
             <p><strong>E-mail:</strong> <?php echo esc_html( $current_email ); ?></p>
             <p><strong>Curso:</strong> <?php echo esc_html( $current_course ); ?></p>
             <p class="apf-coord-summary__hint">Precisa alterar o curso aprovado? Solicite ao financeiro pelo canal oficial.</p>
+          </div>
+
+          <section class="apf-coord-requests" aria-labelledby="apfCoordRequestsTitle">
+            <div class="apf-coord-requests__head">
+              <div>
+                <h3 id="apfCoordRequestsTitle">Solicitações de colaboradores</h3>
+                <p>Acompanhe os envios enviados pelo financeiro e responda cada um deles.</p>
+              </div>
+              <?php if ( $has_archived_requests || $coordinator_pending_count > 0 ) : ?>
+                <div class="apf-coord-requests__tools">
+                  <?php if ( $has_archived_requests ) : ?>
+                    <button type="button"
+                      class="apf-coord-archive-btn"
+                      id="apfCoordArchiveToggle"
+                      aria-haspopup="dialog"
+                      aria-expanded="false"
+                      aria-label="Ver solicitações antigas">
+                      <img src="<?php echo esc_url( $archive_icon_url ); ?>" alt="" role="presentation">
+                    </button>
+                  <?php endif; ?>
+                  <?php if ( $coordinator_pending_count > 0 ) : ?>
+                    <span class="apf-coord-requests__badge"><?php echo esc_html( $coordinator_pending_count . ' pendente(s)' ); ?></span>
+                  <?php endif; ?>
+                </div>
+              <?php endif; ?>
+            </div>
+
+            <?php if ( $request_notice ) : ?>
+              <div class="apf-coord-notice apf-coord-notice--<?php echo esc_attr( $request_notice_type ); ?>">
+                <?php echo esc_html( $request_notice ); ?>
+              </div>
+            <?php endif; ?>
+
+            <?php if ( ! empty( $visible_request_groups ) ) : ?>
+              <div class="apf-coord-requests__cards">
+                <?php foreach ( $visible_request_groups as $group ) :
+                    $group_id     = $group['id'];
+                    $group_title  = $group['title'] ?: 'Solicitação do financeiro';
+                    $group_sent   = ! empty( $group['created_at'] ) ? date_i18n( 'd/m/Y H:i', (int) $group['created_at'] ) : '';
+                    $group_total  = count( $group['items'] );
+                    $group_pending = isset( $group['pending'] ) ? (int) $group['pending'] : 0;
+                    $group_approved = isset( $group['approved'] ) ? (int) $group['approved'] : 0;
+                    $group_rejected = isset( $group['rejected'] ) ? (int) $group['rejected'] : 0;
+                    $group_summary = $group['message']
+                        ? wp_trim_words( $group['message'], 28, '…' )
+                        : 'Sem observações adicionais.';
+                    $names = array();
+                    foreach ( $group['items'] as $item ) {
+                        $names[] = $item['entry']['provider_name'] ?? '—';
+                    }
+                    $preview_names = array_slice( $names, 0, 3 );
+                    $extra_names   = max( 0, $group_total - count( $preview_names ) );
+                    $badge_text = $group_pending > 0
+                        ? $group_pending . ' pendente(s)'
+                        : ( $group_rejected > 0 ? 'Concluído parcialmente' : 'Concluído' );
+                ?>
+                  <article class="apf-coord-request-card" data-status="<?php echo esc_attr( $group_pending > 0 ? 'pending' : 'done' ); ?>">
+                    <header class="apf-coord-request-card__header">
+                      <div>
+                        <strong><?php echo esc_html( $group_title ); ?></strong>
+                        <?php if ( $group_sent ) : ?>
+                          <small>Enviado em <?php echo esc_html( $group_sent ); ?></small>
+                        <?php endif; ?>
+                      </div>
+                      <span class="apf-coord-request-card__badge"><?php echo esc_html( $badge_text ); ?></span>
+                    </header>
+                    <p class="apf-coord-request-card__excerpt"><?php echo esc_html( $group_summary ); ?></p>
+                    <?php if ( ! empty( $preview_names ) ) : ?>
+                      <ul class="apf-coord-request-card__people">
+                        <?php foreach ( $preview_names as $name ) : ?>
+                          <li><?php echo esc_html( $name ); ?></li>
+                        <?php endforeach; ?>
+                        <?php if ( $extra_names > 0 ) : ?>
+                          <li>+<?php echo esc_html( $extra_names . ' colaborador(es)' ); ?></li>
+                        <?php endif; ?>
+                      </ul>
+                    <?php endif; ?>
+                    <div class="apf-coord-request-card__foot">
+                      <span><?php echo esc_html( $group_total . ' colaborador(es)' ); ?></span>
+                      <button type="button" class="apf-coord-btn apf-coord-btn--primary" data-request-modal="<?php echo esc_attr( $group_id ); ?>">
+                        Ver detalhes
+                      </button>
+                    </div>
+                  </article>
+                <?php endforeach; ?>
+              </div>
+            <?php else : ?>
+              <p class="apf-coord-requests__empty">Nenhuma solicitação disponível para este curso.</p>
+            <?php endif; ?>
+          </section>
+
+          <?php if ( $has_archived_requests ) : ?>
+            <div class="apf-coord-archive-modal" id="apfCoordArchiveModal" aria-hidden="true">
+              <div class="apf-coord-archive-modal__overlay" data-archive-close></div>
+              <div class="apf-coord-archive-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="apfCoordArchiveTitle">
+                <div class="apf-coord-archive-modal__head">
+                  <div>
+                    <h4 id="apfCoordArchiveTitle">Solicitações antigas</h4>
+                    <p>Solicitações mais antigas ficam agrupadas nesta área.</p>
+                  </div>
+                  <button type="button" class="apf-coord-archive-modal__close" data-archive-close aria-label="Fechar">&times;</button>
+                </div>
+                <div class="apf-coord-archive-modal__body">
+                  <?php foreach ( $archived_request_groups as $group ) :
+                      $group_id    = $group['id'];
+                      $group_title = $group['title'] ?: 'Solicitação do financeiro';
+                      $group_sent  = ! empty( $group['created_at'] ) ? date_i18n( 'd/m/Y H:i', (int) $group['created_at'] ) : '';
+                      $panel_id    = 'apfCoordArchivePanel-' . sanitize_html_class( $group_id );
+                  ?>
+                    <article class="apf-coord-archive-entry">
+                      <button type="button"
+                        class="apf-coord-archive-entry__toggle"
+                        data-archive-toggle="<?php echo esc_attr( $group_id ); ?>"
+                        aria-expanded="false"
+                        aria-controls="<?php echo esc_attr( $panel_id ); ?>">
+                        <span class="apf-coord-archive-entry__title"><?php echo esc_html( $group_title ); ?></span>
+                        <span class="apf-coord-archive-entry__chevron" aria-hidden="true"></span>
+                      </button>
+                      <?php if ( $group_sent ) : ?>
+                        <small class="apf-coord-archive-entry__date">Enviado em <?php echo esc_html( $group_sent ); ?></small>
+                      <?php endif; ?>
+                      <div class="apf-coord-archive-entry__panel" id="<?php echo esc_attr( $panel_id ); ?>" data-archive-panel="<?php echo esc_attr( $group_id ); ?>" hidden>
+                        <?php echo apf_coord_render_request_detail_inner( $group, array(
+                            'lock_actions' => ! empty( $group['batch_submitted'] ),
+                        ) ); ?>
+                      </div>
+                    </article>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            </div>
+          <?php endif; ?>
+
+          <?php if ( ! empty( $coordinator_request_groups ) ) : ?>
+            <div class="apf-coord-request-cache" hidden aria-hidden="true">
+              <?php foreach ( $coordinator_request_groups as $group ) :
+                  $group_id = $group['id'];
+                  $group_pending = isset( $group['pending'] ) ? (int) $group['pending'] : 0;
+                  $group_submitted = ! empty( $group['batch_submitted'] );
+                  $group_submitted_at = ( ! empty( $group['batch_submitted_at'] ) )
+                      ? date_i18n( 'd/m/Y H:i', (int) $group['batch_submitted_at'] )
+                      : '';
+              ?>
+                <div class="apf-coord-request-detail" id="apfCoordRequestDetail-<?php echo esc_attr( $group_id ); ?>" hidden>
+                  <?php echo apf_coord_render_request_detail_inner( $group, array(
+                      'lock_actions' => $group_submitted,
+                  ) ); ?>
+                  <div class="apf-coord-request-detail__footer">
+                    <?php if ( $group_submitted ) : ?>
+                      <p class="apf-coord-request-detail__status apf-coord-request-detail__status--success">
+                        Enviado ao financeiro<?php echo $group_submitted_at ? ' em ' . esc_html( $group_submitted_at ) : ''; ?>.
+                      </p>
+                    <?php elseif ( $group_pending > 0 ) : ?>
+                      <p class="apf-coord-request-detail__status apf-coord-request-detail__status--warning">
+                        Valide ou recuse todos os colaboradores para liberar o envio.
+                      </p>
+                    <?php else : ?>
+                      <form method="post" class="apf-coord-request__resend">
+                        <?php wp_nonce_field( 'apf_coord_batch', 'apf_coord_batch_nonce' ); ?>
+                        <input type="hidden" name="apf_coord_batch_id" value="<?php echo esc_attr( $group_id ); ?>">
+                        <button type="submit" name="apf_coord_batch_submit" value="1" class="apf-coord-btn apf-coord-btn--primary">
+                          Enviar ao financeiro
+                        </button>
+                        <p class="apf-coord-request-detail__status">
+                          Após o envio, este lote ficará bloqueado para edição.
+                        </p>
+                      </form>
+                    <?php endif; ?>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+
+          <div class="apf-coord-request-modal" id="apfCoordRequestModal" aria-hidden="true">
+            <div class="apf-coord-request-modal__overlay" data-req-close></div>
+            <div class="apf-coord-request-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="apfCoordRequestModalTitle">
+              <div class="apf-coord-request-modal__head">
+                <h4 id="apfCoordRequestModalTitle">Detalhes da solicitação</h4>
+                <button type="button" class="apf-coord-request-modal__close" data-req-close aria-label="Fechar">&times;</button>
+              </div>
+              <div class="apf-coord-request-modal__content" id="apfCoordRequestModalContent">
+                <p class="apf-coord-request-modal__empty">Selecione uma solicitação para visualizar os colaboradores.</p>
+              </div>
+              <div class="apf-coord-reject" id="apfCoordRejectOverlay" aria-hidden="true">
+                <div class="apf-coord-reject__box" role="dialog" aria-modal="true" aria-labelledby="apfCoordRejectTitle">
+                  <div class="apf-coord-reject__header">
+                    <h5 id="apfCoordRejectTitle">Informe o motivo da recusa</h5>
+                    <p class="apf-coord-reject__subtitle">Explique rapidamente ao financeiro por que este envio será recusado.</p>
+                  </div>
+                  <textarea id="apfCoordRejectMessage" rows="4" placeholder="Descreva o motivo da recusa"></textarea>
+                  <div class="apf-coord-reject__actions">
+                    <button type="button" class="apf-coord-btn apf-coord-btn--ghost-danger" data-reject-cancel>Cancelar</button>
+                    <button type="button" class="apf-coord-btn apf-coord-btn--danger" data-reject-confirm>Confirmar recusa</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="apf-coord-calendar" id="apfCoordCalendar" data-events="<?php echo $coord_calendar_attr; ?>">
@@ -736,6 +1256,599 @@ add_shortcode( 'apf_portal_coordenador', function () {
         margin-top:10px;
         font-size:12px;
         color:#b45309;
+      }
+      .apf-coord-requests{
+        border:1px solid #e4e7ec;
+        border-radius:16px;
+        background:#f8fafc;
+        padding:18px 20px;
+        margin:20px 0;
+        display:flex;
+        flex-direction:column;
+        gap:16px;
+      }
+      .apf-coord-requests__head{
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:12px;
+      }
+      .apf-coord-requests__tools{
+        display:flex;
+        align-items:center;
+        gap:10px;
+      }
+      .apf-coord-requests__head h3{
+        margin:0;
+        font-size:17px;
+        color:#0f172a;
+      }
+      .apf-coord-requests__head p{
+        margin:4px 0 0;
+        font-size:13px;
+        color:#475467;
+      }
+      .apf-coord-archive-btn{
+        width:42px;
+        height:42px;
+        border-radius:12px;
+        border:1px solid #d0d5dd;
+        background:#fff;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:0;
+        cursor:pointer;
+        transition:background .2s ease,border-color .2s ease,box-shadow .2s ease;
+      }
+      .apf-coord-archive-btn img{
+        width:18px;
+        height:18px;
+        pointer-events:none;
+      }
+      .apf-coord-archive-btn:hover,
+      .apf-coord-archive-btn:focus-visible{
+        background:#eef2ff;
+        border-color:#c7d2fe;
+        box-shadow:0 0 0 2px rgba(99,102,241,.25);
+        outline:none;
+      }
+      .apf-coord-requests__badge{
+        border-radius:999px;
+        background:#fef3c7;
+        color:#92400e;
+        font-size:12px;
+        font-weight:600;
+        padding:6px 12px;
+        white-space:nowrap;
+      }
+      .apf-coord-requests__cards{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+        gap:14px;
+      }
+      .apf-coord-request-card{
+        border:1px solid #d0d5dd;
+        border-radius:16px;
+        background:#fff;
+        padding:16px;
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+        min-height:200px;
+      }
+      .apf-coord-request-card[data-status="pending"]{
+        border-color:#fde68a;
+        background:#fffbeb;
+      }
+      .apf-coord-request-card__header{
+        display:flex;
+        justify-content:space-between;
+        gap:12px;
+        align-items:flex-start;
+      }
+      .apf-coord-request-card__header strong{
+        display:block;
+        font-size:15px;
+        color:#0f172a;
+      }
+      .apf-coord-request-card__header small{
+        display:block;
+        font-size:12px;
+        color:#475467;
+      }
+      .apf-coord-request-card__badge{
+        border-radius:999px;
+        padding:6px 12px;
+        font-size:12px;
+        font-weight:600;
+        background:#e0e7ff;
+        color:#3730a3;
+        white-space:nowrap;
+      }
+      .apf-coord-request-card__excerpt{
+        margin:0;
+        font-size:13px;
+        color:#475467;
+        line-height:1.4;
+      }
+      .apf-coord-request-card__people{
+        list-style:none;
+        padding:0;
+        margin:0;
+        display:flex;
+        flex-wrap:wrap;
+        gap:6px;
+      }
+      .apf-coord-request-card__people li{
+        background:#eef2ff;
+        color:#4338ca;
+        padding:4px 10px;
+        border-radius:999px;
+        font-size:12px;
+      }
+      .apf-coord-request-card__foot{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        font-size:13px;
+        color:#475467;
+        margin-top:auto;
+      }
+      .apf-coord-requests__empty{
+        margin:0;
+        font-size:13px;
+        color:#475467;
+      }
+      .apf-coord-archive-modal{
+        position:fixed;
+        inset:0;
+        z-index:1100;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        background:rgba(15,23,42,.62);
+        opacity:0;
+        visibility:hidden;
+        transition:opacity .25s ease;
+        pointer-events:none;
+      }
+      .apf-coord-archive-modal[aria-hidden="false"]{
+        opacity:1;
+        visibility:visible;
+        pointer-events:auto;
+      }
+      .apf-coord-archive-modal__overlay{
+        position:absolute;
+        inset:0;
+      }
+      .apf-coord-archive-modal__dialog{
+        position:relative;
+        width:min(720px, calc(100vw - 32px));
+        max-height:90vh;
+        background:#fff;
+        border-radius:20px;
+        border:1px solid #e4e7ec;
+        box-shadow:0 28px 60px rgba(15,23,42,.4);
+        display:flex;
+        flex-direction:column;
+        overflow:hidden;
+      }
+      .apf-coord-archive-modal__head{
+        padding:18px 22px;
+        border-bottom:1px solid #e4e7ec;
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:12px;
+      }
+      .apf-coord-archive-modal__head h4{
+        margin:0;
+        font-size:18px;
+        color:#0f172a;
+      }
+      .apf-coord-archive-modal__head p{
+        margin:6px 0 0;
+        font-size:13px;
+        color:#475467;
+      }
+      .apf-coord-archive-modal__close{
+        border:none;
+        background:transparent;
+        color:#94a3b8;
+        font-size:28px;
+        cursor:pointer;
+      }
+      .apf-coord-archive-modal__body{
+        padding:20px 22px;
+        overflow:auto;
+        display:flex;
+        flex-direction:column;
+        gap:16px;
+      }
+      .apf-coord-archive-entry{
+        border:1px solid #e4e7ec;
+        border-radius:16px;
+        padding:14px 16px;
+        background:#f8fafc;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+      }
+      .apf-coord-archive-entry__toggle{
+        border:none;
+        background:transparent;
+        padding:0;
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        cursor:pointer;
+      }
+      .apf-coord-archive-entry__title{
+        font-size:15px;
+        font-weight:600;
+        color:#0f172a;
+      }
+      .apf-coord-archive-entry__chevron{
+        width:16px;
+        height:16px;
+        border-right:2px solid #475467;
+        border-bottom:2px solid #475467;
+        transform:rotate(45deg);
+        transition:transform .2s ease;
+      }
+      .apf-coord-archive-entry__toggle[aria-expanded="true"] .apf-coord-archive-entry__chevron{
+        transform:rotate(-135deg);
+      }
+      .apf-coord-archive-entry__date{
+        font-size:12px;
+        color:#475467;
+      }
+      .apf-coord-archive-entry__panel{
+        border:1px solid #e4e7ec;
+        border-radius:14px;
+        background:#fff;
+        padding:12px;
+      }
+      .apf-coord-archive-entry__panel[hidden]{
+        display:none;
+      }
+      .apf-coord-archive-entry__panel .apf-coord-request-detail__head{
+        display:none;
+      }
+      .apf-coord-archive-entry__panel .apf-coord-request-detail__message{
+        margin-top:0;
+      }
+      .apf-coord-request-detail{
+        display:block;
+      }
+      .apf-coord-request-detail[hidden]{
+        display:none;
+      }
+      .apf-coord-request-modal{
+        position:fixed;
+        inset:0;
+        z-index:1200;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        background:rgba(15,23,42,.65);
+        opacity:0;
+        visibility:hidden;
+        transition:opacity .25s ease;
+      }
+      .apf-coord-request-modal[aria-hidden="false"]{
+        opacity:1;
+        visibility:visible;
+      }
+      .apf-coord-request-modal__overlay{
+        position:absolute;
+        inset:0;
+      }
+      .apf-coord-request-modal__dialog{
+        position:relative;
+        width:100%;
+        max-width:760px;
+        max-height:90vh;
+        background:#fff;
+        border-radius:18px;
+        box-shadow:0 28px 60px rgba(15,23,42,.45);
+        display:flex;
+        flex-direction:column;
+        overflow:hidden;
+      }
+      .apf-coord-request-modal__head{
+        padding:16px 20px;
+        border-bottom:1px solid #e4e7ec;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+      }
+      .apf-coord-request-modal__head h4{
+        margin:0;
+        font-size:18px;
+        color:#0f172a;
+      }
+      .apf-coord-request-modal__close{
+        border:none;
+        background:transparent;
+        font-size:26px;
+        cursor:pointer;
+        color:#94a3b8;
+      }
+      .apf-coord-request-modal__content{
+        padding:20px;
+        overflow:auto;
+        flex:1;
+      }
+      .apf-coord-reject{
+        position:absolute;
+        inset:0;
+        background:rgba(15,23,42,0.45);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:20px;
+        transition:opacity .2s ease;
+        opacity:0;
+        pointer-events:none;
+        z-index:10;
+      }
+      .apf-coord-reject[aria-hidden="false"]{
+        opacity:1;
+        pointer-events:auto;
+      }
+      .apf-coord-reject__box{
+        width:min(480px, calc(100vw - 32px));
+        max-height:90vh;
+        background:#fff;
+        border-radius:20px;
+        padding:28px;
+        box-shadow:0 28px 60px rgba(15,23,42,0.55);
+        display:flex;
+        flex-direction:column;
+        gap:18px;
+        border:1px solid #e4e7ec;
+      }
+      .apf-coord-reject__header{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+      }
+      .apf-coord-reject__box h5{
+        margin:0;
+        font-size:20px;
+        color:#0f172a;
+      }
+      .apf-coord-reject__subtitle{
+        margin:0;
+        font-size:14px;
+        line-height:1.5;
+        color:#475467;
+      }
+      .apf-coord-reject__box textarea{
+        width: 90%;
+        min-height:130px;
+        padding:12px 14px;
+        border:1px solid #cbd5f5;
+        border-radius:12px;
+        font-size:14px;
+        font-family:inherit;
+        resize:vertical;
+        line-height:1.5;
+      }
+      .apf-coord-reject__box textarea:focus{
+        border-color:#6366f1;
+        outline:none;
+        box-shadow:0 0 0 3px rgba(99,102,241,0.2);
+      }
+      .apf-coord-reject__actions{
+        display:flex;
+        justify-content:flex-end;
+        gap:12px;
+        flex-wrap:wrap;
+      }
+      .apf-coord-request-modal__empty{
+        margin:0;
+        font-size:14px;
+        color:#475467;
+      }
+      .apf-coord-request-detail__message{
+        margin:0 0 12px;
+        font-size:13px;
+        color:#475467;
+        line-height:1.5;
+        padding:10px 12px;
+        background:#f8fafc;
+        border-radius:12px;
+        border:1px solid #e4e7ec;
+      }
+      .apf-coord-request-detail__list{
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+      }
+      .apf-coord-request-detail__footer{
+        margin-top:16px;
+        padding-top:12px;
+        border-top:1px solid #e4e7ec;
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+      }
+      .apf-coord-request__resend{
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+      }
+      .apf-coord-request-detail__status{
+        margin:0;
+        font-size:13px;
+        color:#475467;
+      }
+      .apf-coord-request-detail__status--success{
+        color:#15803d;
+      }
+      .apf-coord-request-detail__status--warning{
+        color:#b45309;
+      }
+      .apf-coord-collab{
+        border:1px solid #d0d5dd;
+        border-radius:14px;
+        background:#fff;
+        overflow:hidden;
+      }
+      .apf-coord-collab--pending{
+        border-color:#fde68a;
+        background:#fffbeb;
+      }
+      .apf-coord-collab--approved{
+        border-color:#bbf7d0;
+        background:#f0fdf4;
+      }
+      .apf-coord-collab--rejected{
+        border-color:#fecdd3;
+        background:#fef2f2;
+      }
+      .apf-coord-collab__header{
+        padding:14px 16px;
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+      }
+      .apf-coord-collab__toggle{
+        display:flex;
+        flex-wrap:wrap;
+        gap:8px;
+        align-items:center;
+        border:none;
+        background:transparent;
+        width:100%;
+        text-align:left;
+        cursor:pointer;
+      }
+      .apf-coord-collab__name{
+        font-weight:600;
+        font-size:15px;
+        color:#0f172a;
+      }
+      .apf-coord-collab__value{
+        font-size:13px;
+        color:#0f172a;
+        background:#e0f2fe;
+        padding:2px 8px;
+        border-radius:999px;
+      }
+      .apf-coord-collab__status-label{
+        font-size:12px;
+        font-weight:600;
+        color:#475467;
+      }
+      .apf-coord-collab__actions{
+        display:flex;
+        flex-wrap:wrap;
+        gap:10px;
+      }
+      .apf-coord-request__actions{
+        display:flex;
+        gap:10px;
+        flex-wrap:wrap;
+      }
+      .apf-coord-request__note-noscript textarea{
+        width:100%;
+        min-height:70px;
+        padding:8px 10px;
+        border:1px solid #cbd5f5;
+        border-radius:8px;
+        font-size:13px;
+        font-family:inherit;
+        resize:vertical;
+        background:#fff;
+      }
+      .apf-coord-request__note-noscript textarea:focus{
+        border-color:#6366f1;
+        outline:none;
+        box-shadow:0 0 0 3px rgba(99,102,241,0.2);
+      }
+      .apf-coord-request__note-noscript{
+        display:block;
+        margin-top:8px;
+        font-size:13px;
+        color:#0f172a;
+      }
+      .apf-coord-request__note-hint{
+        margin:0;
+        font-size:12px;
+        color:#475467;
+      }
+      .apf-coord-btn--ghost-danger{
+        background:transparent !important;
+        color:#b91c1c !important;
+        border:1px solid #fca5a5 !important;
+      }
+      .apf-coord-collab__note{
+        margin:0;
+        font-size:12px;
+        color:#475467;
+      }
+      .apf-coord-collab__note-detail{
+        margin:4px 0 0;
+        font-size:12px;
+        color:#b91c1c;
+      }
+      .apf-coord-collab__body{
+        padding:16px;
+        border-top:1px solid #e4e7ec;
+      }
+      .apf-coord-collab__meta{
+        margin:0 0 8px;
+        font-size:12px;
+        color:#94a3b8;
+      }
+      .apf-coord-collab__section{
+        margin-bottom:14px;
+      }
+      .apf-coord-collab__section h5{
+        margin:0 0 6px;
+        font-size:13px;
+        color:#0f172a;
+      }
+      .apf-coord-collab__section dl{
+        margin:0;
+        display:grid;
+        grid-template-columns:minmax(150px,0.45fr) 1fr;
+        gap:8px 16px;
+        padding:12px 14px;
+        border:1px solid #e2e8f0;
+        border-radius:12px;
+        background:#f8fafc;
+      }
+      .apf-coord-collab__section dt{
+        font-weight:600;
+        font-size:12px;
+        text-transform:uppercase;
+        letter-spacing:.04em;
+        color:#1e293b;
+      }
+      .apf-coord-collab__section dd{
+        margin:0;
+        font-size:13px;
+        color:#0f172a;
+      }
+      .apf-coord-collab__description{
+        white-space:pre-line;
+      }
+      .apf-coord-btn--success{
+        background:#15803d;
+      }
+      .apf-coord-btn--success:hover{
+        background:#166534;
+      }
+      .apf-coord-btn--danger{
+        background:#b91c1c;
+      }
+      .apf-coord-btn--danger:hover{
+        background:#991b1b;
       }
       .apf-coord-calendar{
         margin-top:16px;
@@ -994,7 +2107,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
         try{
           const url = new URL(window.location.href);
           let changed = false;
-          ['apf_coord_notice','apf_coord_status'].forEach(param=>{
+          ['apf_coord_notice','apf_coord_status','apf_coord_req_notice','apf_coord_req_status'].forEach(param=>{
             if(url.searchParams.has(param)){
               url.searchParams.delete(param);
               changed = true;
@@ -1055,6 +2168,270 @@ add_shortcode( 'apf_portal_coordenador', function () {
         form.addEventListener('submit', dismissCoordMessages);
         form.addEventListener('input', dismissCoordMessages, { once:true });
       }
+      let rejectModalForm = null;
+      let rejectModalNoteInput = null;
+      const rejectOverlay = document.getElementById('apfCoordRejectOverlay');
+      const rejectTextarea = document.getElementById('apfCoordRejectMessage');
+      const rejectConfirm = rejectOverlay ? rejectOverlay.querySelector('[data-reject-confirm]') : null;
+      const rejectCancel = rejectOverlay ? rejectOverlay.querySelector('[data-reject-cancel]') : null;
+
+      const openRejectOverlay = (form, noteInput) => {
+        if(!rejectOverlay || !rejectTextarea){ return; }
+        rejectModalForm = form;
+        rejectModalNoteInput = noteInput;
+        rejectTextarea.value = noteInput ? (noteInput.value || '') : '';
+        rejectOverlay.setAttribute('aria-hidden','false');
+        setTimeout(()=>rejectTextarea.focus(), 30);
+      };
+
+      const closeRejectOverlay = () => {
+        if(!rejectOverlay || !rejectTextarea){ return; }
+        rejectOverlay.setAttribute('aria-hidden','true');
+        rejectTextarea.value = '';
+        rejectModalForm = null;
+        rejectModalNoteInput = null;
+      };
+
+      if(rejectCancel){
+        rejectCancel.addEventListener('click', ()=>closeRejectOverlay());
+      }
+      if(rejectOverlay){
+        rejectOverlay.addEventListener('click', e=>{
+          if(e.target === rejectOverlay){
+            closeRejectOverlay();
+          }
+        });
+      }
+      if(rejectConfirm){
+        rejectConfirm.addEventListener('click', ()=>{
+          if(!rejectModalForm || !rejectModalNoteInput){ closeRejectOverlay(); return; }
+          const message = rejectTextarea.value ? rejectTextarea.value.trim() : '';
+          if(!message){
+            rejectTextarea.focus();
+            alert('Informe o motivo da recusa antes de continuar.');
+            return;
+          }
+          rejectModalNoteInput.value = message;
+          rejectModalForm.dataset.apfRejectReady = '1';
+          closeRejectOverlay();
+          rejectModalForm.submit();
+        });
+      }
+
+      const enhanceRequestForms = (scope) => {
+        const context = scope || document;
+        $$('.apf-coord-request__actions', context).forEach(requestForm=>{
+          if(requestForm.dataset.bound === '1'){ return; }
+          requestForm.dataset.bound = '1';
+          const hiddenNote = requestForm.querySelector('input[name="apf_coord_request_note"]');
+          let lastSubmitAction = '';
+          requestForm.querySelectorAll('button[name="apf_coord_request_action"]').forEach(btn=>{
+            btn.addEventListener('click', ()=>{
+              lastSubmitAction = btn.value;
+            });
+          });
+          requestForm.addEventListener('submit', event=>{
+            dismissCoordMessages();
+            const submitter = event.submitter || null;
+            const actionValue = submitter ? submitter.value : lastSubmitAction;
+            if(actionValue === 'reject'){
+              if(requestForm.dataset.apfRejectReady !== '1'){
+                event.preventDefault();
+                openRejectOverlay(requestForm, hiddenNote);
+                return;
+              }
+              requestForm.dataset.apfRejectReady = '0';
+            } else {
+              requestForm.dataset.apfRejectReady = '0';
+              if(hiddenNote){
+                hiddenNote.value = '';
+              }
+            }
+          });
+        });
+      };
+      enhanceRequestForms();
+
+      const requestModal = document.getElementById('apfCoordRequestModal');
+      const requestModalDialog = requestModal ? requestModal.querySelector('.apf-coord-request-modal__dialog') : null;
+      const requestModalContent = document.getElementById('apfCoordRequestModalContent');
+      const requestModalClose = requestModal ? $$('[data-req-close]', requestModal) : [];
+      const requestCache = document.querySelector('.apf-coord-request-cache');
+      const requestButtons = $$('[data-request-modal]');
+      let requestModalLastFocus = null;
+      let activeRequestDetail = null;
+      const archiveToggle = document.getElementById('apfCoordArchiveToggle');
+      const archiveModal = document.getElementById('apfCoordArchiveModal');
+      const archiveDialog = archiveModal ? archiveModal.querySelector('.apf-coord-archive-modal__dialog') : null;
+      const archiveCloseButtons = archiveModal ? $$('[data-archive-close]', archiveModal) : [];
+      const archiveEntries = archiveModal ? $$('.apf-coord-archive-entry', archiveModal) : [];
+      let archiveLastFocus = null;
+
+      const bindCollabToggles = (scope) => {
+        if(!scope){ return; }
+        $$('.apf-coord-collab__toggle', scope).forEach(btn=>{
+          if(btn.dataset.bound === '1'){ return; }
+          btn.dataset.bound = '1';
+          btn.addEventListener('click', ()=>{
+            const targetId = btn.getAttribute('data-collab-toggle');
+            if(!targetId){ return; }
+            const panel = scope.querySelector('[data-collab-panel="'+targetId+'"]') || scope.querySelector('#'+targetId);
+            if(!panel){ return; }
+            const expanded = btn.getAttribute('aria-expanded') === 'true';
+            btn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+            panel.hidden = expanded;
+          });
+        });
+        enhanceRequestForms(scope);
+      };
+
+      const updateBodyScrollLock = () => {
+        const requestOpen = requestModal && requestModal.getAttribute('aria-hidden') === 'false';
+        const archiveOpen = archiveModal && archiveModal.getAttribute('aria-hidden') === 'false';
+        document.body.style.overflow = (requestOpen || archiveOpen) ? 'hidden' : '';
+      };
+
+      const closeRequestModal = () => {
+        if(!requestModal){ return; }
+        closeRejectOverlay();
+        requestModal.setAttribute('aria-hidden','true');
+        updateBodyScrollLock();
+        if(activeRequestDetail && requestCache){
+          activeRequestDetail.hidden = true;
+          requestCache.appendChild(activeRequestDetail);
+          activeRequestDetail = null;
+        }
+        if(requestModalLastFocus){
+          requestModalLastFocus.focus();
+        }
+      };
+
+      const openRequestModal = (groupId) => {
+        if(!requestModal || !requestModalContent || !requestCache){ return; }
+        const detail = document.getElementById('apfCoordRequestDetail-' + groupId);
+        if(!detail){ return; }
+        if(activeRequestDetail && requestCache.contains(activeRequestDetail) === false){
+          requestCache.appendChild(activeRequestDetail);
+          activeRequestDetail.hidden = true;
+        }
+        activeRequestDetail = detail;
+        detail.hidden = false;
+        requestModalContent.innerHTML = '';
+        requestModalContent.appendChild(detail);
+        bindCollabToggles(detail);
+        requestModal.setAttribute('aria-hidden','false');
+        requestModalLastFocus = document.activeElement;
+        updateBodyScrollLock();
+        if(requestModalDialog){
+          requestModalDialog.setAttribute('tabindex','-1');
+          requestModalDialog.focus();
+        }
+      };
+
+      requestButtons.forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const target = btn.getAttribute('data-request-modal');
+          if(target){
+            openRequestModal(target);
+          }
+        });
+      });
+      requestModalClose.forEach(btn=>{
+        btn.addEventListener('click', ()=>closeRequestModal());
+      });
+      const closeArchiveModal = () => {
+        if(!archiveModal){ return; }
+        archiveModal.setAttribute('aria-hidden','true');
+        updateBodyScrollLock();
+        if(archiveToggle){
+          archiveToggle.setAttribute('aria-expanded','false');
+        }
+        archiveEntries.forEach(entry=>{
+          const toggleBtn = entry.querySelector('[data-archive-toggle]');
+          const panel = entry.querySelector('[data-archive-panel]');
+          if(toggleBtn){
+            toggleBtn.setAttribute('aria-expanded','false');
+          }
+          if(panel){
+            panel.hidden = true;
+          }
+        });
+        if(archiveLastFocus){
+          archiveLastFocus.focus();
+          archiveLastFocus = null;
+        }
+      };
+      const openArchiveModal = () => {
+        if(!archiveModal){ return; }
+        archiveLastFocus = document.activeElement;
+        archiveModal.setAttribute('aria-hidden','false');
+        updateBodyScrollLock();
+        if(archiveToggle){
+          archiveToggle.setAttribute('aria-expanded','true');
+        }
+        if(archiveDialog){
+          archiveDialog.setAttribute('tabindex','-1');
+          archiveDialog.focus();
+        }
+      };
+      if(archiveToggle && archiveModal){
+        archiveToggle.addEventListener('click', ()=>{
+          const hidden = archiveModal.getAttribute('aria-hidden') !== 'false';
+          if(hidden){
+            openArchiveModal();
+          }else{
+            closeArchiveModal();
+          }
+        });
+      }
+      archiveCloseButtons.forEach(btn=>{
+        btn.addEventListener('click', ()=>closeArchiveModal());
+      });
+      if(archiveEntries.length){
+        archiveEntries.forEach(entry=>{
+          const toggleBtn = entry.querySelector('[data-archive-toggle]');
+          const panel = entry.querySelector('[data-archive-panel]');
+          if(!toggleBtn || !panel){ return; }
+          toggleBtn.addEventListener('click', ()=>{
+            const expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+            if(expanded){
+              toggleBtn.setAttribute('aria-expanded','false');
+              panel.hidden = true;
+              return;
+            }
+            archiveEntries.forEach(other=>{
+              if(other === entry){ return; }
+              const otherToggle = other.querySelector('[data-archive-toggle]');
+              const otherPanel = other.querySelector('[data-archive-panel]');
+              if(otherToggle){
+                otherToggle.setAttribute('aria-expanded','false');
+              }
+              if(otherPanel){
+                otherPanel.hidden = true;
+              }
+            });
+            toggleBtn.setAttribute('aria-expanded','true');
+            panel.hidden = false;
+            bindCollabToggles(panel);
+          });
+        });
+      }
+      document.addEventListener('keydown', e=>{
+        if(e.key === 'Escape' && rejectOverlay && rejectOverlay.getAttribute('aria-hidden') === 'false'){
+          e.preventDefault();
+          closeRejectOverlay();
+          return;
+        }
+        if(e.key === 'Escape' && requestModal && requestModal.getAttribute('aria-hidden') === 'false'){
+          e.preventDefault();
+          closeRequestModal();
+          return;
+        }
+        if(e.key === 'Escape' && archiveModal && archiveModal.getAttribute('aria-hidden') === 'false'){
+          e.preventDefault();
+          closeArchiveModal();
+        }
+      });
 
       const calendarNode = document.getElementById('apfCoordCalendar');
       const coordModal = document.getElementById('apfCoordModal');

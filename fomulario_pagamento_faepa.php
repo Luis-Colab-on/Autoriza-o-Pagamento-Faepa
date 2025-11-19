@@ -187,6 +187,455 @@ if ( ! function_exists( 'apf_resolve_channel_email' ) ) {
     }
 }
 
+if ( ! function_exists( 'apf_get_coordinator_requests' ) ) {
+    /**
+     * Recupera as solicitações enviadas aos coordenadores.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    function apf_get_coordinator_requests() {
+        $requests = get_option( 'apf_coordinator_requests', array() );
+        return is_array( $requests ) ? $requests : array();
+    }
+}
+
+if ( ! function_exists( 'apf_store_coordinator_requests' ) ) {
+    /**
+     * Salva a lista completa de solicitações.
+     *
+     * @param array $requests
+     */
+    function apf_store_coordinator_requests( $requests ) {
+        if ( ! is_array( $requests ) ) {
+            $requests = array();
+        }
+        update_option( 'apf_coordinator_requests', array_values( $requests ), false );
+    }
+}
+
+if ( ! function_exists( 'apf_add_coordinator_requests' ) ) {
+    /**
+     * Anexa novas solicitações ao registro global.
+     *
+     * @param array<int,array<string,mixed>> $records
+     */
+    function apf_add_coordinator_requests( $records ) {
+        if ( empty( $records ) || ! is_array( $records ) ) {
+            return;
+        }
+        $current = apf_get_coordinator_requests();
+        foreach ( $records as $record ) {
+            if ( ! is_array( $record ) || empty( $record['id'] ) ) {
+                continue;
+            }
+            $current[] = $record;
+        }
+        apf_store_coordinator_requests( $current );
+    }
+}
+
+if ( ! function_exists( 'apf_set_coordinator_request_status' ) ) {
+    /**
+     * Atualiza o status de uma solicitação específica.
+     *
+     * @param string $request_id
+     * @param string $status     pending|approved|rejected
+     * @param array  $extra      Dados adicionais (user_id, note, timestamp)
+     * @return bool
+     */
+    function apf_set_coordinator_request_status( $request_id, $status, $extra = array() ) {
+        $request_id = sanitize_text_field( $request_id );
+        if ( '' === $request_id ) {
+            return false;
+        }
+        $allowed_status = array( 'pending', 'approved', 'rejected' );
+        if ( ! in_array( $status, $allowed_status, true ) ) {
+            $status = 'pending';
+        }
+
+        $requests = apf_get_coordinator_requests();
+        $updated  = false;
+        foreach ( $requests as $index => $request ) {
+            if ( ! is_array( $request ) || ! isset( $request['id'] ) ) {
+                continue;
+            }
+            if ( $request['id'] !== $request_id ) {
+                continue;
+            }
+            if ( ! empty( $request['batch_submitted'] ) ) {
+                // Lote já enviado ao financeiro; não permite alterações unitárias.
+                return false;
+            }
+            $requests[ $index ]['status']      = $status;
+            $requests[ $index ]['updated_at']  = time();
+            $requests[ $index ]['decision_at'] = time();
+            $requests[ $index ]['decision_by'] = isset( $extra['user_id'] ) ? (int) $extra['user_id'] : get_current_user_id();
+            if ( isset( $extra['note'] ) ) {
+                $requests[ $index ]['decision_note'] = sanitize_text_field( $extra['note'] );
+            }
+            $updated = true;
+            break;
+        }
+
+        if ( $updated ) {
+            apf_store_coordinator_requests( $requests );
+        }
+
+        return $updated;
+    }
+}
+
+if ( ! function_exists( 'apf_mark_coordinator_batch_submitted' ) ) {
+    /**
+     * Marca todas as solicitações de um lote como enviadas ao financeiro.
+     *
+     * @param string $batch_id
+     * @param array  $extra { user_id?:int }
+     * @return bool
+     */
+    function apf_mark_coordinator_batch_submitted( $batch_id, $extra = array() ) {
+        $batch_id = sanitize_text_field( (string) $batch_id );
+        if ( '' === $batch_id ) {
+            return false;
+        }
+        $requests = apf_get_coordinator_requests();
+        $updated  = false;
+        $timestamp = time();
+        $user_id = isset( $extra['user_id'] ) ? (int) $extra['user_id'] : get_current_user_id();
+
+        foreach ( $requests as $index => $request ) {
+            if ( ! is_array( $request ) || ! isset( $request['batch_id'] ) ) {
+                continue;
+            }
+            if ( $request['batch_id'] !== $batch_id ) {
+                continue;
+            }
+            if ( ! empty( $request['batch_submitted'] ) ) {
+                continue;
+            }
+            $requests[ $index ]['batch_submitted']    = true;
+            $requests[ $index ]['batch_submitted_at'] = $timestamp;
+            $requests[ $index ]['batch_submitted_by'] = $user_id;
+            $updated = true;
+        }
+
+        if ( $updated ) {
+            apf_store_coordinator_requests( $requests );
+        }
+
+        return $updated;
+    }
+}
+
+if ( ! function_exists( 'apf_coord_build_request_details' ) ) {
+    /**
+     * Monta os detalhes exibidos no painel do coordenador/financeiro.
+     *
+     * @param array $entry
+     * @return array<string,mixed>
+     */
+    function apf_coord_build_request_details( $entry ) {
+        $payload = ( isset( $entry['payload'] ) && is_array( $entry['payload'] ) ) ? $entry['payload'] : array();
+        $submission_id = isset( $entry['submission_id'] ) ? (int) $entry['submission_id'] : 0;
+        $payment_snapshot = array();
+        $service_snapshot = array();
+        if ( isset( $entry['snapshot_payment'] ) && is_array( $entry['snapshot_payment'] ) ) {
+            foreach ( $entry['snapshot_payment'] as $label => $value ) {
+                $payment_snapshot[ sanitize_text_field( (string) $label ) ] = is_scalar( $value ) ? sanitize_text_field( (string) $value ) : '';
+            }
+        }
+        if ( isset( $entry['snapshot_service'] ) && is_array( $entry['snapshot_service'] ) ) {
+            foreach ( $entry['snapshot_service'] as $label => $value ) {
+                $service_snapshot[ sanitize_text_field( (string) $label ) ] = is_scalar( $value ) ? sanitize_text_field( (string) $value ) : '';
+            }
+        }
+
+        $admin_url = '';
+        if ( ! empty( $entry['submission_admin_url'] ) ) {
+            $admin_url = esc_url_raw( $entry['submission_admin_url'] );
+        } elseif ( $submission_id > 0 ) {
+            $admin_url = get_edit_post_link( $submission_id, '' );
+        } elseif ( isset( $payload['_admin_url'] ) ) {
+            $admin_url = esc_url_raw( $payload['_admin_url'] );
+        }
+
+        if ( ! empty( $payment_snapshot ) || ! empty( $service_snapshot ) ) {
+            return array(
+                'payment'   => ! empty( $payment_snapshot ) ? $payment_snapshot : array(),
+                'service'   => ! empty( $service_snapshot ) ? $service_snapshot : array(),
+                'admin_url' => $admin_url,
+            );
+        }
+
+        $meta_lookup = function( $key ) use ( $submission_id ) {
+            if ( $submission_id <= 0 ) {
+                return '';
+            }
+            return get_post_meta( $submission_id, 'apf_' . $key, true );
+        };
+
+        $director_name = $meta_lookup( 'nome_diretor' );
+        if ( '' === $director_name && isset( $payload['Coordenador'] ) ) {
+            $director_name = $payload['Coordenador'];
+        }
+        $director_name = sanitize_text_field( $director_name );
+
+        $control_number = sanitize_text_field( $meta_lookup( 'num_controle' ) );
+        $phone_value    = sanitize_text_field( $meta_lookup( 'tel_prestador' ) ?: ( $payload['Telefone'] ?? '' ) );
+        $email_value    = sanitize_email( $meta_lookup( 'email_prest' ) ?: ( $payload['E-mail'] ?? '' ) );
+        $doc_fiscal     = sanitize_text_field( $meta_lookup( 'num_doc_fiscal' ) ?: ( $payload['Doc. Fiscal'] ?? '' ) );
+        $raw_value      = $meta_lookup( 'valor' );
+        $value_display  = '';
+        if ( '' !== $raw_value ) {
+            $value_display = apf_format_currency_for_input( apf_normalize_currency_value( $raw_value ) );
+        }
+        $person_type = sanitize_text_field( $meta_lookup( 'pessoa_tipo' ) );
+        $person_label = ( 'pj' === strtolower( $person_type ) ) ? 'Pessoa jurídica' : 'Pessoa física';
+        $person_doc   = '';
+        $person_name  = '';
+        if ( 'pj' === strtolower( $person_type ) ) {
+            $person_name = sanitize_text_field( $meta_lookup( 'nome_empresa' ) ?: ( $payload['Nome/Empresa'] ?? '' ) );
+            $person_doc  = sanitize_text_field( $meta_lookup( 'cnpj' ) ?: ( $payload['CNPJ'] ?? '' ) );
+        } else {
+            $person_name = sanitize_text_field( $meta_lookup( 'nome_prof' ) ?: ( $payload['Nome/Empresa'] ?? '' ) );
+            $person_doc  = sanitize_text_field( $meta_lookup( 'cpf' ) ?: ( $payload['CPF'] ?? '' ) );
+        }
+
+        $person_summary = $person_name;
+        if ( '' !== $person_doc ) {
+            $person_summary = $person_summary
+                ? $person_summary . ' — ' . $person_doc
+                : $person_doc;
+        }
+        $person_line = $person_label;
+        if ( '' !== $person_summary ) {
+            $person_line .= ': ' . $person_summary;
+        }
+
+        $prest_contas = sanitize_text_field( $meta_lookup( 'prest_contas' ) );
+        $data_prest   = sanitize_text_field( $meta_lookup( 'data_prest' ) ?: ( $payload['Data do Serviço'] ?? '' ) );
+        $class_text   = sanitize_text_field( $meta_lookup( 'classificacao' ) ?: ( $payload['Classificação'] ?? '' ) );
+        $descricao    = sanitize_textarea_field( $meta_lookup( 'descricao' ) );
+        $carga        = sanitize_text_field( $meta_lookup( 'carga_horaria' ) ?: ( $payload['Carga Horária (CH)'] ?? '' ) );
+
+        return array(
+            'payment' => array(
+                'Nome Completo Diretor Executivo' => $director_name ?: '—',
+                'Número de Controle Secretaria'   => $control_number ?: '—',
+                'Telefone do Prestador'           => $phone_value ?: '—',
+                'E-mail do Prestador'             => $email_value ?: '—',
+                'Número do Documento Fiscal'      => $doc_fiscal ?: '—',
+                'Valor (R$)'                      => $value_display ?: ( $entry['provider_value'] ?? '—' ),
+                'Tipo do prestador'               => $person_line ?: $person_label,
+            ),
+            'service' => array(
+                'Prestação de contas'             => $prest_contas ?: '—',
+                'Data de prestação de serviço'    => $data_prest ?: '—',
+                'Classificação'                   => $class_text ?: '—',
+                'Descrição do serviço ou material'=> $descricao ?: ( $payload['Descrição'] ?? '' ),
+                'Carga horária do curso'          => $carga ?: '—',
+            ),
+            'admin_url' => $admin_url,
+        );
+    }
+}
+
+if ( ! function_exists( 'apf_coord_render_request_detail_inner' ) ) {
+    /**
+     * Renderiza a listagem de colaboradores de uma solicitação.
+     *
+     * @param array $group
+     * @param array $args { readonly?:bool, lock_actions?:bool }
+     * @return string
+     */
+    function apf_coord_render_request_detail_inner( $group, $args = array() ) {
+        if ( empty( $group ) || ! is_array( $group ) ) {
+            return '';
+        }
+
+        $options = array(
+            'readonly'    => ! empty( $args['readonly'] ),
+            'lock_actions'=> ! empty( $args['lock_actions'] ),
+        );
+        if ( $options['readonly'] ) {
+            $options['lock_actions'] = true;
+        }
+
+        $group_id      = isset( $group['id'] ) ? sanitize_text_field( (string) $group['id'] ) : uniqid( 'req_' );
+        $group_title   = isset( $group['title'] ) && $group['title'] ? sanitize_text_field( $group['title'] ) : 'Solicitação do financeiro';
+        $group_sent    = isset( $group['created_at'] ) && $group['created_at']
+            ? date_i18n( 'd/m/Y H:i', (int) $group['created_at'] )
+            : '';
+        $group_message = isset( $group['message'] ) && $group['message']
+            ? nl2br( esc_html( $group['message'] ) )
+            : 'Sem observações adicionais.';
+
+        ob_start();
+        ?>
+        <div class="apf-coord-request-detail__head">
+          <div>
+            <h4><?php echo esc_html( $group_title ); ?></h4>
+            <?php if ( $group_sent ) : ?>
+              <small>Enviado em <?php echo esc_html( $group_sent ); ?></small>
+            <?php endif; ?>
+          </div>
+        </div>
+        <div class="apf-coord-request-detail__message">
+          <?php echo $group_message; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+        </div>
+        <div class="apf-coord-request-detail__list">
+          <?php if ( ! empty( $group['items'] ) ) :
+              foreach ( $group['items'] as $index => $item ) :
+                  $entry   = $item['entry'] ?? array();
+                  $details = $item['details'] ?? array();
+                  $status  = isset( $entry['status'] ) ? $entry['status'] : 'pending';
+                  $status_label = 'pending' === $status ? 'Pendente' : ( 'approved' === $status ? 'Aprovado' : 'Recusado' );
+                  $value_label  = isset( $entry['provider_value'] ) ? $entry['provider_value'] : '';
+                  $sent_at      = isset( $entry['created_at'] ) && $entry['created_at']
+                      ? date_i18n( 'd/m/Y H:i', (int) $entry['created_at'] )
+                      : '';
+                  $decision_at  = isset( $entry['decision_at'] ) && $entry['decision_at']
+                      ? date_i18n( 'd/m/Y H:i', (int) $entry['decision_at'] )
+                      : '';
+                  $panel_id = 'apfCoordCollab-' . sanitize_html_class( $group_id . '-' . ( $entry['id'] ?? $index ) );
+                  $payment_details = isset( $details['payment'] ) && is_array( $details['payment'] ) ? $details['payment'] : array();
+                  $service_details = isset( $details['service'] ) && is_array( $details['service'] ) ? $details['service'] : array();
+          ?>
+            <article class="apf-coord-collab apf-coord-collab--<?php echo esc_attr( $status ); ?>">
+              <div class="apf-coord-collab__header">
+                <button type="button" class="apf-coord-collab__toggle" data-collab-toggle="<?php echo esc_attr( $panel_id ); ?>" aria-expanded="false" aria-controls="<?php echo esc_attr( $panel_id ); ?>">
+                  <span class="apf-coord-collab__name"><?php echo esc_html( $entry['provider_name'] ?? '—' ); ?></span>
+                  <?php if ( $value_label ) : ?>
+                    <span class="apf-coord-collab__value"><?php echo esc_html( $value_label ); ?></span>
+                  <?php endif; ?>
+                  <span class="apf-coord-collab__status-label"><?php echo esc_html( $status_label ); ?></span>
+                </button>
+                <div class="apf-coord-collab__actions">
+                  <?php if ( 'pending' === $status && ! $options['lock_actions'] ) : ?>
+                    <form method="post" class="apf-coord-request__actions">
+                      <?php wp_nonce_field( 'apf_coord_request', 'apf_coord_request_nonce' ); ?>
+                      <input type="hidden" name="apf_coord_request_id" value="<?php echo esc_attr( $entry['id'] ?? '' ); ?>">
+                      <input type="hidden" name="apf_coord_request_note" value="">
+                      <noscript>
+                        <label class="apf-coord-request__note-noscript">
+                          <span>Informe o motivo da recusa</span>
+                          <textarea name="apf_coord_request_note_noscript" rows="2" placeholder="Descreva rapidamente o motivo"></textarea>
+                        </label>
+                        <p class="apf-coord-request__note-hint">Obrigatório para concluir a recusa.</p>
+                      </noscript>
+                      <button type="submit" name="apf_coord_request_action" value="approve" class="apf-coord-btn apf-coord-btn--success" data-approve-btn>Validar</button>
+                      <button type="submit" name="apf_coord_request_action" value="reject" class="apf-coord-btn apf-coord-btn--danger">Recusar</button>
+                    </form>
+                  <?php else : ?>
+                    <p class="apf-coord-collab__note">
+                      <?php echo esc_html( $status_label ); ?>
+                      <?php if ( $decision_at ) : ?>
+                        — <?php echo esc_html( $decision_at ); ?>
+                      <?php endif; ?>
+                    </p>
+                    <?php if ( 'rejected' === $status && ! empty( $entry['decision_note'] ) ) : ?>
+                      <p class="apf-coord-collab__note-detail">
+                        <strong>Motivo:</strong> <?php echo esc_html( $entry['decision_note'] ); ?>
+                      </p>
+                    <?php endif; ?>
+                  <?php endif; ?>
+                </div>
+              </div>
+              <div class="apf-coord-collab__body" id="<?php echo esc_attr( $panel_id ); ?>" data-collab-panel="<?php echo esc_attr( $panel_id ); ?>" hidden>
+                <?php if ( $sent_at ) : ?>
+                  <p class="apf-coord-collab__meta">Solicitação enviada em <?php echo esc_html( $sent_at ); ?></p>
+                <?php endif; ?>
+                <?php if ( ! empty( $payment_details ) ) : ?>
+                  <div class="apf-coord-collab__section">
+                    <h5>Informações de pagamento</h5>
+                    <dl>
+                      <?php foreach ( $payment_details as $label => $value ) : ?>
+                        <dt><?php echo esc_html( $label ); ?></dt>
+                        <dd><?php echo esc_html( $value ?: '—' ); ?></dd>
+                      <?php endforeach; ?>
+                    </dl>
+                  </div>
+                <?php endif; ?>
+                <?php if ( ! empty( $service_details ) ) : ?>
+                  <div class="apf-coord-collab__section">
+                    <h5>Prestação do serviço</h5>
+                    <dl>
+                      <?php foreach ( $service_details as $label => $value ) : ?>
+                        <dt><?php echo esc_html( $label ); ?></dt>
+                        <dd class="<?php echo ( 'Descrição do serviço ou material' === $label ) ? 'apf-coord-collab__description' : ''; ?>">
+                          <?php
+                          if ( 'Descrição do serviço ou material' === $label ) {
+                              echo nl2br( esc_html( $value ?: '—' ) );
+                          } else {
+                              echo esc_html( $value ?: '—' );
+                          }
+                          ?>
+                        </dd>
+                      <?php endforeach; ?>
+                    </dl>
+                  </div>
+                <?php endif; ?>
+                <?php if ( 'rejected' === $status && ! empty( $entry['decision_note'] ) ) : ?>
+                  <div class="apf-coord-collab__section">
+                    <h5>Motivo da recusa</h5>
+                    <p class="apf-coord-collab__description"><?php echo esc_html( $entry['decision_note'] ); ?></p>
+                  </div>
+                <?php endif; ?>
+              </div>
+            </article>
+          <?php endforeach; endif; ?>
+        </div>
+        <?php
+        return trim( ob_get_clean() );
+    }
+}
+
+if ( ! function_exists( 'apf_get_submission_payload' ) ) {
+    /**
+     * Retorna um resumo dos dados da submissão para exibir/filtrar.
+     *
+     * @param int $post_id
+     * @return array<string,string>
+     */
+    function apf_get_submission_payload( $post_id ) {
+        $post_id = (int) $post_id;
+        if ( $post_id <= 0 || 'apf_submission' !== get_post_type( $post_id ) ) {
+            return array();
+        }
+        $meta = function( $key ) use ( $post_id ) {
+            return get_post_meta( $post_id, 'apf_' . $key, true );
+        };
+
+        $tipo = $meta( 'pessoa_tipo' );
+        $nome = ( 'pj' === $tipo ) ? $meta( 'nome_empresa' ) : $meta( 'nome_prof' );
+        $valor = $meta( 'valor' );
+        $valor_fmt = ( '' !== $valor ) ? number_format( (float) $valor, 2, ',', '.' ) : '';
+        $banco_parts = array_filter( array_map( 'trim', array(
+            (string) $meta( 'banco' ),
+            (string) $meta( 'agencia' ),
+            (string) $meta( 'conta' ),
+        ) ) );
+        $banco = $banco_parts ? implode( ' / ', $banco_parts ) : '';
+
+        return array(
+            'Data'                => get_post_field( 'post_date', $post_id ),
+            'Tipo'                => strtoupper( $tipo ?: '—' ),
+            'Nome/Empresa'        => $nome ?: '—',
+            'Telefone'            => $meta( 'tel_prestador' ) ?: '—',
+            'E-mail'              => $meta( 'email_prest' ) ?: '—',
+            'Valor (R$)'          => $valor_fmt ?: '—',
+            'Coordenador'         => $meta( 'nome_diretor' ) ?: '—',
+            'Doc. Fiscal'         => $meta( 'num_doc_fiscal' ) ?: '—',
+            'Data do Serviço'     => $meta( 'data_prest' ) ?: '—',
+            'Classificação'       => $meta( 'classificacao' ) ?: '—',
+            'Curso'               => $meta( 'nome_curto' ) ?: '—',
+            'Carga Horária (CH)'  => $meta( 'carga_horaria' ) ?: '—',
+            'Banco/Agência/Conta' => $banco ?: '—',
+            '_admin_url'          => admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
+        );
+    }
+}
+
 /* ====== CPT para armazenar as submissões ====== */
 add_action('init', function () {
     register_post_type('apf_submission', [
@@ -769,7 +1218,7 @@ add_shortcode('apf_form', function () {
 });
 
 /* ====== includes ====== */
-require_once __DIR__ . '/includes/inbox.php';
+require_once __DIR__ . '/includes/financeiro.php';
 require_once __DIR__ . '/includes/admin-meta.php';
-require_once __DIR__ . '/includes/portal.php';
+require_once __DIR__ . '/includes/portal_colaborador.php';
 require_once __DIR__ . '/includes/portal_coordenador.php';
