@@ -348,6 +348,11 @@ add_shortcode( 'apf_portal_coordenador', function () {
         exit;
     }
 
+    $is_ajax_request = (
+        ( isset( $_SERVER['HTTP_X_REQUESTED_WITH'] ) && 'xmlhttprequest' === strtolower( sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_REQUESTED_WITH'] ) ) ) )
+        || ( isset( $_POST['apf_coord_ajax'] ) && '1' === (string) $_POST['apf_coord_ajax'] )
+    );
+
     if ( isset( $_POST['apf_coord_request_action'] ) ) {
         if ( ! isset( $_POST['apf_coord_request_nonce'] ) || ! wp_verify_nonce( $_POST['apf_coord_request_nonce'], 'apf_coord_request' ) ) {
             $request_notice      = 'Não foi possível registrar sua resposta. Recarregue e tente novamente.';
@@ -407,13 +412,29 @@ add_shortcode( 'apf_portal_coordenador', function () {
                         }
                         $updated = apf_set_coordinator_request_status( $request_id, $status, $extra_payload );
                         if ( $updated ) {
+                            $decision_label = date_i18n( 'd/m/Y H:i' );
                             $request_notice = ( 'approved' === $status )
                                 ? 'Solicitação aprovada com sucesso.'
                                 : 'Solicitação recusada.';
                             $request_notice_type = 'success';
+                            if ( $is_ajax_request ) {
+                                wp_send_json_success( array(
+                                    'request_id'    => $request_id,
+                                    'status'        => $status,
+                                    'status_label'  => ( 'approved' === $status ) ? 'Aprovado' : 'Recusado',
+                                    'decision_label'=> $decision_label,
+                                    'note'          => ( 'rejected' === $status ) ? $note_sanitized : '',
+                                    'message'       => $request_notice,
+                                ) );
+                            }
                         } else {
                             $request_notice      = 'Não foi possível atualizar esta solicitação.';
                             $request_notice_type = 'error';
+                            if ( $is_ajax_request ) {
+                                wp_send_json_error( array(
+                                    'message' => $request_notice,
+                                ), 400 );
+                            }
                         }
                     }
                 }
@@ -432,8 +453,17 @@ add_shortcode( 'apf_portal_coordenador', function () {
             'apf_coord_req_notice' => $request_notice,
             'apf_coord_req_status' => ( 'success' === $request_notice_type ) ? 'success' : 'error',
         ), $target );
-        wp_safe_redirect( esc_url_raw( $target ) );
-        exit;
+        if ( $is_ajax_request ) {
+            $payload = array( 'message' => $request_notice );
+            if ( 'success' === $request_notice_type ) {
+                wp_send_json_success( $payload );
+            } else {
+                wp_send_json_error( $payload, 400 );
+            }
+        } else {
+            wp_safe_redirect( esc_url_raw( $target ) );
+            exit;
+        }
     }
 
     $calendar_events = array();
@@ -909,7 +939,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
                     $group_title  = $group['title'] ?: 'Solicitação do financeiro';
                     $group_sent   = ! empty( $group['created_at'] ) ? date_i18n( 'd/m/Y H:i', (int) $group['created_at'] ) : '';
                     $group_total  = count( $group['items'] );
-                    $group_pending = isset( $group['pending'] ) ? (int) $group['pending'] : 0;
+                    $group_pending  = isset( $group['pending'] ) ? (int) $group['pending'] : 0;
                     $group_approved = isset( $group['approved'] ) ? (int) $group['approved'] : 0;
                     $group_rejected = isset( $group['rejected'] ) ? (int) $group['rejected'] : 0;
                     $group_summary = $group['message']
@@ -921,11 +951,23 @@ add_shortcode( 'apf_portal_coordenador', function () {
                     }
                     $preview_names = array_slice( $names, 0, 3 );
                     $extra_names   = max( 0, $group_total - count( $preview_names ) );
-                    $badge_text = $group_pending > 0
-                        ? $group_pending . ' pendente(s)'
-                        : ( $group_rejected > 0 ? 'Concluído parcialmente' : 'Concluído' );
+                    $group_submitted = ! empty( $group['batch_submitted'] );
+                    $badge_state = 'pending';
+                    if ( $group_submitted ) {
+                        $badge_text  = 'Concluído';
+                        $badge_state = 'done';
+                    } elseif ( $group_pending >= $group_total ) {
+                        $badge_text  = 'Pendente';
+                        $badge_state = 'pending';
+                    } elseif ( $group_pending > 0 ) {
+                        $badge_text  = 'Em andamento';
+                        $badge_state = 'progress';
+                    } else {
+                        $badge_text  = 'Em andamento';
+                        $badge_state = 'progress';
+                    }
                 ?>
-                  <article class="apf-coord-request-card" data-status="<?php echo esc_attr( $group_pending > 0 ? 'pending' : 'done' ); ?>">
+                  <article class="apf-coord-request-card" data-status="<?php echo esc_attr( $badge_state ); ?>" data-submitted="<?php echo $group_submitted ? '1' : '0'; ?>">
                     <header class="apf-coord-request-card__header">
                       <div>
                         <strong><?php echo esc_html( $group_title ); ?></strong>
@@ -1012,7 +1054,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
                       ? date_i18n( 'd/m/Y H:i', (int) $group['batch_submitted_at'] )
                       : '';
               ?>
-                <div class="apf-coord-request-detail" id="apfCoordRequestDetail-<?php echo esc_attr( $group_id ); ?>" hidden>
+                <div class="apf-coord-request-detail" id="apfCoordRequestDetail-<?php echo esc_attr( $group_id ); ?>" hidden data-submitted="<?php echo $group_submitted ? '1' : '0'; ?>">
                   <?php echo apf_coord_render_request_detail_inner( $group, array(
                       'lock_actions' => $group_submitted,
                   ) ); ?>
@@ -1021,12 +1063,11 @@ add_shortcode( 'apf_portal_coordenador', function () {
                       <p class="apf-coord-request-detail__status apf-coord-request-detail__status--success">
                         Enviado ao financeiro<?php echo $group_submitted_at ? ' em ' . esc_html( $group_submitted_at ) : ''; ?>.
                       </p>
-                    <?php elseif ( $group_pending > 0 ) : ?>
-                      <p class="apf-coord-request-detail__status apf-coord-request-detail__status--warning">
+                    <?php else : ?>
+                      <p class="apf-coord-request-detail__status apf-coord-request-detail__status--warning" data-pending-warning <?php echo ( $group_pending > 0 ) ? '' : 'hidden'; ?>>
                         Valide ou recuse todos os colaboradores para liberar o envio.
                       </p>
-                    <?php else : ?>
-                      <form method="post" class="apf-coord-request__resend">
+                      <form method="post" class="apf-coord-request__resend" data-resend-form <?php echo ( $group_pending > 0 ) ? 'hidden' : ''; ?>>
                         <?php wp_nonce_field( 'apf_coord_batch', 'apf_coord_batch_nonce' ); ?>
                         <input type="hidden" name="apf_coord_batch_id" value="<?php echo esc_attr( $group_id ); ?>">
                         <button type="submit" name="apf_coord_batch_submit" value="1" class="apf-coord-btn apf-coord-btn--primary">
@@ -1340,6 +1381,14 @@ add_shortcode( 'apf_portal_coordenador', function () {
       .apf-coord-request-card[data-status="pending"]{
         border-color:#fde68a;
         background:#fffbeb;
+      }
+      .apf-coord-request-card[data-status="progress"]{
+        border-color:#bfdbfe;
+        background:#eff6ff;
+      }
+      .apf-coord-request-card[data-status="done"]{
+        border-color:#bbf7d0;
+        background:#f0fdf4;
       }
       .apf-coord-request-card__header{
         display:flex;
@@ -1680,6 +1729,10 @@ add_shortcode( 'apf_portal_coordenador', function () {
         display:flex;
         flex-direction:column;
         gap:8px;
+      }
+      .apf-coord-request__resend[hidden],
+      .apf-coord-request-detail__status[data-pending-warning][hidden]{
+        display:none !important;
       }
       .apf-coord-request-detail__status{
         margin:0;
@@ -2214,9 +2267,173 @@ add_shortcode( 'apf_portal_coordenador', function () {
           rejectModalNoteInput.value = message;
           rejectModalForm.dataset.apfRejectReady = '1';
           closeRejectOverlay();
-          rejectModalForm.submit();
+          if(typeof rejectModalForm.requestSubmit === 'function'){
+            rejectModalForm.requestSubmit();
+          }else{
+            rejectModalForm.dispatchEvent(new Event('submit', { cancelable:true, bubbles:true }));
+          }
         });
       }
+
+      const updateCollabStatus = (form, payload) => {
+        if(!form || !payload){ return; }
+        const wrapper = form.closest('.apf-coord-collab');
+        if(!wrapper){ return; }
+        const status = payload.status || '';
+        const statusLabel = payload.status_label || payload.status || '';
+        const decisionLabel = payload.decision_label || '';
+        const note = payload.note || '';
+        wrapper.classList.remove('apf-coord-collab--pending','apf-coord-collab--approved','apf-coord-collab--rejected');
+        if(status){ wrapper.classList.add('apf-coord-collab--' + status); }
+        wrapper.dataset.status = status || '';
+        const statusEl = wrapper.querySelector('.apf-coord-collab__status-label');
+        if(statusEl){ statusEl.textContent = statusLabel; }
+        const actions = wrapper.querySelector('.apf-coord-collab__actions');
+        if(actions){
+          actions.innerHTML = '';
+          const p = document.createElement('p');
+          p.className = 'apf-coord-collab__note';
+          p.textContent = decisionLabel ? (statusLabel + ' — ' + decisionLabel) : statusLabel;
+          actions.appendChild(p);
+          if(status === 'rejected' && note){
+            const detail = document.createElement('p');
+            detail.className = 'apf-coord-collab__note-detail';
+            const strong = document.createElement('strong');
+            strong.textContent = 'Motivo:';
+            detail.appendChild(strong);
+            detail.appendChild(document.createTextNode(' ' + note));
+            actions.appendChild(detail);
+          }
+        }
+      };
+
+      const toggleVisibility = (node, show) => {
+        if(!node){ return; }
+        if(show){
+          node.hidden = false;
+          node.removeAttribute('hidden');
+          node.style.display = '';
+        }else{
+          node.hidden = true;
+          node.setAttribute('hidden','');
+          node.style.display = 'none';
+        }
+      };
+
+      const computePendingCount = (detail) => {
+        if(!detail){ return 0; }
+        const collabs = detail.querySelectorAll('.apf-coord-collab');
+        let pending = 0;
+        collabs.forEach(c=>{
+          let status = c.dataset.status || '';
+          if(!status){
+            if(c.classList.contains('apf-coord-collab--pending')){ status = 'pending'; }
+            else if(c.classList.contains('apf-coord-collab--approved')){ status = 'approved'; }
+            else if(c.classList.contains('apf-coord-collab--rejected')){ status = 'rejected'; }
+          }
+          if(status === 'pending' || !status){
+            pending++;
+          }
+          c.dataset.status = status || 'pending';
+        });
+        return pending;
+      };
+
+      const refreshRequestState = (detailOrForm) => {
+        if(!detailOrForm){ return; }
+        const detail = detailOrForm && detailOrForm.classList && detailOrForm.classList.contains('apf-coord-request-detail')
+          ? detailOrForm
+          : detailOrForm.closest ? detailOrForm.closest('.apf-coord-request-detail') : null;
+        if(!detail){ return; }
+        const pending = computePendingCount(detail);
+        const warning = detail.querySelector('[data-pending-warning]');
+        const resendForm = detail.querySelector('[data-resend-form]');
+        const submitted = detail.getAttribute('data-submitted') === '1';
+        toggleVisibility(warning, !submitted && pending > 0);
+        if(!submitted){
+          toggleVisibility(resendForm, pending === 0);
+        }else{
+          toggleVisibility(resendForm, false);
+        }
+        const detailId = detail.id || '';
+        const groupId = detailId.replace('apfCoordRequestDetail-','');
+        if(groupId){
+          const card = document.querySelector('[data-request-modal="'+groupId+'"]');
+          if(card){
+            const badge = card.querySelector('.apf-coord-request-card__badge');
+            const total = detail.querySelectorAll('.apf-coord-collab').length;
+            let badgeLabel = 'Pendente';
+            let badgeState = 'pending';
+            if(submitted){
+              badgeLabel = 'Concluído';
+              badgeState = 'done';
+            }else if(pending >= total){
+              badgeLabel = 'Pendente';
+              badgeState = 'pending';
+            }else if(pending > 0){
+              badgeLabel = 'Em andamento';
+              badgeState = 'progress';
+            }else{
+              badgeLabel = 'Em andamento';
+              badgeState = 'progress';
+            }
+            if(badge){ badge.textContent = badgeLabel; }
+            card.setAttribute('data-status', badgeState);
+            card.setAttribute('data-submitted', submitted ? '1' : '0');
+          }
+        }
+      };
+
+      const submitRequestFormAjax = async (form, submitter, actionValue) => {
+        const hiddenNote = form.querySelector('input[name="apf_coord_request_note"]');
+        const formData = new FormData(form);
+        formData.append('apf_coord_ajax','1');
+        if(actionValue){
+          formData.set('apf_coord_request_action', actionValue);
+        }
+        const btn = submitter || form.querySelector('button[type="submit"]');
+        if(btn){ btn.disabled = true; }
+        const detailRef = form.closest('.apf-coord-request-detail');
+        const fallbackDecision = new Date().toLocaleString('pt-BR');
+        const fallbackPayload = {
+          status: actionValue === 'reject' ? 'rejected' : 'approved',
+          status_label: actionValue === 'reject' ? 'Recusado' : 'Aprovado',
+          decision_label: fallbackDecision,
+          note: actionValue === 'reject' && hiddenNote ? (hiddenNote.value || '') : '',
+        };
+        try{
+          const resp = await fetch(window.location.href, {
+            method:'POST',
+            body:formData,
+            credentials:'same-origin',
+            headers:{'X-Requested-With':'XMLHttpRequest'},
+          });
+          const raw = await resp.text();
+          let data = null;
+          try{ data = JSON.parse(raw); }catch(_e){}
+          if(!resp.ok){
+            const msg = (data && data.data && data.data.message) || raw || 'Não foi possível salvar. Tente novamente.';
+            throw new Error(msg);
+          }
+          if(data && data.success === false){
+            const msg = (data.data && data.data.message) || 'Não foi possível salvar. Tente novamente.';
+            throw new Error(msg);
+          }
+          const payload = (data && data.data) ? data.data : fallbackPayload;
+          updateCollabStatus(form, payload);
+          dismissCoordMessages();
+          refreshRequestState(detailRef || form);
+        }catch(err){
+          alert(err.message || 'Não foi possível salvar. Tente novamente.');
+          if(hiddenNote && actionValue !== 'reject'){
+            hiddenNote.value = '';
+          }
+          return false;
+        }finally{
+          if(btn){ btn.disabled = false; }
+        }
+        return true;
+      };
 
       const enhanceRequestForms = (scope) => {
         const context = scope || document;
@@ -2230,11 +2447,11 @@ add_shortcode( 'apf_portal_coordenador', function () {
               lastSubmitAction = btn.value;
             });
           });
-          requestForm.addEventListener('submit', event=>{
-            dismissCoordMessages();
-            const submitter = event.submitter || null;
-            const actionValue = submitter ? submitter.value : lastSubmitAction;
-            if(actionValue === 'reject'){
+        requestForm.addEventListener('submit', event=>{
+          dismissCoordMessages();
+          const submitter = event.submitter || null;
+          const actionValue = submitter ? submitter.value : lastSubmitAction;
+          if(actionValue === 'reject'){
               if(requestForm.dataset.apfRejectReady !== '1'){
                 event.preventDefault();
                 openRejectOverlay(requestForm, hiddenNote);
@@ -2247,6 +2464,8 @@ add_shortcode( 'apf_portal_coordenador', function () {
                 hiddenNote.value = '';
               }
             }
+            event.preventDefault();
+            submitRequestFormAjax(requestForm, submitter, actionValue);
           });
         });
       };
@@ -2318,6 +2537,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
         detail.hidden = false;
         requestModalContent.innerHTML = '';
         requestModalContent.appendChild(detail);
+        refreshRequestState(detail.querySelector('form.apf-coord-request__actions'));
         bindCollabToggles(detail);
         requestModal.setAttribute('aria-hidden','false');
         requestModalLastFocus = document.activeElement;

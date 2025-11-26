@@ -2028,6 +2028,14 @@ add_shortcode('apf_inbox', function () {
             <button id="apfBtnClear"  type="button" class="apf-btn apf-btn--ghost">Limpar</button>
           </div>
         </form>
+      </div>
+
+      <div class="apf-pager-row">
+        <div class="apf-pager" id="apfPager" aria-label="Paginação da lista">
+          <button type="button" class="apf-btn apf-btn--ghost apf-pager__btn" id="apfPagerPrev" aria-label="Página anterior">&larr;</button>
+          <span class="apf-pager__label" id="apfPagerLabel">1/1</span>
+          <button type="button" class="apf-btn apf-btn--ghost apf-pager__btn" id="apfPagerNext" aria-label="Próxima página">&rarr;</button>
+        </div>
         <div class="apf-count"><span id="apfCount" class="apf-badge"></span></div>
       </div>
 
@@ -2260,18 +2268,51 @@ add_shortcode('apf_inbox', function () {
         padding:0 14px; font-size:14px; min-width:220px;
       }
       .apf-filter select:focus{ border-color:var(--apf-primary); box-shadow:var(--apf-focus); outline:none; }
-      .apf-filter__row{ display:flex; gap:10px; align-items:center; }
+      .apf-filter__row{ display:flex; gap:10px; align-items:stretch; }
       .apf-filter__row select{ flex:1; }
       .apf-filter__assign-btn{
-        flex:1;
-        white-space:normal;
-        min-height:44px;
+        padding:0rem;
+        line-height:1.3;
+        word-break:break-word;
+        font-size:12px;
+      }
+      #apfAssignStart{
+        padding:0rem;
+        line-height:1.3;
+        word-break:break-word;
+        font-size:12px;
+      }
+      .apf-pager-row{
+        display:flex;
+        justify-content:flex-end;
+        align-items:center;
+        gap:12px;
+        margin:6px 0 10px;
+        flex-wrap:wrap;
+      }
+      .apf-pager{
+        display:flex;
+        align-items:center;
+        gap:6px;
+        height:42px;
+        padding:0 4px;
+      }
+      .apf-pager__btn{
+        width:38px;
+        min-width:38px;
+        height:38px;
+        padding:0;
         display:flex;
         align-items:center;
         justify-content:center;
-        line-height:1.3;
+        font-size:16px;
+      }
+      .apf-pager__label{
+        min-width:64px;
         text-align:center;
+        font-size:12px;
         font-weight:600;
+        color:var(--apf-muted);
       }
       .apf-search input{
         width:100%; height:44px; border:1px solid var(--apf-border); border-radius:999px;
@@ -3205,6 +3246,7 @@ add_shortcode('apf_inbox', function () {
           grid-template-columns:1fr 1fr;
         }
       }
+      .apf-toolbar__meta{ flex:0 0 auto; }
       .apf-count{ font-size:13px; color:var(--apf-muted); }
       .apf-badge{ display:inline-block; padding:4px 10px; border-radius:999px; background:var(--apf-soft); border:1px solid var(--apf-border); }
       .apf-break[data-envios]{ position:relative; padding-right:78px; }
@@ -3247,6 +3289,7 @@ add_shortcode('apf_inbox', function () {
 
       /* Highlight */
       .apf-hide{ display:none !important; }
+      .apf-page-hide{ display:none !important; }
       .apf-highlight{ background:linear-gradient(transparent 60%, var(--apf-highlight) 0); }
 
       /* ===== Modal de detalhes */
@@ -3858,6 +3901,8 @@ add_shortcode('apf_inbox', function () {
         #apfBtnSearch{ flex:1 1 150px; width:100%; }
         .apf-filter__row{ flex-direction:column; align-items:stretch; }
         .apf-filter__assign-btn{ width:100%; }
+        .apf-pager-row{ justify-content:space-between; }
+        .apf-pager{ width:100%; justify-content:flex-end; padding:0; }
         .apf-scheduler__audience{ flex-direction:column; align-items:flex-start; gap:8px; }
         .apf-scheduler__tabs{ width:100%; justify-content:space-between; }
         .apf-scheduler__tab{ flex:1 1 auto; text-align:center; }
@@ -3890,6 +3935,9 @@ add_shortcode('apf_inbox', function () {
       const directorSelect = $('#apfDirectorFilter');
       const rows = $$('#apfTable tbody tr');
       const countEl = $('#apfCount');
+      const pagerPrev = $('#apfPagerPrev');
+      const pagerNext = $('#apfPagerNext');
+      const pagerLabel = $('#apfPagerLabel');
       const inboxWrap = $('#apfInboxWrap');
       const assignPanel = $('#apfAssignPanel');
       const assignForm = $('#apfAssignForm');
@@ -5145,14 +5193,45 @@ add_shortcode('apf_inbox', function () {
         });
       }
 
+      const PAGE_SIZE = 10;
+      let currentPage = 0;
+      let visibleRows = rows.slice();
       let activeQuery = '';
       let activeFilterKey = '';
 
-      function applyFilter(){
+      function updatePager(totalVisible){
+        if(!pagerPrev || !pagerNext || !pagerLabel){ return; }
+        const total = totalVisible || 0;
+        const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+        if(currentPage >= totalPages){ currentPage = totalPages - 1; }
+        if(currentPage < 0){ currentPage = 0; }
+        pagerPrev.disabled = total === 0 || currentPage === 0;
+        pagerNext.disabled = total === 0 || currentPage >= (totalPages - 1);
+        pagerPrev.style.visibility = totalPages > 1 ? 'visible' : 'hidden';
+        pagerNext.style.visibility = totalPages > 1 ? 'visible' : 'hidden';
+        pagerLabel.textContent = total ? ((currentPage + 1) + '/' + totalPages) : '0/0';
+      }
+
+      function applyPagination(){
+        const total = visibleRows.length;
+        const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+        if(currentPage >= totalPages){ currentPage = totalPages - 1; }
+        if(currentPage < 0){ currentPage = 0; }
+        rows.forEach(row=>row.classList.remove('apf-page-hide'));
+        visibleRows.forEach((row, idx)=>{
+          const hide = idx < (currentPage * PAGE_SIZE) || idx >= ((currentPage + 1) * PAGE_SIZE);
+          row.classList.toggle('apf-page-hide', hide);
+        });
+        updatePager(total);
+      }
+
+      function applyFilter(resetPage = true){
+        if(resetPage){ currentPage = 0; }
         const qn = norm(activeQuery);
         const qd = digits(activeQuery);
         const filterApplied = !!(activeQuery || activeFilterKey);
         let visible = 0;
+        const matches = [];
         rows.forEach(row=>{
           const raw = row.getAttribute('data-search') || row.innerText || '';
           const n = norm(raw), d = digits(raw);
@@ -5162,18 +5241,20 @@ add_shortcode('apf_inbox', function () {
           const show = okText && okDig && okDirector;
           row.classList.toggle('apf-hide', !show);
           if(show){
-            visible++; highlightRow(row, activeQuery);
+            visible++; matches.push(row); highlightRow(row, activeQuery);
           }else{
             highlightRow(row, '');
           }
         });
+        visibleRows = matches;
+        applyPagination();
         countEl.textContent = filterApplied ? (visible + ' resultado(s)') : (rows.length + ' registro(s)');
       }
 
       function runSearch(){
         activeQuery = (input.value || '').trim();
         activeFilterKey = directorSelect ? directorSelect.value : '';
-        applyFilter();
+        applyFilter(true);
       }
 
       function clearFilter(){
@@ -5186,7 +5267,7 @@ add_shortcode('apf_inbox', function () {
         input.value = '';
         if(directorSelect){ directorSelect.value = ''; }
         setActiveCoordinatorKey('');
-        applyFilter();
+        applyFilter(true);
         input.focus();
       }
 
@@ -5678,6 +5759,24 @@ add_shortcode('apf_inbox', function () {
           }
         }
       });
+
+      if(pagerPrev){
+        pagerPrev.addEventListener('click', ()=>{
+          if(currentPage > 0){
+            currentPage -= 1;
+            applyPagination();
+          }
+        });
+      }
+      if(pagerNext){
+        pagerNext.addEventListener('click', ()=>{
+          const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
+          if(currentPage < (totalPages - 1)){
+            currentPage += 1;
+            applyPagination();
+          }
+        });
+      }
 
       // Busca
       btnSearch.addEventListener('click', runSearch);
