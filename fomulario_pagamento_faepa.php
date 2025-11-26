@@ -293,11 +293,11 @@ if ( ! function_exists( 'apf_mark_coordinator_batch_submitted' ) ) {
      * @param array  $extra { user_id?:int }
      * @return bool
      */
-    function apf_mark_coordinator_batch_submitted( $batch_id, $extra = array() ) {
-        $batch_id = sanitize_text_field( (string) $batch_id );
-        if ( '' === $batch_id ) {
-            return false;
-        }
+function apf_mark_coordinator_batch_submitted( $batch_id, $extra = array() ) {
+    $batch_id = sanitize_text_field( (string) $batch_id );
+    if ( '' === $batch_id ) {
+        return false;
+    }
         $requests = apf_get_coordinator_requests();
         $updated  = false;
         $timestamp = time();
@@ -310,6 +310,10 @@ if ( ! function_exists( 'apf_mark_coordinator_batch_submitted' ) ) {
             if ( $request['batch_id'] !== $batch_id ) {
                 continue;
             }
+            if ( isset( $request['status'] ) && 'approved' !== $request['status'] ) {
+                // Apenas aprovados seguem para o financeiro/FAEPA.
+                continue;
+            }
             if ( ! empty( $request['batch_submitted'] ) ) {
                 continue;
             }
@@ -319,6 +323,60 @@ if ( ! function_exists( 'apf_mark_coordinator_batch_submitted' ) ) {
             $updated = true;
         }
 
+        if ( $updated ) {
+            apf_store_coordinator_requests( $requests );
+        }
+
+    return $updated;
+}
+}
+
+if ( ! function_exists( 'apf_mark_coordinator_batch_forwarded' ) ) {
+    /**
+     * Marca um lote como enviado à FAEPA (após validação do financeiro).
+     *
+     * @param string $batch_id
+     * @param array  $args { note?:string, user_id?:int, timestamp?:int }
+     * @return bool
+     */
+    function apf_mark_coordinator_batch_forwarded( $batch_id, $args = array() ) {
+        $batch_id = sanitize_text_field( (string) $batch_id );
+        if ( '' === $batch_id ) {
+            return false;
+        }
+
+        $requests  = apf_get_coordinator_requests();
+        $timestamp = isset( $args['timestamp'] ) ? (int) $args['timestamp'] : time();
+        $user_id   = isset( $args['user_id'] ) ? (int) $args['user_id'] : get_current_user_id();
+        $note      = isset( $args['note'] ) ? sanitize_textarea_field( $args['note'] ) : '';
+
+        $has_approved = false;
+        $updated = false;
+        foreach ( $requests as $index => $request ) {
+            if ( ! is_array( $request ) || ! isset( $request['batch_id'] ) ) {
+                continue;
+            }
+            if ( $request['batch_id'] !== $batch_id ) {
+                continue;
+            }
+            $current_status = isset( $request['status'] ) ? sanitize_key( $request['status'] ) : 'pending';
+            if ( 'approved' !== $current_status ) {
+                continue;
+            }
+
+            $has_approved = true;
+            $requests[ $index ]['faepa_forwarded']     = true;
+            $requests[ $index ]['faepa_forwarded_at']  = $timestamp;
+            $requests[ $index ]['faepa_forwarded_by']  = $user_id;
+            if ( '' !== $note ) {
+                $requests[ $index ]['faepa_forwarded_note'] = $note;
+            }
+            $updated = true;
+        }
+
+        if ( ! $has_approved ) {
+            return false;
+        }
         if ( $updated ) {
             apf_store_coordinator_requests( $requests );
         }
@@ -390,10 +448,11 @@ if ( ! function_exists( 'apf_coord_build_request_details' ) ) {
             $value_display = apf_format_currency_for_input( apf_normalize_currency_value( $raw_value ) );
         }
         $person_type = sanitize_text_field( $meta_lookup( 'pessoa_tipo' ) );
-        $person_label = ( 'pj' === strtolower( $person_type ) ) ? 'Pessoa jurídica' : 'Pessoa física';
+        $is_pj       = ( 'pj' === strtolower( $person_type ) );
+        $person_label= $is_pj ? 'Pessoa Jurídica' : 'Pessoa Física';
         $person_doc   = '';
         $person_name  = '';
-        if ( 'pj' === strtolower( $person_type ) ) {
+        if ( $is_pj ) {
             $person_name = sanitize_text_field( $meta_lookup( 'nome_empresa' ) ?: ( $payload['Nome/Empresa'] ?? '' ) );
             $person_doc  = sanitize_text_field( $meta_lookup( 'cnpj' ) ?: ( $payload['CNPJ'] ?? '' ) );
         } else {
@@ -401,32 +460,31 @@ if ( ! function_exists( 'apf_coord_build_request_details' ) ) {
             $person_doc  = sanitize_text_field( $meta_lookup( 'cpf' ) ?: ( $payload['CPF'] ?? '' ) );
         }
 
-        $person_summary = $person_name;
-        if ( '' !== $person_doc ) {
-            $person_summary = $person_summary
-                ? $person_summary . ' — ' . $person_doc
-                : $person_doc;
-        }
-        $person_line = $person_label;
-        if ( '' !== $person_summary ) {
-            $person_line .= ': ' . $person_summary;
-        }
-
         $prest_contas = sanitize_text_field( $meta_lookup( 'prest_contas' ) );
         $data_prest   = sanitize_text_field( $meta_lookup( 'data_prest' ) ?: ( $payload['Data do Serviço'] ?? '' ) );
         $class_text   = sanitize_text_field( $meta_lookup( 'classificacao' ) ?: ( $payload['Classificação'] ?? '' ) );
         $descricao    = sanitize_textarea_field( $meta_lookup( 'descricao' ) );
         $carga        = sanitize_text_field( $meta_lookup( 'carga_horaria' ) ?: ( $payload['Carga Horária (CH)'] ?? '' ) );
+        $course       = sanitize_text_field( $meta_lookup( 'nome_curto' ) ?: ( $payload['Curso'] ?? '' ) );
+        $bank_name    = sanitize_text_field( $meta_lookup( 'banco' ) );
+        $bank_agency  = sanitize_text_field( $meta_lookup( 'agencia' ) );
+        $bank_account = sanitize_text_field( $meta_lookup( 'conta' ) );
 
         return array(
             'payment' => array(
                 'Nome Completo Diretor Executivo' => $director_name ?: '—',
                 'Número de Controle Secretaria'   => $control_number ?: '—',
+                'Nome do Prestador'               => $person_name ?: '—',
+                'Documento (CPF/CNPJ)'            => $person_doc ?: '—',
+                'Tipo do prestador'               => $person_label,
                 'Telefone do Prestador'           => $phone_value ?: '—',
                 'E-mail do Prestador'             => $email_value ?: '—',
+                'Curso'                           => $course ?: '—',
                 'Número do Documento Fiscal'      => $doc_fiscal ?: '—',
                 'Valor (R$)'                      => $value_display ?: ( $entry['provider_value'] ?? '—' ),
-                'Tipo do prestador'               => $person_line ?: $person_label,
+                'Banco'                           => $bank_name ?: '—',
+                'Agência'                         => $bank_agency ?: '—',
+                'Conta Corrente'                  => $bank_account ?: '—',
             ),
             'service' => array(
                 'Prestação de contas'             => $prest_contas ?: '—',
@@ -1222,3 +1280,4 @@ require_once __DIR__ . '/includes/financeiro.php';
 require_once __DIR__ . '/includes/admin-meta.php';
 require_once __DIR__ . '/includes/portal_colaborador.php';
 require_once __DIR__ . '/includes/portal_coordenador.php';
+require_once __DIR__ . '/includes/portal_faepa.php';

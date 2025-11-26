@@ -982,6 +982,94 @@ add_shortcode('apf_inbox', function () {
         }
     }
 
+    if ( isset( $_POST['apf_faepa_forward_action'] ) ) {
+        if ( ! isset( $_POST['apf_faepa_nonce'] ) || ! wp_verify_nonce( $_POST['apf_faepa_nonce'], 'apf_faepa_forward' ) ) {
+            $faepa_notice      = 'Não foi possível registrar o envio. Recarregue a página e tente novamente.';
+            $faepa_notice_type = 'error';
+        } else {
+            $batch_id = isset( $_POST['apf_faepa_batch_id'] ) ? sanitize_text_field( wp_unslash( $_POST['apf_faepa_batch_id'] ) ) : '';
+            if ( '' === $batch_id ) {
+                $faepa_notice      = 'Lote inválido. Abra novamente o retorno e tente de novo.';
+                $faepa_notice_type = 'error';
+            } else {
+                $entries = array();
+                $requests = apf_get_coordinator_requests();
+                if ( is_array( $requests ) ) {
+                    foreach ( $requests as $entry ) {
+                        if ( ! is_array( $entry ) || empty( $entry['batch_id'] ) || $entry['batch_id'] !== $batch_id ) {
+                            continue;
+                        }
+                        $entries[] = $entry;
+                    }
+                }
+
+                if ( empty( $entries ) ) {
+                    $faepa_notice      = 'Nenhum retorno encontrado para este lote.';
+                    $faepa_notice_type = 'error';
+                } else {
+                $pending_count   = 0;
+                $approved_count  = 0;
+                $already_forwarded = true;
+                foreach ( $entries as $entry ) {
+                    $status = isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'pending';
+                    if ( 'pending' === $status ) {
+                        $pending_count++;
+                    } elseif ( 'approved' === $status ) {
+                        $approved_count++;
+                    }
+                    if ( empty( $entry['faepa_forwarded'] ) ) {
+                        $already_forwarded = false;
+                    }
+                }
+
+                    if ( $pending_count > 0 ) {
+                        $faepa_notice      = 'Ainda existem colaboradores pendentes neste retorno. Valide todos antes de enviar para a FAEPA.';
+                        $faepa_notice_type = 'error';
+                    } elseif ( $approved_count <= 0 ) {
+                        $faepa_notice      = 'Nenhum colaborador aprovado neste retorno. Apenas aprovados podem ser enviados à FAEPA.';
+                        $faepa_notice_type = 'error';
+                    } else {
+                        $updated = apf_mark_coordinator_batch_forwarded( $batch_id, array(
+                            'user_id' => get_current_user_id(),
+                        ) );
+                        if ( $updated || $already_forwarded ) {
+                            $faepa_notice      = 'Dados confirmados e enviados para a FAEPA.';
+                            $faepa_notice_type = 'success';
+                        } else {
+                            $faepa_notice      = 'Não foi possível atualizar o envio para a FAEPA.';
+                            $faepa_notice_type = 'error';
+                        }
+                    }
+                }
+            }
+        }
+
+        $target_url = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target_url = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target_url ) {
+            $target_url = home_url( '/' );
+        }
+        $target_url = remove_query_arg( array( 'apf_faepa_notice', 'apf_faepa_status' ), $target_url );
+        $target_url = add_query_arg( array(
+            'apf_faepa_notice' => $faepa_notice,
+            'apf_faepa_status' => ( 'success' === $faepa_notice_type ) ? 'success' : 'error',
+        ), $target_url );
+
+        wp_safe_redirect( esc_url_raw( $target_url ) );
+        exit;
+    }
+
+    $faepa_notice      = '';
+    $faepa_notice_type = 'success';
+    if ( isset( $_GET['apf_faepa_notice'] ) ) {
+        $faepa_notice = sanitize_text_field( wp_unslash( $_GET['apf_faepa_notice'] ) );
+        if ( isset( $_GET['apf_faepa_status'] ) && 'error' === sanitize_text_field( wp_unslash( $_GET['apf_faepa_status'] ) ) ) {
+            $faepa_notice_type = 'error';
+        }
+    }
+
     $available_courses = apf_inbox_get_available_courses();
     $course_pool = array();
     if ( is_array( $available_courses ) ) {
@@ -1605,6 +1693,10 @@ add_shortcode('apf_inbox', function () {
                             'email'  => isset( $entry['coordinator_email'] ) ? sanitize_email( $entry['coordinator_email'] ) : '',
                             'course' => isset( $entry['course'] ) ? sanitize_text_field( (string) $entry['course'] ) : '',
                         ),
+                        'faepa_forwarded'     => false,
+                        'faepa_forwarded_at'  => 0,
+                        'faepa_forwarded_by'  => 0,
+                        'faepa_forwarded_note'=> '',
                     );
                 }
 
@@ -1616,6 +1708,10 @@ add_shortcode('apf_inbox', function () {
                 $submitted_at = isset( $entry['batch_submitted_at'] ) ? (int) $entry['batch_submitted_at'] : 0;
                 $updated_at   = isset( $entry['updated_at'] ) ? (int) $entry['updated_at'] : 0;
                 $reference_ts = max( $submitted_at, $decision_at, $updated_at );
+                $faepa_forwarded = ! empty( $entry['faepa_forwarded'] );
+                $faepa_forwarded_at = isset( $entry['faepa_forwarded_at'] ) ? (int) $entry['faepa_forwarded_at'] : 0;
+                $faepa_forwarded_by = isset( $entry['faepa_forwarded_by'] ) ? (int) $entry['faepa_forwarded_by'] : 0;
+                $faepa_forwarded_note = isset( $entry['faepa_forwarded_note'] ) ? sanitize_textarea_field( $entry['faepa_forwarded_note'] ) : '';
 
                 $coordinator_return_groups[ $group_id ]['counts']['total']++;
                 if ( isset( $coordinator_return_groups[ $group_id ]['counts'][ $status ] ) ) {
@@ -1623,6 +1719,16 @@ add_shortcode('apf_inbox', function () {
                 }
                 if ( $reference_ts > $coordinator_return_groups[ $group_id ]['submitted_at'] ) {
                     $coordinator_return_groups[ $group_id ]['submitted_at'] = $reference_ts;
+                }
+                if ( $faepa_forwarded ) {
+                    $coordinator_return_groups[ $group_id ]['faepa_forwarded'] = true;
+                    $coordinator_return_groups[ $group_id ]['faepa_forwarded_at'] = max( $coordinator_return_groups[ $group_id ]['faepa_forwarded_at'], $faepa_forwarded_at );
+                    if ( $faepa_forwarded_by > 0 ) {
+                        $coordinator_return_groups[ $group_id ]['faepa_forwarded_by'] = $faepa_forwarded_by;
+                    }
+                    if ( '' === $coordinator_return_groups[ $group_id ]['faepa_forwarded_note'] && '' !== $faepa_forwarded_note ) {
+                        $coordinator_return_groups[ $group_id ]['faepa_forwarded_note'] = $faepa_forwarded_note;
+                    }
                 }
 
                 if ( '' === $coordinator_return_groups[ $group_id ]['coordinator']['name'] && ! empty( $entry['coordinator_name'] ) ) {
@@ -1666,6 +1772,9 @@ add_shortcode('apf_inbox', function () {
             }
             $coordinator_return_groups[ $group_id ]['submitted_label'] = ! empty( $coordinator_return_groups[ $group_id ]['submitted_at'] )
                 ? date_i18n( 'd/m/Y H:i', (int) $coordinator_return_groups[ $group_id ]['submitted_at'] )
+                : '';
+            $coordinator_return_groups[ $group_id ]['faepa_forwarded_label'] = ( ! empty( $bundle['faepa_forwarded'] ) && ! empty( $bundle['faepa_forwarded_at'] ) )
+                ? date_i18n( 'd/m/Y H:i', (int) $bundle['faepa_forwarded_at'] )
                 : '';
         }
         $coordinator_return_groups = array_values( $coordinator_return_groups );
@@ -2114,6 +2223,11 @@ add_shortcode('apf_inbox', function () {
       </div>
 
       <?php $archived_return_ids_attr = ! empty( $archived_return_ids ) ? implode( ',', $archived_return_ids ) : ''; ?>
+      <?php if ( $faepa_notice ) : ?>
+        <div class="apf-coord-return__notice apf-coord-return__notice--<?php echo esc_attr( $faepa_notice_type ); ?>">
+          <?php echo esc_html( $faepa_notice ); ?>
+        </div>
+      <?php endif; ?>
       <section class="apf-coord-return" id="apfCoordReturn" aria-labelledby="apfCoordReturnTitle">
         <div class="apf-coord-return__head">
           <div>
@@ -2153,6 +2267,9 @@ add_shortcode('apf_inbox', function () {
                     <?php endif; ?>
                     <?php if ( $course ) : ?>
                       <p class="apf-coord-return__course"><?php echo esc_html( $course ); ?></p>
+                    <?php endif; ?>
+                    <?php if ( ! empty( $return_group['faepa_forwarded'] ) ) : ?>
+                      <p class="apf-coord-return__faepa">Enviado à FAEPA<?php echo $return_group['faepa_forwarded_label'] ? ' em ' . esc_html( $return_group['faepa_forwarded_label'] ) : ''; ?></p>
                     <?php endif; ?>
                   </div>
                   <span class="apf-coord-return__total"><?php echo esc_html( $total . ' colaborador' . ( $total === 1 ? '' : 'es' ) ); ?></span>
@@ -2196,6 +2313,16 @@ add_shortcode('apf_inbox', function () {
           </div>
           <div class="apf-coord-return-modal__body" id="apfCoordModalBody">
             <p class="apf-coord-return-modal__empty">Selecione um retorno para ver os detalhes.</p>
+          </div>
+          <div class="apf-coord-return-modal__footer" id="apfCoordFaepaBox" hidden>
+            <div class="apf-coord-faepa__status" id="apfCoordFaepaStatus"></div>
+            <form method="post" class="apf-coord-faepa__form" id="apfCoordFaepaForm">
+              <?php wp_nonce_field( 'apf_faepa_forward', 'apf_faepa_nonce' ); ?>
+              <input type="hidden" name="apf_faepa_forward_action" value="1">
+              <input type="hidden" name="apf_faepa_batch_id" value="">
+              <p class="apf-coord-faepa__hint" data-faepa-hint>Confirme apenas quando todos os colaboradores estiverem aprovados.</p>
+              <button type="submit" class="apf-btn apf-btn--primary" id="apfCoordFaepaSubmit">Confirmar e enviar para a FAEPA</button>
+            </form>
           </div>
         </div>
       </div>
@@ -3475,6 +3602,28 @@ add_shortcode('apf_inbox', function () {
         font-size:13px;
         color:var(--apf-muted);
       }
+      .apf-coord-return__notice{
+        margin:8px 0 12px;
+        padding:10px 12px;
+        border-radius:10px;
+        font-size:13px;
+        border:1px solid var(--apf-border);
+      }
+      .apf-coord-return__notice--success{
+        background:#f0fdf4;
+        border-color:#bbf7d0;
+        color:#166534;
+      }
+      .apf-coord-return__notice--error{
+        background:#fef2f2;
+        border-color:#fecaca;
+        color:#991b1b;
+      }
+      .apf-coord-return__faepa{
+        margin:6px 0 0;
+        font-size:12px;
+        color:var(--apf-muted);
+      }
 
       /* Modal retorno coordenador */
       .apf-coord-return-modal{
@@ -3544,6 +3693,37 @@ add_shortcode('apf_inbox', function () {
         flex-direction:column;
         gap:14px;
       }
+      .apf-coord-return-modal__footer{
+        padding:16px 20px 20px;
+        border-top:1px solid rgba(255,255,255,.08);
+        background:#0a1020;
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+      }
+      .apf-coord-faepa__status{
+        font-size:13px;
+        font-weight:600;
+        color:#22c55e;
+      }
+      .apf-coord-faepa__status--pending{ color:#fbbf24; }
+      .apf-coord-faepa__status--error{ color:#fca5a5; }
+      .apf-coord-faepa__form{
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+      }
+      .apf-coord-faepa__form.is-disabled{
+        opacity:.9;
+      }
+      .apf-coord-faepa__form label{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+        font-size:13px;
+        color:#e2e8f0;
+      }
+      .apf-coord-faepa__hint{margin:0;font-size:12px;color:#cbd5e1}
       .apf-coord-return-modal__empty{
         margin:0;
         font-size:13px;
@@ -3646,6 +3826,10 @@ add_shortcode('apf_inbox', function () {
       }
       .apf-archive-entry__toggle small{
         color:#cbd5f5;
+      }
+      .apf-archive-entry__status{
+        color:#a5b4fc;
+        font-size:12px;
       }
       .apf-archive-entry__chevron{
         width:12px;
@@ -5405,6 +5589,13 @@ add_shortcode('apf_inbox', function () {
       const coordReturnGroupsMap = new Map();
       let coordReturnLastFocus = null;
       let coordArchiveLastFocus = null;
+      const coordFaepaBox = $('#apfCoordFaepaBox');
+      const coordFaepaStatus = $('#apfCoordFaepaStatus');
+      const coordFaepaForm = $('#apfCoordFaepaForm');
+      const coordFaepaBatch = coordFaepaForm ? coordFaepaForm.querySelector('input[name=\"apf_faepa_batch_id\"]') : null;
+      const coordFaepaNote = $('#apfCoordFaepaNote');
+      const coordFaepaSubmit = $('#apfCoordFaepaSubmit');
+      const coordFaepaHint = coordFaepaBox ? coordFaepaBox.querySelector('[data-faepa-hint]') : null;
 
       const coordReturnDataNode = document.getElementById('apfCoordReturnData');
       if(coordReturnDataNode){
@@ -5447,12 +5638,60 @@ add_shortcode('apf_inbox', function () {
         return section;
       }
 
+      function updateFaepaBox(group){
+        if(!coordFaepaBox){ return; }
+        if(!group){
+          coordFaepaBox.hidden = true;
+          return;
+        }
+        coordFaepaBox.hidden = false;
+        const pending = group.counts && typeof group.counts.pending === 'number' ? group.counts.pending : 0;
+        const forwarded = !!group.faepa_forwarded;
+        if(coordFaepaBatch){
+          coordFaepaBatch.value = group.id || '';
+        }
+        if(coordFaepaNote){
+          coordFaepaNote.value = group.faepa_forwarded_note || '';
+          coordFaepaNote.readOnly = forwarded;
+        }
+        if(coordFaepaSubmit){
+          coordFaepaSubmit.disabled = forwarded || pending > 0;
+          coordFaepaSubmit.style.display = forwarded ? 'none' : '';
+        }
+        if(coordFaepaHint){
+          if(forwarded){
+            coordFaepaHint.textContent = group.faepa_forwarded_note
+              ? 'Observação registrada pelo financeiro.'
+              : 'Lote já enviado para a FAEPA.';
+          }else if(pending > 0){
+            coordFaepaHint.textContent = 'Valide todos os colaboradores antes de enviar.';
+          }else{
+            coordFaepaHint.textContent = 'Confirme o recebimento e envie para a FAEPA.';
+          }
+        }
+        if(coordFaepaStatus){
+          const pendingLabel = pending > 0 ? (pending + ' pendente(s) para validar') : 'Aguardando envio à FAEPA';
+          coordFaepaStatus.textContent = forwarded
+            ? 'Enviado à FAEPA' + (group.faepa_forwarded_label ? ' em ' + group.faepa_forwarded_label : '')
+            : pendingLabel;
+          let statusClass = 'apf-coord-faepa__status';
+          if(!forwarded){
+            statusClass += pending > 0 ? ' apf-coord-faepa__status--error' : ' apf-coord-faepa__status--pending';
+          }
+          coordFaepaStatus.className = statusClass;
+        }
+        if(coordFaepaForm){
+          coordFaepaForm.classList.toggle('is-disabled', forwarded);
+        }
+      }
+
       function renderCoordReturnGroup(group){
         if(!coordReturnBody){
           return;
         }
         if(!group){
           coordReturnBody.innerHTML = '<p class="apf-coord-return-modal__empty">Nenhum dado disponível.</p>';
+          updateFaepaBox(null);
           return;
         }
         coordReturnBody.innerHTML = '';
@@ -5474,6 +5713,7 @@ add_shortcode('apf_inbox', function () {
           }
           coordReturnSubtitle.textContent = parts.join(' • ');
         }
+        updateFaepaBox(group);
         if(group.message){
           const message = document.createElement('p');
           message.className = 'apf-coord-modal__note';
@@ -5579,6 +5819,7 @@ add_shortcode('apf_inbox', function () {
         coordReturnModal.setAttribute('aria-hidden','true');
         document.body.style.overflow = '';
         if(coordReturnLastFocus){ coordReturnLastFocus.focus(); }
+        updateFaepaBox(null);
       }
 
       function renderArchiveGroups(ids){
@@ -5611,10 +5852,16 @@ add_shortcode('apf_inbox', function () {
           heading.textContent = group.title || 'Retorno do coordenador';
           const date = document.createElement('small');
           date.textContent = group.submitted_label ? ('Enviado em ' + group.submitted_label) : 'Data indisponível';
+          const status = document.createElement('small');
+          status.className = 'apf-archive-entry__status';
+          status.textContent = group.faepa_forwarded
+            ? 'Enviado à FAEPA' + (group.faepa_forwarded_label ? ' em ' + group.faepa_forwarded_label : '')
+            : 'Aguardando envio à FAEPA';
           const chevron = document.createElement('span');
           chevron.className = 'apf-archive-entry__chevron';
           toggle.appendChild(heading);
           toggle.appendChild(date);
+          toggle.appendChild(status);
           toggle.appendChild(chevron);
           const content = document.createElement('div');
           content.className = 'apf-archive-entry__content';
