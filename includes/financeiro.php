@@ -891,6 +891,9 @@ add_shortcode('apf_inbox', function () {
                     $classification = sanitize_text_field( (string) $meta_get( 'classificacao' ) ?: ( $clean_payload['Classificação'] ?? '' ) );
                     $service_desc = sanitize_textarea_field( (string) $meta_get( 'descricao' ) );
                     $service_hours = sanitize_text_field( (string) $meta_get( 'carga_horaria' ) ?: ( $clean_payload['Carga Horária (CH)'] ?? '' ) );
+                    $bank_name    = sanitize_text_field( (string) $meta_get( 'banco' ) );
+                    $bank_agency  = sanitize_text_field( (string) $meta_get( 'agencia' ) );
+                    $bank_account = sanitize_text_field( (string) $meta_get( 'conta' ) );
 
                     $payment_snapshot = array(
                         'Nome Completo Diretor Executivo' => $director_display ?: '—',
@@ -907,6 +910,11 @@ add_shortcode('apf_inbox', function () {
                         'Classificação'                   => $classification ?: '—',
                         'Descrição do serviço ou material'=> $service_desc ?: ( $clean_payload['Descrição'] ?? '' ),
                         'Carga horária do curso'          => $service_hours ?: '—',
+                    );
+                    $payout_snapshot = array(
+                        'Banco'          => $bank_name ?: '—',
+                        'Agência'        => $bank_agency ?: '—',
+                        'Conta Corrente' => $bank_account ?: '—',
                     );
 
                     $clean_payload = array();
@@ -936,6 +944,7 @@ add_shortcode('apf_inbox', function () {
                         'provider_value'       => $clean_payload['Valor (R$)'] ?? '',
                         'snapshot_payment'     => $payment_snapshot,
                         'snapshot_service'     => $service_snapshot,
+                        'snapshot_payout'      => $payout_snapshot,
                         'note_title'           => $note_title,
                         'note_body'            => $note_body,
                         'status'               => 'pending',
@@ -5779,8 +5788,10 @@ add_shortcode('apf_inbox', function () {
           if(item.details){
             const paySection = buildCoordSection('Dados do pagamento', item.details.payment);
             const serviceSection = buildCoordSection('Prestação do serviço', item.details.service);
+            const payoutSection = buildCoordSection('Dados para pagamento', item.details.payout);
             if(paySection){ detailsWrap.appendChild(paySection); }
             if(serviceSection){ detailsWrap.appendChild(serviceSection); }
+            if(payoutSection){ detailsWrap.appendChild(payoutSection); }
             if(item.details.admin_url){
               const adminLink = document.createElement('a');
               adminLink.className = 'apf-coord-modal__admin';
@@ -5923,8 +5934,10 @@ add_shortcode('apf_inbox', function () {
             if(item.details){
               const paySection = buildCoordSection('Dados do pagamento', item.details.payment);
               const serviceSection = buildCoordSection('Prestação do serviço', item.details.service);
+              const payoutSection = buildCoordSection('Dados para pagamento', item.details.payout);
               if(paySection){ detailWrap.appendChild(paySection); }
               if(serviceSection){ detailWrap.appendChild(serviceSection); }
+              if(payoutSection){ detailWrap.appendChild(payoutSection); }
               if(item.details.admin_url){
                 const adminLink = document.createElement('a');
                 adminLink.className = 'apf-coord-modal__admin';

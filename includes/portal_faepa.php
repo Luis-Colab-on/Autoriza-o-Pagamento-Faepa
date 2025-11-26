@@ -376,6 +376,7 @@ $apf_portal_faepa_cb = function () {
                         }
                         $detail_payment = $item['details']['payment'] ?? array();
                         $detail_service = $item['details']['service'] ?? array();
+                        $detail_payout  = $item['details']['payout'] ?? array();
                     ?>
                       <article class="apf-faepa-entry">
                         <details>
@@ -417,6 +418,18 @@ $apf_portal_faepa_cb = function () {
                                 <strong>Prestação do serviço</strong>
                                 <dl>
                                   <?php foreach ( $detail_service as $label => $value ) : ?>
+                                    <dt><?php echo esc_html( $label ); ?></dt>
+                                    <dd><?php echo esc_html( $value === '' ? '—' : $value ); ?></dd>
+                                  <?php endforeach; ?>
+                                </dl>
+                              </div>
+                            <?php endif; ?>
+
+                            <?php if ( ! empty( $detail_payout ) ) : ?>
+                              <div class="apf-faepa-entry__block">
+                                <strong>Dados para pagamento</strong>
+                                <dl>
+                                  <?php foreach ( $detail_payout as $label => $value ) : ?>
                                     <dt><?php echo esc_html( $label ); ?></dt>
                                     <dd><?php echo esc_html( $value === '' ? '—' : $value ); ?></dd>
                                   <?php endforeach; ?>

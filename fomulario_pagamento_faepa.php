@@ -397,6 +397,7 @@ if ( ! function_exists( 'apf_coord_build_request_details' ) ) {
         $submission_id = isset( $entry['submission_id'] ) ? (int) $entry['submission_id'] : 0;
         $payment_snapshot = array();
         $service_snapshot = array();
+        $payout_snapshot  = array();
         if ( isset( $entry['snapshot_payment'] ) && is_array( $entry['snapshot_payment'] ) ) {
             foreach ( $entry['snapshot_payment'] as $label => $value ) {
                 $payment_snapshot[ sanitize_text_field( (string) $label ) ] = is_scalar( $value ) ? sanitize_text_field( (string) $value ) : '';
@@ -405,6 +406,11 @@ if ( ! function_exists( 'apf_coord_build_request_details' ) ) {
         if ( isset( $entry['snapshot_service'] ) && is_array( $entry['snapshot_service'] ) ) {
             foreach ( $entry['snapshot_service'] as $label => $value ) {
                 $service_snapshot[ sanitize_text_field( (string) $label ) ] = is_scalar( $value ) ? sanitize_text_field( (string) $value ) : '';
+            }
+        }
+        if ( isset( $entry['snapshot_payout'] ) && is_array( $entry['snapshot_payout'] ) ) {
+            foreach ( $entry['snapshot_payout'] as $label => $value ) {
+                $payout_snapshot[ sanitize_text_field( (string) $label ) ] = is_scalar( $value ) ? sanitize_text_field( (string) $value ) : '';
             }
         }
 
@@ -417,14 +423,6 @@ if ( ! function_exists( 'apf_coord_build_request_details' ) ) {
             $admin_url = esc_url_raw( $payload['_admin_url'] );
         }
 
-        if ( ! empty( $payment_snapshot ) || ! empty( $service_snapshot ) ) {
-            return array(
-                'payment'   => ! empty( $payment_snapshot ) ? $payment_snapshot : array(),
-                'service'   => ! empty( $service_snapshot ) ? $service_snapshot : array(),
-                'admin_url' => $admin_url,
-            );
-        }
-
         $meta_lookup = function( $key ) use ( $submission_id ) {
             if ( $submission_id <= 0 ) {
                 return '';
@@ -432,16 +430,27 @@ if ( ! function_exists( 'apf_coord_build_request_details' ) ) {
             return get_post_meta( $submission_id, 'apf_' . $key, true );
         };
 
+        $clean_payload = array();
+        if ( ! empty( $payload ) ) {
+            foreach ( $payload as $payload_key => $payload_value ) {
+                if ( '_admin_url' === $payload_key ) {
+                    $clean_payload['_admin_url'] = esc_url_raw( $payload_value );
+                    continue;
+                }
+                $clean_payload[ $payload_key ] = is_scalar( $payload_value ) ? sanitize_text_field( (string) $payload_value ) : '';
+            }
+        }
+
         $director_name = $meta_lookup( 'nome_diretor' );
-        if ( '' === $director_name && isset( $payload['Coordenador'] ) ) {
-            $director_name = $payload['Coordenador'];
+        if ( '' === $director_name && isset( $clean_payload['Coordenador'] ) ) {
+            $director_name = $clean_payload['Coordenador'];
         }
         $director_name = sanitize_text_field( $director_name );
 
         $control_number = sanitize_text_field( $meta_lookup( 'num_controle' ) );
-        $phone_value    = sanitize_text_field( $meta_lookup( 'tel_prestador' ) ?: ( $payload['Telefone'] ?? '' ) );
-        $email_value    = sanitize_email( $meta_lookup( 'email_prest' ) ?: ( $payload['E-mail'] ?? '' ) );
-        $doc_fiscal     = sanitize_text_field( $meta_lookup( 'num_doc_fiscal' ) ?: ( $payload['Doc. Fiscal'] ?? '' ) );
+        $phone_value    = sanitize_text_field( $meta_lookup( 'tel_prestador' ) ?: ( $clean_payload['Telefone'] ?? '' ) );
+        $email_value    = sanitize_email( $meta_lookup( 'email_prest' ) ?: ( $clean_payload['E-mail'] ?? '' ) );
+        $doc_fiscal     = sanitize_text_field( $meta_lookup( 'num_doc_fiscal' ) ?: ( $clean_payload['Doc. Fiscal'] ?? '' ) );
         $raw_value      = $meta_lookup( 'valor' );
         $value_display  = '';
         if ( '' !== $raw_value ) {
@@ -453,46 +462,96 @@ if ( ! function_exists( 'apf_coord_build_request_details' ) ) {
         $person_doc   = '';
         $person_name  = '';
         if ( $is_pj ) {
-            $person_name = sanitize_text_field( $meta_lookup( 'nome_empresa' ) ?: ( $payload['Nome/Empresa'] ?? '' ) );
-            $person_doc  = sanitize_text_field( $meta_lookup( 'cnpj' ) ?: ( $payload['CNPJ'] ?? '' ) );
+            $person_name = sanitize_text_field( $meta_lookup( 'nome_empresa' ) ?: ( $clean_payload['Nome/Empresa'] ?? '' ) );
+            $person_doc  = sanitize_text_field( $meta_lookup( 'cnpj' ) ?: ( $clean_payload['CNPJ'] ?? '' ) );
         } else {
-            $person_name = sanitize_text_field( $meta_lookup( 'nome_prof' ) ?: ( $payload['Nome/Empresa'] ?? '' ) );
-            $person_doc  = sanitize_text_field( $meta_lookup( 'cpf' ) ?: ( $payload['CPF'] ?? '' ) );
+            $person_name = sanitize_text_field( $meta_lookup( 'nome_prof' ) ?: ( $clean_payload['Nome/Empresa'] ?? '' ) );
+            $person_doc  = sanitize_text_field( $meta_lookup( 'cpf' ) ?: ( $clean_payload['CPF'] ?? '' ) );
         }
 
         $prest_contas = sanitize_text_field( $meta_lookup( 'prest_contas' ) );
-        $data_prest   = sanitize_text_field( $meta_lookup( 'data_prest' ) ?: ( $payload['Data do Serviço'] ?? '' ) );
-        $class_text   = sanitize_text_field( $meta_lookup( 'classificacao' ) ?: ( $payload['Classificação'] ?? '' ) );
+        $data_prest   = sanitize_text_field( $meta_lookup( 'data_prest' ) ?: ( $clean_payload['Data do Serviço'] ?? '' ) );
+        $class_text   = sanitize_text_field( $meta_lookup( 'classificacao' ) ?: ( $clean_payload['Classificação'] ?? '' ) );
         $descricao    = sanitize_textarea_field( $meta_lookup( 'descricao' ) );
-        $carga        = sanitize_text_field( $meta_lookup( 'carga_horaria' ) ?: ( $payload['Carga Horária (CH)'] ?? '' ) );
-        $course       = sanitize_text_field( $meta_lookup( 'nome_curto' ) ?: ( $payload['Curso'] ?? '' ) );
+        $carga        = sanitize_text_field( $meta_lookup( 'carga_horaria' ) ?: ( $clean_payload['Carga Horária (CH)'] ?? '' ) );
+        $course       = sanitize_text_field( $meta_lookup( 'nome_curto' ) ?: ( $clean_payload['Curso'] ?? '' ) );
         $bank_name    = sanitize_text_field( $meta_lookup( 'banco' ) );
         $bank_agency  = sanitize_text_field( $meta_lookup( 'agencia' ) );
         $bank_account = sanitize_text_field( $meta_lookup( 'conta' ) );
 
+        if ( '' === $bank_name && '' === $bank_agency && '' === $bank_account && isset( $clean_payload['Banco/Agência/Conta'] ) ) {
+            $parts = array_map( 'trim', explode( '/', (string) $clean_payload['Banco/Agência/Conta'] ) );
+            if ( isset( $parts[0] ) && '' === $bank_name ) {
+                $bank_name = sanitize_text_field( $parts[0] );
+            }
+            if ( isset( $parts[1] ) && '' === $bank_agency ) {
+                $bank_agency = sanitize_text_field( $parts[1] );
+            }
+            if ( isset( $parts[2] ) && '' === $bank_account ) {
+                $bank_account = sanitize_text_field( $parts[2] );
+            }
+        }
+
+        $payment_fallback = array(
+            'Nome Completo Diretor Executivo' => $director_name ?: '—',
+            'Número de Controle Secretaria'   => $control_number ?: '—',
+            'Nome do Prestador'               => $person_name ?: '—',
+            'Documento (CPF/CNPJ)'            => $person_doc ?: '—',
+            'Tipo do prestador'               => $person_label,
+            'Telefone do Prestador'           => $phone_value ?: '—',
+            'E-mail do Prestador'             => $email_value ?: '—',
+            'Curso'                           => $course ?: '—',
+            'Número do Documento Fiscal'      => $doc_fiscal ?: '—',
+            'Valor (R$)'                      => $value_display ?: ( $entry['provider_value'] ?? '—' ),
+        );
+        $service_fallback = array(
+            'Prestação de contas'             => $prest_contas ?: '—',
+            'Data de prestação de serviço'    => $data_prest ?: '—',
+            'Classificação'                   => $class_text ?: '—',
+            'Descrição do serviço ou material'=> $descricao ?: ( $clean_payload['Descrição'] ?? '' ),
+            'Carga horária do curso'          => $carga ?: '—',
+        );
+        $payout_fallback = array(
+            'Banco'          => $bank_name ?: '—',
+            'Agência'        => $bank_agency ?: '—',
+            'Conta Corrente' => $bank_account ?: '—',
+        );
+
+        $payment_data = ! empty( $payment_snapshot ) ? $payment_snapshot : $payment_fallback;
+        $service_data = ! empty( $service_snapshot ) ? $service_snapshot : $service_fallback;
+        $payout_data  = ! empty( $payout_snapshot )  ? $payout_snapshot  : array();
+
+        foreach ( $payment_fallback as $label => $value ) {
+            if ( ! isset( $payment_data[ $label ] ) || '' === $payment_data[ $label ] ) {
+                $payment_data[ $label ] = $value;
+            }
+        }
+        foreach ( $service_fallback as $label => $value ) {
+            if ( ! isset( $service_data[ $label ] ) || '' === $service_data[ $label ] ) {
+                $service_data[ $label ] = $value;
+            }
+        }
+        foreach ( $payout_fallback as $label => $value ) {
+            if ( ! isset( $payout_data[ $label ] ) || '' === $payout_data[ $label ] ) {
+                $payout_data[ $label ] = $value;
+            }
+        }
+        if ( empty( $payout_data ) ) {
+            $payout_data = $payout_fallback;
+        }
+
+        if ( ! empty( $payout_data ) ) {
+            foreach ( array( 'Banco', 'Agência', 'Conta Corrente', 'Conta' ) as $bank_label ) {
+                if ( isset( $payment_data[ $bank_label ] ) ) {
+                    unset( $payment_data[ $bank_label ] );
+                }
+            }
+        }
+
         return array(
-            'payment' => array(
-                'Nome Completo Diretor Executivo' => $director_name ?: '—',
-                'Número de Controle Secretaria'   => $control_number ?: '—',
-                'Nome do Prestador'               => $person_name ?: '—',
-                'Documento (CPF/CNPJ)'            => $person_doc ?: '—',
-                'Tipo do prestador'               => $person_label,
-                'Telefone do Prestador'           => $phone_value ?: '—',
-                'E-mail do Prestador'             => $email_value ?: '—',
-                'Curso'                           => $course ?: '—',
-                'Número do Documento Fiscal'      => $doc_fiscal ?: '—',
-                'Valor (R$)'                      => $value_display ?: ( $entry['provider_value'] ?? '—' ),
-                'Banco'                           => $bank_name ?: '—',
-                'Agência'                         => $bank_agency ?: '—',
-                'Conta Corrente'                  => $bank_account ?: '—',
-            ),
-            'service' => array(
-                'Prestação de contas'             => $prest_contas ?: '—',
-                'Data de prestação de serviço'    => $data_prest ?: '—',
-                'Classificação'                   => $class_text ?: '—',
-                'Descrição do serviço ou material'=> $descricao ?: ( $payload['Descrição'] ?? '' ),
-                'Carga horária do curso'          => $carga ?: '—',
-            ),
+            'payment'   => $payment_data,
+            'service'   => $service_data,
+            'payout'    => $payout_data,
             'admin_url' => $admin_url,
         );
     }
@@ -558,6 +617,7 @@ if ( ! function_exists( 'apf_coord_render_request_detail_inner' ) ) {
                   $panel_id = 'apfCoordCollab-' . sanitize_html_class( $group_id . '-' . ( $entry['id'] ?? $index ) );
                   $payment_details = isset( $details['payment'] ) && is_array( $details['payment'] ) ? $details['payment'] : array();
                   $service_details = isset( $details['service'] ) && is_array( $details['service'] ) ? $details['service'] : array();
+                  $payout_details  = isset( $details['payout'] ) && is_array( $details['payout'] ) ? $details['payout'] : array();
           ?>
             <article class="apf-coord-collab apf-coord-collab--<?php echo esc_attr( $status ); ?>">
               <div class="apf-coord-collab__header">
@@ -629,6 +689,17 @@ if ( ! function_exists( 'apf_coord_render_request_detail_inner' ) ) {
                           }
                           ?>
                         </dd>
+                      <?php endforeach; ?>
+                    </dl>
+                  </div>
+                <?php endif; ?>
+                <?php if ( ! empty( $payout_details ) ) : ?>
+                  <div class="apf-coord-collab__section">
+                    <h5>Dados para pagamento</h5>
+                    <dl>
+                      <?php foreach ( $payout_details as $label => $value ) : ?>
+                        <dt><?php echo esc_html( $label ); ?></dt>
+                        <dd><?php echo esc_html( $value ?: '—' ); ?></dd>
                       <?php endforeach; ?>
                     </dl>
                   </div>
