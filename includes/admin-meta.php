@@ -26,6 +26,7 @@ function apf_render_meta_box( $post ){
         'valor'          => 'Valor (R$)',
         'pessoa_tipo'    => 'Tipo (pf/pj)',
         'nome_empresa'   => 'Nome Empresa (PJ)',
+        'nome_colaborador'=> 'Nome do Colaborador (PJ)',
         'cnpj'           => 'CNPJ (PJ)',
         'nome_prof'      => 'Nome Profissional (PF)',
         'cpf'            => 'CPF (PF)',
@@ -68,7 +69,7 @@ add_action('save_post_apf_submission', function( $post_id ){
 
     $keys = array(
         'nome_diretor','num_controle','tel_prestador','email_prest','num_doc_fiscal','valor',
-        'pessoa_tipo','nome_empresa','cnpj','nome_prof','cpf',
+        'pessoa_tipo','nome_empresa','nome_colaborador','cnpj','nome_prof','cpf',
         'prest_contas','data_prest','classificacao','descricao','nome_curto','carga_horaria',
         'banco','agencia','conta'
     );

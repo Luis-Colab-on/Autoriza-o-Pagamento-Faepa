@@ -456,18 +456,17 @@ if ( ! function_exists( 'apf_coord_build_request_details' ) ) {
         if ( '' !== $raw_value ) {
             $value_display = apf_format_currency_for_input( apf_normalize_currency_value( $raw_value ) );
         }
-        $person_type = sanitize_text_field( $meta_lookup( 'pessoa_tipo' ) );
-        $is_pj       = ( 'pj' === strtolower( $person_type ) );
-        $person_label= $is_pj ? 'Pessoa Jurídica' : 'Pessoa Física';
-        $person_doc   = '';
-        $person_name  = '';
-        if ( $is_pj ) {
-            $person_name = sanitize_text_field( $meta_lookup( 'nome_empresa' ) ?: ( $clean_payload['Nome/Empresa'] ?? '' ) );
-            $person_doc  = sanitize_text_field( $meta_lookup( 'cnpj' ) ?: ( $clean_payload['CNPJ'] ?? '' ) );
-        } else {
-            $person_name = sanitize_text_field( $meta_lookup( 'nome_prof' ) ?: ( $clean_payload['Nome/Empresa'] ?? '' ) );
-            $person_doc  = sanitize_text_field( $meta_lookup( 'cpf' ) ?: ( $clean_payload['CPF'] ?? '' ) );
-        }
+        $person_type  = sanitize_text_field( $meta_lookup( 'pessoa_tipo' ) );
+        $is_pj        = ( 'pj' === strtolower( $person_type ) );
+        $person_label = $is_pj ? 'Pessoa Jurídica' : 'Pessoa Física';
+        $company_name = sanitize_text_field( $meta_lookup( 'nome_empresa' ) ?: ( $clean_payload['Nome da Empresa'] ?? ( $clean_payload['Empresa (PJ)'] ?? '' ) ) );
+        $collab_name  = $is_pj
+            ? sanitize_text_field( $meta_lookup( 'nome_colaborador' ) ?: ( $clean_payload['Nome do colaborador'] ?? $clean_payload['Nome do Prestador'] ?? $clean_payload['Nome/Empresa'] ?? '' ) )
+            : sanitize_text_field( $meta_lookup( 'nome_prof' ) ?: ( $clean_payload['Nome do Prestador'] ?? $clean_payload['Nome/Empresa'] ?? '' ) );
+        $person_name  = $is_pj ? ( $collab_name ?: $company_name ) : ( $collab_name ?: '' );
+        $person_doc   = $is_pj
+            ? sanitize_text_field( $meta_lookup( 'cnpj' ) ?: ( $clean_payload['CNPJ'] ?? '' ) )
+            : sanitize_text_field( $meta_lookup( 'cpf' ) ?: ( $clean_payload['CPF'] ?? '' ) );
 
         $prest_contas = sanitize_text_field( $meta_lookup( 'prest_contas' ) );
         $data_prest   = sanitize_text_field( $meta_lookup( 'data_prest' ) ?: ( $clean_payload['Data do Serviço'] ?? '' ) );
@@ -493,11 +492,12 @@ if ( ! function_exists( 'apf_coord_build_request_details' ) ) {
         }
 
         $payment_fallback = array(
+            'Tipo do prestador'               => $person_label,
+            'Empresa (PJ)'                    => $is_pj ? ( $company_name ?: '—' ) : '',
+            'Nome do colaborador'             => $person_name ?: '—',
+            'Documento (CPF/CNPJ)'            => $person_doc ?: '—',
             'Nome Completo Diretor Executivo' => $director_name ?: '—',
             'Número de Controle Secretaria'   => $control_number ?: '—',
-            'Nome do Prestador'               => $person_name ?: '—',
-            'Documento (CPF/CNPJ)'            => $person_doc ?: '—',
-            'Tipo do prestador'               => $person_label,
             'Telefone do Prestador'           => $phone_value ?: '—',
             'E-mail do Prestador'             => $email_value ?: '—',
             'Curso'                           => $course ?: '—',
@@ -536,6 +536,41 @@ if ( ! function_exists( 'apf_coord_build_request_details' ) ) {
                 $payout_data[ $label ] = $value;
             }
         }
+        $provider_type_label = $person_label ?: ( $payment_data['Tipo do prestador'] ?? '' );
+        $provider_name_label = $person_name ?: ( $payment_data['Nome do colaborador'] ?? $payment_data['Nome do Prestador'] ?? '' );
+        $provider_document   = $person_doc ?: ( $payment_data['Documento (CPF/CNPJ)'] ?? '' );
+        $provider_company    = $is_pj
+            ? ( $company_name ?: ( $payment_data['Empresa (PJ)'] ?? ( $payment_data['Nome da Empresa'] ?? '' ) ) )
+            : '';
+        $director_display    = $payment_data['Nome Completo Diretor Executivo'] ?? ( $director_name ?: '—' );
+        $control_display     = $payment_data['Número de Controle Secretaria'] ?? ( $control_number ?: '—' );
+        $ordered_payment = array(
+            'Nome Completo Diretor Executivo' => $director_display ?: '—',
+            'Número de Controle Secretaria'   => $control_display ?: '—',
+            'Tipo do prestador'               => $provider_type_label ?: '—',
+        );
+        if ( $is_pj ) {
+            $ordered_payment['Empresa (PJ)'] = $provider_company ?: '—';
+        }
+        $ordered_payment['Nome do colaborador'] = $provider_name_label ?: '—';
+        $ordered_payment['Documento (CPF/CNPJ)'] = $provider_document ?: '—';
+
+        foreach ( $payment_data as $label => $value ) {
+            if ( isset( $ordered_payment[ $label ] ) ) {
+                if ( '' === $ordered_payment[ $label ] || '—' === $ordered_payment[ $label ] ) {
+                    $ordered_payment[ $label ] = $value ?: '—';
+                }
+                continue;
+            }
+            if ( ! $is_pj && 'Empresa (PJ)' === $label ) {
+                continue;
+            }
+            if ( 'Nome do Prestador' === $label || 'Nome da Empresa' === $label ) {
+                continue;
+            }
+            $ordered_payment[ $label ] = $value;
+        }
+        $payment_data = $ordered_payment;
         if ( empty( $payout_data ) ) {
             $payout_data = $payout_fallback;
         }
@@ -618,11 +653,23 @@ if ( ! function_exists( 'apf_coord_render_request_detail_inner' ) ) {
                   $payment_details = isset( $details['payment'] ) && is_array( $details['payment'] ) ? $details['payment'] : array();
                   $service_details = isset( $details['service'] ) && is_array( $details['service'] ) ? $details['service'] : array();
                   $payout_details  = isset( $details['payout'] ) && is_array( $details['payout'] ) ? $details['payout'] : array();
+                  $company_label   = '';
+                  if ( isset( $payment_details['Empresa (PJ)'] ) ) {
+                      $company_label = sanitize_text_field( (string) $payment_details['Empresa (PJ)'] );
+                  } elseif ( isset( $payment_details['Nome da Empresa'] ) ) {
+                      $company_label = sanitize_text_field( (string) $payment_details['Nome da Empresa'] );
+                  }
+                  if ( '—' === $company_label ) {
+                      $company_label = '';
+                  }
           ?>
             <article class="apf-coord-collab apf-coord-collab--<?php echo esc_attr( $status ); ?>">
               <div class="apf-coord-collab__header">
                 <button type="button" class="apf-coord-collab__toggle" data-collab-toggle="<?php echo esc_attr( $panel_id ); ?>" aria-expanded="false" aria-controls="<?php echo esc_attr( $panel_id ); ?>">
                   <span class="apf-coord-collab__name"><?php echo esc_html( $entry['provider_name'] ?? '—' ); ?></span>
+                  <?php if ( $company_label && $company_label !== ( $entry['provider_name'] ?? '' ) ) : ?>
+                    <span class="apf-coord-collab__company"><?php echo esc_html( $company_label ); ?></span>
+                  <?php endif; ?>
                   <?php if ( $value_label ) : ?>
                     <span class="apf-coord-collab__value"><?php echo esc_html( $value_label ); ?></span>
                   <?php endif; ?>
@@ -735,8 +782,14 @@ if ( ! function_exists( 'apf_get_submission_payload' ) ) {
             return get_post_meta( $post_id, 'apf_' . $key, true );
         };
 
-        $tipo = $meta( 'pessoa_tipo' );
-        $nome = ( 'pj' === $tipo ) ? $meta( 'nome_empresa' ) : $meta( 'nome_prof' );
+        $tipo = strtolower( (string) $meta( 'pessoa_tipo' ) );
+        $company = $meta( 'nome_empresa' );
+        $collab  = ( 'pj' === $tipo )
+            ? ( $meta( 'nome_colaborador' ) ?: $meta( 'nome_prof' ) )
+            : $meta( 'nome_prof' );
+        $nome = $collab ?: $company;
+        $doc_id = ( 'pj' === $tipo ) ? $meta( 'cnpj' ) : $meta( 'cpf' );
+        $doc_id = $doc_id ? sanitize_text_field( (string) $doc_id ) : '';
         $valor = $meta( 'valor' );
         $valor_fmt = ( '' !== $valor ) ? number_format( (float) $valor, 2, ',', '.' ) : '';
         $banco_parts = array_filter( array_map( 'trim', array(
@@ -746,10 +799,19 @@ if ( ! function_exists( 'apf_get_submission_payload' ) ) {
         ) ) );
         $banco = $banco_parts ? implode( ' / ', $banco_parts ) : '';
 
-        return array(
+        $provider_payload = array(
+            'Tipo do prestador'       => ( 'pj' === $tipo ) ? 'Pessoa Jurídica' : 'Pessoa Física',
+            'Empresa (PJ)'            => ( 'pj' === $tipo ) ? ( $company ?: '—' ) : '',
+            'Nome do colaborador'     => $nome ?: '—',
+            'Documento (CPF/CNPJ)'    => $doc_id ?: '—',
+        );
+
+        return array_merge( $provider_payload, array(
             'Data'                => get_post_field( 'post_date', $post_id ),
             'Tipo'                => strtoupper( $tipo ?: '—' ),
             'Nome/Empresa'        => $nome ?: '—',
+            'Nome do colaborador' => $collab ?: ( $company ?: '—' ),
+            'Empresa (PJ)'        => ( 'pj' === $tipo ) ? ( $company ?: '—' ) : '',
             'Telefone'            => $meta( 'tel_prestador' ) ?: '—',
             'E-mail'              => $meta( 'email_prest' ) ?: '—',
             'Valor (R$)'          => $valor_fmt ?: '—',
@@ -761,7 +823,7 @@ if ( ! function_exists( 'apf_get_submission_payload' ) ) {
             'Carga Horária (CH)'  => $meta( 'carga_horaria' ) ?: '—',
             'Banco/Agência/Conta' => $banco ?: '—',
             '_admin_url'          => admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
-        );
+        ) );
     }
 }
 
@@ -947,11 +1009,12 @@ add_shortcode('apf_form', function () {
         $valor_bruto    = wp_unslash($_POST['valor'] ?? '');
         $valor_norm     = apf_normalize_currency_value( $valor_bruto );
 
-        $pessoa_tipo  = (isset($_POST['pessoa_tipo']) && $_POST['pessoa_tipo']==='pf') ? 'pf' : 'pj';
-        $nome_empresa = $clean( wp_unslash($_POST['nome_empresa'] ?? '') );
-        $cnpj         = $only_num( wp_unslash($_POST['cnpj'] ?? '') );
-        $nome_prof    = $clean( wp_unslash($_POST['nome_prof'] ?? '') );
-        $cpf          = $only_num( wp_unslash($_POST['cpf'] ?? '') );
+        $pessoa_tipo       = (isset($_POST['pessoa_tipo']) && $_POST['pessoa_tipo']==='pf') ? 'pf' : 'pj';
+        $nome_empresa      = $clean( wp_unslash($_POST['nome_empresa'] ?? '') );
+        $nome_colaborador  = $clean( wp_unslash($_POST['nome_colaborador'] ?? '') );
+        $cnpj              = $only_num( wp_unslash($_POST['cnpj'] ?? '') );
+        $nome_prof         = $clean( wp_unslash($_POST['nome_prof'] ?? '') );
+        $cpf               = $only_num( wp_unslash($_POST['cpf'] ?? '') );
 
         // Passo 2
         $prest_contas  = $clean( wp_unslash($_POST['prest_contas'] ?? '') );
@@ -977,7 +1040,7 @@ add_shortcode('apf_form', function () {
         // ====== SEMPRE CRIA NOVO POST ======
         $user_id   = get_current_user_id();
         $titulo    = 'Solicitação - ' . ( $pessoa_tipo==='pj'
-                        ? ( $nome_empresa ?: 'PJ' )
+                        ? ( $nome_colaborador ?: $nome_empresa ?: 'PJ' )
                         : ( $nome_prof    ?: 'PF' )
                      ) . ' - ' . current_time('Y-m-d H:i');
 
@@ -1003,6 +1066,7 @@ add_shortcode('apf_form', function () {
                 'valor'          => $valor_norm,
                 'pessoa_tipo'    => $pessoa_tipo,
                 'nome_empresa'   => $nome_empresa,
+                'nome_colaborador'=> $nome_colaborador,
                 'cnpj'           => $cnpj,
                 'nome_prof'      => $nome_prof,
                 'cpf'            => $cpf,
@@ -1107,6 +1171,9 @@ add_shortcode('apf_form', function () {
           <div class="apf-grid" id="apfPJ">
             <label>Nome da Empresa
               <input type="text" name="nome_empresa">
+            </label>
+            <label>Nome do colaborador
+              <input type="text" name="nome_colaborador">
             </label>
             <label>CNPJ
               <input type="text" name="cnpj" placeholder="00.000.000/0000-00">
@@ -1247,6 +1314,7 @@ add_shortcode('apf_form', function () {
         form.querySelector('input[name="nome_prof"]').required = pf;
         form.querySelector('input[name="cpf"]').required = pf;
         form.querySelector('input[name="nome_empresa"]').required = !pf;
+        form.querySelector('input[name="nome_colaborador"]').required = !pf;
         form.querySelector('input[name="cnpj"]').required = !pf;
       }
       radios.forEach(r => r.addEventListener('change', togglePessoa));

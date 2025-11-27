@@ -849,6 +849,14 @@ add_shortcode('apf_inbox', function () {
                     $meta_get = function( $meta_key ) use ( $post_id ) {
                         return get_post_meta( $post_id, 'apf_' . $meta_key, true );
                     };
+                    $clean_payload = array();
+                    foreach ( $payload as $payload_key => $payload_value ) {
+                        if ( '_admin_url' === $payload_key ) {
+                            $clean_payload['_admin_url'] = esc_url_raw( $payload_value );
+                            continue;
+                        }
+                        $clean_payload[ $payload_key ] = sanitize_text_field( (string) $payload_value );
+                    }
                     $raw_director = $meta_get( 'nome_diretor' );
                     $director_display = $raw_director ? sanitize_text_field( $raw_director ) : ( $clean_payload['Coordenador'] ?? '' );
                     $director_display = sanitize_text_field( (string) $director_display );
@@ -868,23 +876,17 @@ add_shortcode('apf_inbox', function () {
                     if ( '' !== $value_display && stripos( $value_display, 'R$' ) === false ) {
                         $value_display = 'R$ ' . $value_display;
                     }
-                    $person_type = strtolower( (string) $meta_get( 'pessoa_tipo' ) );
-                    $is_company  = ( 'pj' === $person_type );
-                    $person_label = $is_company ? 'Pessoa Jurídica' : 'Pessoa Física';
-                    $person_name  = $is_company
-                        ? sanitize_text_field( (string) $meta_get( 'nome_empresa' ) ?: ( $clean_payload['Nome/Empresa'] ?? '' ) )
-                        : sanitize_text_field( (string) $meta_get( 'nome_prof' ) ?: ( $clean_payload['Nome/Empresa'] ?? '' ) );
-                    $person_doc   = $is_company
-                        ? sanitize_text_field( (string) $meta_get( 'cnpj' ) )
-                        : sanitize_text_field( (string) $meta_get( 'cpf' ) );
-                    $person_summary = $person_name;
-                    if ( '' !== $person_doc ) {
-                        $person_summary = $person_summary ? $person_summary . ' — ' . $person_doc : $person_doc;
-                    }
-                    $person_line = $person_label;
-                    if ( '' !== $person_summary ) {
-                        $person_line .= ': ' . $person_summary;
-                    }
+                    $person_type   = strtolower( (string) $meta_get( 'pessoa_tipo' ) );
+                    $is_company    = ( 'pj' === $person_type );
+                    $person_label  = $is_company ? 'Pessoa Jurídica' : 'Pessoa Física';
+                    $company_name  = sanitize_text_field( (string) $meta_get( 'nome_empresa' ) ?: ( $clean_payload['Nome da Empresa'] ?? ( $clean_payload['Empresa (PJ)'] ?? '' ) ) );
+                    $collab_name   = $is_company
+                        ? sanitize_text_field( (string) $meta_get( 'nome_colaborador' ) ?: ( $clean_payload['Nome do colaborador'] ?? $clean_payload['Nome do Prestador'] ?? $clean_payload['Nome/Empresa'] ?? '' ) )
+                        : sanitize_text_field( (string) $meta_get( 'nome_prof' ) ?: ( $clean_payload['Nome do Prestador'] ?? $clean_payload['Nome/Empresa'] ?? '' ) );
+                    $person_name   = $is_company ? ( $collab_name ?: $company_name ) : $collab_name;
+                    $person_doc    = $is_company
+                        ? sanitize_text_field( (string) ( $meta_get( 'cnpj' ) ?: ( $clean_payload['Documento (CPF/CNPJ)'] ?? $clean_payload['CNPJ'] ?? '' ) ) )
+                        : sanitize_text_field( (string) ( $meta_get( 'cpf' ) ?: ( $clean_payload['Documento (CPF/CNPJ)'] ?? $clean_payload['CPF'] ?? '' ) ) );
 
                     $prest_contas = sanitize_text_field( (string) $meta_get( 'prest_contas' ) );
                     $service_date = sanitize_text_field( (string) $meta_get( 'data_prest' ) ?: ( $clean_payload['Data do Serviço'] ?? '' ) );
@@ -896,13 +898,16 @@ add_shortcode('apf_inbox', function () {
                     $bank_account = sanitize_text_field( (string) $meta_get( 'conta' ) );
 
                     $payment_snapshot = array(
+                        'Tipo do prestador'               => $person_label,
+                        'Empresa (PJ)'                    => $is_company ? ( $company_name ?: '—' ) : '',
+                        'Nome do colaborador'             => $person_name ?: '—',
+                        'Documento (CPF/CNPJ)'            => $person_doc ?: '—',
                         'Nome Completo Diretor Executivo' => $director_display ?: '—',
                         'Número de Controle Secretaria'   => $control_number ?: '—',
                         'Telefone do Prestador'           => $provider_phone ?: '—',
                         'E-mail do Prestador'             => $provider_email ?: '—',
                         'Número do Documento Fiscal'      => $doc_fiscal ?: '—',
                         'Valor (R$)'                      => $value_display ?: ( $clean_payload['Valor (R$)'] ?? '—' ),
-                        'Tipo do prestador'               => $person_line ?: $person_label,
                     );
                     $service_snapshot = array(
                         'Prestação de contas'             => $prest_contas ?: '—',
@@ -917,15 +922,6 @@ add_shortcode('apf_inbox', function () {
                         'Conta Corrente' => $bank_account ?: '—',
                     );
 
-                    $clean_payload = array();
-                    foreach ( $payload as $payload_key => $payload_value ) {
-                        if ( '_admin_url' === $payload_key ) {
-                            $clean_payload['_admin_url'] = esc_url_raw( $payload_value );
-                            continue;
-                        }
-                        $clean_payload[ $payload_key ] = sanitize_text_field( (string) $payload_value );
-                    }
-
                     $records[] = array(
                         'id'                   => uniqid( 'req_' ),
                         'batch_id'             => $batch_id,
@@ -938,7 +934,8 @@ add_shortcode('apf_inbox', function () {
                         'submission_id'        => $post_id,
                         'submission_admin_url' => isset( $clean_payload['_admin_url'] ) ? $clean_payload['_admin_url'] : '',
                         'provider_type'        => $clean_payload['Tipo'] ?? '',
-                        'provider_name'        => $clean_payload['Nome/Empresa'] ?? '',
+                        'provider_name'        => $clean_payload['Nome do colaborador'] ?? ( $clean_payload['Nome/Empresa'] ?? '' ),
+                        'provider_company'     => $clean_payload['Empresa (PJ)'] ?? '',
                         'provider_email'       => $clean_payload['E-mail'] ?? '',
                         'provider_phone'       => $clean_payload['Telefone'] ?? '',
                         'provider_value'       => $clean_payload['Valor (R$)'] ?? '',
@@ -1135,8 +1132,15 @@ add_shortcode('apf_inbox', function () {
                 $group_key = 'post_' . $id;
             }
 
-            $tipo = $m($id,'pessoa_tipo'); // pf/pj
-            $nome = ($tipo==='pj') ? $m($id,'nome_empresa') : $m($id,'nome_prof');
+            $tipo    = $m($id,'pessoa_tipo'); // pf/pj
+            $tipo_norm = strtolower( (string) $tipo );
+            $empresa = $m($id,'nome_empresa');
+            $collab  = ($tipo_norm==='pj')
+                ? ( $m($id,'nome_colaborador') ?: $m($id,'nome_prof') )
+                : $m($id,'nome_prof');
+            $nome = $collab ?: $empresa;
+            $doc_id = ( 'pj' === $tipo_norm ) ? $m( $id, 'cnpj' ) : $m( $id, 'cpf' );
+            $doc_id = $doc_id ? sanitize_text_field( (string) $doc_id ) : '';
             $tel  = $m($id,'tel_prestador');
             $mail = $m($id,'email_prest');
 
@@ -1167,10 +1171,16 @@ add_shortcode('apf_inbox', function () {
             } elseif ( '' === $director_label ) {
                 $director_label = $curso ?: '';
             }
-            $payload = array(
+            $provider_payload = array(
+                'Tipo do prestador'       => ( 'pj' === $tipo_norm ) ? 'Pessoa Jurídica' : 'Pessoa Física',
+                'Documento (CPF/CNPJ)'    => $doc_id ?: '—',
+            );
+            $payload = array_merge( $provider_payload, array(
               'Data'                   => get_the_date('Y-m-d H:i'),
               'Tipo'                   => strtoupper($tipo ?: '—'),
               'Nome/Empresa'           => $nome ?: '—',
+              'Nome do colaborador'    => $collab ?: ($empresa ?: '—'),
+              'Empresa (PJ)'           => ($tipo_norm==='pj') ? ($empresa ?: '—') : '',
               'Telefone'               => $tel ?: '—',
               'E-mail'                 => $mail ?: '—',
               'Valor (R$)'             => $valor_fmt ?: '—',
@@ -1182,7 +1192,7 @@ add_shortcode('apf_inbox', function () {
               'Carga Horária (CH)'     => $ch ?: '—',
               'Banco/Agência/Conta'    => $banco ?: '—',
               '_admin_url'             => $admin_url,
-            );
+            ) );
             $concat = trim( implode(' ', array_values($payload) ) );
 
             if ( ! isset( $group_map[ $group_key ] ) ) {
@@ -1203,6 +1213,8 @@ add_shortcode('apf_inbox', function () {
                 'author_id'      => $author_id,
                 'email'          => $mail,
                 'name'           => $nome ?: ( $mail ?: '' ),
+                'company'        => $empresa ?: '',
+                'collab'         => $collab ?: '',
             );
             $group_map[ $group_key ]['search_parts'][] = $concat;
         endwhile;
@@ -1237,6 +1249,8 @@ add_shortcode('apf_inbox', function () {
                 'author_id'  => isset( $entry['author_id'] ) ? (int) $entry['author_id'] : 0,
                 'email'      => isset( $entry['email'] ) ? sanitize_email( $entry['email'] ) : '',
                 'name'       => isset( $entry['name'] ) ? sanitize_text_field( $entry['name'] ) : '',
+                'company'    => isset( $entry['company'] ) ? sanitize_text_field( $entry['company'] ) : '',
+                'collab'     => isset( $entry['collab'] ) ? sanitize_text_field( $entry['collab'] ) : '',
             );
         }
         $group_rows[] = array(
@@ -1250,6 +1264,8 @@ add_shortcode('apf_inbox', function () {
             'author_id'     => isset( $latest['author_id'] ) ? (int) $latest['author_id'] : 0,
             'email'         => isset( $latest['email'] ) ? sanitize_email( $latest['email'] ) : '',
             'name'          => isset( $latest['name'] ) ? sanitize_text_field( $latest['name'] ) : '',
+            'company'       => isset( $latest['company'] ) ? sanitize_text_field( $latest['company'] ) : '',
+            'collab'        => isset( $latest['collab'] ) ? sanitize_text_field( $latest['collab'] ) : '',
             'group_key'     => $group_key,
         );
     }
@@ -1275,6 +1291,8 @@ add_shortcode('apf_inbox', function () {
         $author_id = isset( $bundle['author_id'] ) ? (int) $bundle['author_id'] : 0;
         $email     = isset( $bundle['email'] ) ? sanitize_email( $bundle['email'] ) : '';
         $name      = isset( $bundle['name'] ) ? sanitize_text_field( $bundle['name'] ) : '';
+        $company   = isset( $bundle['company'] ) ? sanitize_text_field( $bundle['company'] ) : '';
+        $collab    = isset( $bundle['collab'] ) ? sanitize_text_field( $bundle['collab'] ) : '';
 
         $alias_email = '';
         if ( $author_id > 0 && function_exists( 'apf_get_user_channel_email' ) ) {
@@ -1298,7 +1316,9 @@ add_shortcode('apf_inbox', function () {
 
         if ( '' === $name ) {
             $payload = isset( $latest['payload'] ) ? $latest['payload'] : array();
-            if ( ! empty( $payload['Nome/Empresa'] ) && $payload['Nome/Empresa'] !== '—' ) {
+            if ( ! empty( $payload['Nome do colaborador'] ) && $payload['Nome do colaborador'] !== '—' ) {
+                $name = sanitize_text_field( $payload['Nome do colaborador'] );
+            } elseif ( ! empty( $payload['Nome/Empresa'] ) && $payload['Nome/Empresa'] !== '—' ) {
                 $name = sanitize_text_field( $payload['Nome/Empresa'] );
             } elseif ( ! empty( $payload['E-mail'] ) && $payload['E-mail'] !== '—' ) {
                 $name = sanitize_text_field( $payload['E-mail'] );
@@ -1797,19 +1817,24 @@ add_shortcode('apf_inbox', function () {
         } );
     }
 
+    $coord_return_months = array();
+    if ( ! empty( $coordinator_return_groups ) ) {
+        foreach ( $coordinator_return_groups as $group_bundle ) {
+            if ( empty( $group_bundle['submitted_at'] ) ) {
+                continue;
+            }
+            $month_key = date_i18n( 'Y-m', (int) $group_bundle['submitted_at'] );
+            $coord_return_months[ $month_key ] = date_i18n( 'm/Y', (int) $group_bundle['submitted_at'] );
+        }
+        if ( ! empty( $coord_return_months ) ) {
+            krsort( $coord_return_months );
+        }
+    }
+
     $visible_return_groups  = $coordinator_return_groups;
     $archived_return_groups = array();
     $archived_return_ids    = array();
-    $max_visible_return_cards = 3;
-    if ( count( $coordinator_return_groups ) > $max_visible_return_cards ) {
-        $visible_return_groups  = array_slice( $coordinator_return_groups, 0, $max_visible_return_cards );
-        $archived_return_groups = array_slice( $coordinator_return_groups, $max_visible_return_cards );
-        foreach ( $archived_return_groups as $archived_group ) {
-            if ( ! empty( $archived_group['id'] ) ) {
-                $archived_return_ids[] = sanitize_text_field( (string) $archived_group['id'] );
-            }
-        }
-    }
+    $max_visible_return_cards = count( $coordinator_return_groups );
 
     $coord_archive_icon_url = plugins_url( 'imgs/box-archive-branca.svg', dirname( __DIR__ ) . '/fomulario_pagamento_faepa.php' );
 
@@ -2180,12 +2205,18 @@ add_shortcode('apf_inbox', function () {
                 $director_label = $bundle['director_label'];
                 $count_badge  = (int) $bundle['count'];
                 $search_blob  = $bundle['search'];
-                $nome_display = $payload['Nome/Empresa'];
+                $nome_display    = ( ! empty( $payload['Nome do colaborador'] ) && $payload['Nome do colaborador'] !== '—' )
+                    ? $payload['Nome do colaborador']
+                    : $payload['Nome/Empresa'];
+                $empresa_display = isset( $payload['Empresa (PJ)'] ) ? trim( (string) $payload['Empresa (PJ)'] ) : '';
           ?>
             <tr data-search="<?php echo esc_attr( $search_blob ); ?>" data-json="<?php echo $data_json; ?>" data-history="<?php echo $history_json; ?>" data-director-key="<?php echo esc_attr( $director_key ); ?>" data-director-label="<?php echo esc_attr( $director_label ); ?>" data-total="<?php echo esc_attr( $count_badge ); ?>" data-group-key="<?php echo esc_attr( $bundle['group_key'] ); ?>" data-latest-id="<?php echo esc_attr( $bundle['latest']['id'] ?? 0 ); ?>">
               <td class="apf-uppercase"><?php echo esc_html( $payload['Tipo'] ); ?></td>
               <td class="apf-break"<?php if ( $count_badge > 1 ) echo ' data-envios="'.esc_attr( $count_badge . ' envios' ).'"'; ?>>
-                <?php echo esc_html( $nome_display ); ?>
+                <div class="apf-table__title"><?php echo esc_html( $nome_display ); ?></div>
+                <?php if ( 'PJ' === strtoupper( (string) $payload['Tipo'] ) && $empresa_display && $empresa_display !== $nome_display ) : ?>
+                  <div class="apf-table__subtitle"><?php echo esc_html( $empresa_display ); ?></div>
+                <?php endif; ?>
               </td>
               <td class="apf-break"><?php echo esc_html( $payload['Telefone'] ); ?></td>
               <td class="apf-break"><?php echo esc_html( $payload['E-mail'] ); ?></td>
@@ -2258,6 +2289,22 @@ add_shortcode('apf_inbox', function () {
           <?php endif; ?>
         </div>
         <?php if ( ! empty( $visible_return_groups ) ) : ?>
+          <div class="apf-coord-return__controls">
+            <label class="apf-coord-return__filter">
+              <span>Filtrar por mês</span>
+              <select id="apfCoordReturnMonth">
+                <option value=""><?php echo esc_html( 'Todos os meses' ); ?></option>
+                <?php foreach ( $coord_return_months as $month_key => $month_label ) : ?>
+                  <option value="<?php echo esc_attr( $month_key ); ?>"><?php echo esc_html( $month_label ); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+            <div class="apf-coord-return__pager" aria-label="Paginação dos retornos">
+              <button type="button" class="apf-btn apf-btn--ghost apf-coord-return__pager-btn" id="apfCoordReturnPrev" aria-label="Página anterior">&larr;</button>
+              <span id="apfCoordReturnLabel">1/1</span>
+              <button type="button" class="apf-btn apf-btn--ghost apf-coord-return__pager-btn" id="apfCoordReturnNext" aria-label="Próxima página">&rarr;</button>
+            </div>
+          </div>
           <div class="apf-coord-return__grid">
             <?php foreach ( $visible_return_groups as $return_group ) :
                 $total    = isset( $return_group['counts']['total'] ) ? (int) $return_group['counts']['total'] : 0;
@@ -2266,8 +2313,12 @@ add_shortcode('apf_inbox', function () {
                 $pending  = isset( $return_group['counts']['pending'] ) ? (int) $return_group['counts']['pending'] : 0;
                 $submitted= isset( $return_group['submitted_label'] ) ? $return_group['submitted_label'] : '';
                 $course   = isset( $return_group['coordinator']['course'] ) ? $return_group['coordinator']['course'] : '';
+                $month_key = '';
+                if ( ! empty( $return_group['submitted_at'] ) ) {
+                    $month_key = date_i18n( 'Y-m', (int) $return_group['submitted_at'] );
+                }
             ?>
-              <article class="apf-coord-return__card" data-coord-group="<?php echo esc_attr( $return_group['id'] ); ?>">
+              <article class="apf-coord-return__card" data-coord-group="<?php echo esc_attr( $return_group['id'] ); ?>" data-coord-month="<?php echo esc_attr( $month_key ); ?>" data-coord-submitted="<?php echo esc_attr( $return_group['submitted_at'] ?? '' ); ?>">
                 <header>
                   <div>
                     <h3><?php echo esc_html( $return_group['title'] ); ?></h3>
@@ -2283,28 +2334,15 @@ add_shortcode('apf_inbox', function () {
                   </div>
                   <span class="apf-coord-return__total"><?php echo esc_html( $total . ' colaborador' . ( $total === 1 ? '' : 'es' ) ); ?></span>
                 </header>
-                <ul class="apf-coord-return__stats">
-                  <li>
-                    <strong><?php echo esc_html( $approved ); ?></strong>
-                    <span>Aprovados</span>
-                  </li>
-                  <li>
-                    <strong><?php echo esc_html( $rejected ); ?></strong>
-                    <span>Recusados</span>
-                  </li>
-                  <li>
-                    <strong><?php echo esc_html( $pending ); ?></strong>
-                    <span>Pendentes</span>
-                  </li>
-                </ul>
                 <button type="button"
                         class="apf-btn apf-btn--ghost apf-coord-return__details"
                         data-coord-group="<?php echo esc_attr( $return_group['id'] ); ?>">
                   Ver detalhes
                 </button>
               </article>
-            <?php endforeach; ?>
+          <?php endforeach; ?>
           </div>
+          <p class="apf-coord-return__empty" id="apfCoordReturnEmpty" hidden> Nenhum retorno encontrado para o filtro selecionado.</p>
         <?php else : ?>
           <p class="apf-coord-return__empty">Nenhum retorno enviado pelos coordenadores até o momento.</p>
         <?php endif; ?>
@@ -2317,6 +2355,16 @@ add_shortcode('apf_inbox', function () {
             <div>
               <h3 id="apfCoordModalTitle">Detalhes do retorno</h3>
               <p id="apfCoordModalSubtitle"></p>
+              <div id="apfCoordModalCounts" class="apf-coord-return-modal__counts">
+                <span class="apf-coord-return-modal__count-box apf-coord-return-modal__count-box--approved" data-count-approved>
+                  <strong>0</strong>
+                  <span>Aprovados</span>
+                </span>
+                <span class="apf-coord-return-modal__count-box apf-coord-return-modal__count-box--rejected" data-count-rejected>
+                  <strong>0</strong>
+                  <span>Recusados</span>
+                </span>
+              </div>
             </div>
             <button type="button" class="apf-coord-return-modal__close" data-coord-return-close aria-label="Fechar">&times;</button>
           </div>
@@ -3414,6 +3462,8 @@ add_shortcode('apf_inbox', function () {
       .apf-table tbody td{ padding:12px 14px; border-bottom:1px solid var(--apf-border); vertical-align:top; }
       .apf-table tbody tr:nth-child(odd){ background:var(--apf-row); }
       .apf-table tbody tr:hover{ background:var(--apf-row-hover); }
+      .apf-table__title{ font-weight:700; color:var(--apf-text); }
+      .apf-table__subtitle{ display:block; font-size:12px; color:var(--apf-muted); margin-top:2px; }
 
       .apf-col--num{ text-align:right; font-variant-numeric:tabular-nums; }
       .apf-nowrap{ white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:180px; }
@@ -3467,8 +3517,21 @@ add_shortcode('apf_inbox', function () {
       }
       .apf-modal__counter{ font-weight:600; min-width:120px; text-align:center; }
       .apf-details{ display:grid; grid-template-columns: 220px 1fr; gap:10px 16px; }
-      .apf-details dt{ color:var(--apf-muted); }
-      .apf-details dd{ margin:0; }
+      .apf-details dt{
+        color:var(--apf-muted);
+        padding-bottom:6px;
+        border-bottom:1px solid var(--apf-border);
+      }
+      .apf-details dd{
+        margin:0;
+        padding-bottom:6px;
+        border-bottom:1px solid var(--apf-border);
+      }
+      .apf-details dt:last-of-type,
+      .apf-details dd:last-of-type{
+        border-bottom:none;
+        padding-bottom:0;
+      }
 
       /* ===== Retorno dos coordenadores */
       .apf-coord-return{
@@ -3507,15 +3570,56 @@ add_shortcode('apf_inbox', function () {
         background:var(--apf-soft);
         white-space:nowrap;
       }
+      .apf-coord-return__controls{
+        display:flex;
+        align-items:flex-end;
+        justify-content:space-between;
+        gap:12px;
+        flex-wrap:wrap;
+        margin-bottom:12px;
+      }
+      .apf-coord-return__filter{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+        min-width:210px;
+        font-size:12px;
+        color:var(--apf-muted);
+      }
+      .apf-coord-return__filter select{
+        height:38px;
+        border:1px solid var(--apf-border);
+        border-radius:10px;
+        padding:0 12px;
+        background:var(--apf-bg);
+        color:var(--apf-text);
+      }
+      .apf-coord-return__filter select:focus{
+        border-color:var(--apf-primary);
+        box-shadow:var(--apf-focus);
+        outline:none;
+      }
+      .apf-coord-return__pager{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        font-size:13px;
+        color:var(--apf-muted);
+      }
+      .apf-coord-return__pager-btn{
+        min-width:36px;
+        padding:6px 10px;
+      }
+      .apf-coord-return__hidden{ display:none !important; }
       .apf-coord-return__grid{
         display:grid;
-        grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+        grid-template-columns:1fr;
         gap:16px;
       }
       .apf-coord-return__card{
         border:1px solid var(--apf-border);
         border-radius:var(--apf-radius-sm);
-        padding:16px;
+        padding:12px;
         background:var(--apf-soft);
         display:flex;
         flex-direction:column;
@@ -3553,24 +3657,15 @@ add_shortcode('apf_inbox', function () {
         margin:0;
         padding:0;
         display:flex;
-        gap:16px;
+        gap:12px;
       }
       .apf-coord-return__stats li{
         flex:1;
         border:1px solid var(--apf-border);
         border-radius:10px;
-        padding:10px;
+        padding:8px;
         background:var(--apf-bg);
         text-align:center;
-      }
-      .apf-coord-return__stats strong{
-        display:block;
-        font-size:20px;
-        line-height:1;
-      }
-      .apf-coord-return__stats span{
-        font-size:12px;
-        color:var(--apf-muted);
       }
       .apf-coord-return__details{
         margin-top:auto;
@@ -3737,6 +3832,45 @@ add_shortcode('apf_inbox', function () {
         margin:0;
         font-size:13px;
         color:#cbd5f5;
+      }
+      .apf-coord-return-modal__counts{
+        margin:8px 0 10px;
+        display:flex;
+        align-items:stretch;
+        gap:10px;
+      }
+      .apf-coord-return-modal__count-box{
+        flex:1;
+        font-size:13px;
+        color:#e2e8f0;
+        font-weight:700;
+        text-align:center;
+        padding:10px 12px;
+        border:1px solid rgba(226,232,240,.25);
+        border-radius:12px;
+        background:rgba(226,232,240,.12);
+        display:block;
+      }
+      .apf-coord-return-modal__count-box strong{
+        display:block;
+        font-size:20px;
+        margin-bottom:4px;
+      }
+      .apf-coord-return-modal__count-box span{
+        display:block;
+        text-transform:uppercase;
+        letter-spacing:.04em;
+        font-size:11px;
+      }
+      .apf-coord-return-modal__count-box--approved{
+        background:rgba(16,185,129,.12);
+        border-color:rgba(52,211,153,.5);
+        color:#34d399;
+      }
+      .apf-coord-return-modal__count-box--rejected{
+        background:rgba(248,113,113,.12);
+        border-color:rgba(248,113,113,.5);
+        color:#f87171;
       }
       .apf-coord-archive-modal{
         position:fixed;
@@ -5484,7 +5618,8 @@ add_shortcode('apf_inbox', function () {
         Object.keys(data).forEach(k=>{
           if(k[0] === '_') return;
           const dt = document.createElement('dt'); dt.textContent = k;
-          const dd = document.createElement('dd'); dd.textContent = (data[k] ?? '—');
+          const value = (data[k] === undefined || data[k] === null || data[k] === '') ? '—' : data[k];
+          const dd = document.createElement('dd'); dd.textContent = value;
           details.appendChild(dt); details.appendChild(dd);
         });
         if(data._admin_url){
@@ -5586,9 +5721,18 @@ add_shortcode('apf_inbox', function () {
       const coordReturnBody = $('#apfCoordModalBody');
       const coordReturnTitle = $('#apfCoordModalTitle');
       const coordReturnSubtitle = $('#apfCoordModalSubtitle');
+      const coordReturnCounts = $('#apfCoordModalCounts');
+      const coordReturnCountApproved = coordReturnCounts ? coordReturnCounts.querySelector('[data-count-approved]') : null;
+      const coordReturnCountRejected = coordReturnCounts ? coordReturnCounts.querySelector('[data-count-rejected]') : null;
       const coordReturnCloseTriggers = coordReturnModal ? coordReturnModal.querySelectorAll('[data-coord-return-close]') : [];
       const coordReturnSection = document.getElementById('apfCoordReturn');
-      const coordReturnCards = coordReturnSection ? $$('.apf-coord-return__card[data-coord-index]', coordReturnSection) : [];
+      const coordReturnGrid = coordReturnSection ? coordReturnSection.querySelector('.apf-coord-return__grid') : null;
+      let coordReturnCards = coordReturnGrid ? Array.from(coordReturnGrid.querySelectorAll('.apf-coord-return__card')) : [];
+      const coordReturnMonthSelect = document.getElementById('apfCoordReturnMonth');
+      const coordReturnPagerPrev = document.getElementById('apfCoordReturnPrev');
+      const coordReturnPagerNext = document.getElementById('apfCoordReturnNext');
+      const coordReturnPagerLabel = document.getElementById('apfCoordReturnLabel');
+      const coordReturnEmptyState = document.getElementById('apfCoordReturnEmpty');
       const coordArchiveToggle = coordReturnSection ? coordReturnSection.querySelector('.apf-coord-return__archive-icon-btn') : null;
       const coordArchiveModal = $('#apfCoordArchiveModal');
       const coordArchiveDialog = coordArchiveModal ? coordArchiveModal.querySelector('.apf-coord-archive-modal__dialog') : null;
@@ -5623,6 +5767,66 @@ add_shortcode('apf_inbox', function () {
           }
         }
       }
+
+      const COORD_RETURN_PAGE_SIZE = 5;
+      let coordReturnPage = 0;
+      let coordReturnFiltered = coordReturnCards.slice();
+
+      function renderCoordReturnGrid(resetPage = false){
+        if(!coordReturnGrid){ return; }
+        if(resetPage){ coordReturnPage = 0; }
+        const monthFilter = coordReturnMonthSelect ? coordReturnMonthSelect.value : '';
+        coordReturnFiltered = [];
+        coordReturnCards.forEach(card=>{
+          const cardMonth = card.getAttribute('data-coord-month') || '';
+          const matches = !monthFilter || cardMonth === monthFilter;
+          if(matches){
+            coordReturnFiltered.push(card);
+          }
+        });
+        const total = coordReturnFiltered.length;
+        const totalPages = total > 0 ? Math.ceil(total / COORD_RETURN_PAGE_SIZE) : 0;
+        if(coordReturnPage >= totalPages){ coordReturnPage = Math.max(0, totalPages - 1); }
+        coordReturnCards.forEach(card=>card.classList.add('apf-coord-return__hidden'));
+        coordReturnFiltered.forEach((card, idx)=>{
+          const hide = totalPages === 0 || idx < (coordReturnPage * COORD_RETURN_PAGE_SIZE) || idx >= ((coordReturnPage + 1) * COORD_RETURN_PAGE_SIZE);
+          card.classList.toggle('apf-coord-return__hidden', hide);
+        });
+        if(coordReturnEmptyState){
+          coordReturnEmptyState.hidden = total !== 0;
+        }
+        if(coordReturnPagerLabel){
+          coordReturnPagerLabel.textContent = totalPages ? ((coordReturnPage + 1) + '/' + totalPages) : '0/0';
+        }
+        if(coordReturnPagerPrev){
+          coordReturnPagerPrev.disabled = totalPages === 0 || coordReturnPage === 0;
+        }
+        if(coordReturnPagerNext){
+          coordReturnPagerNext.disabled = totalPages === 0 || coordReturnPage >= (totalPages - 1);
+        }
+      }
+
+      if(coordReturnMonthSelect){
+        coordReturnMonthSelect.addEventListener('change', ()=>renderCoordReturnGrid(true));
+      }
+      if(coordReturnPagerPrev){
+        coordReturnPagerPrev.addEventListener('click', ()=>{
+          if(coordReturnPage > 0){
+            coordReturnPage -= 1;
+            renderCoordReturnGrid(false);
+          }
+        });
+      }
+      if(coordReturnPagerNext){
+        coordReturnPagerNext.addEventListener('click', ()=>{
+          const totalPages = coordReturnFiltered.length ? Math.ceil(coordReturnFiltered.length / COORD_RETURN_PAGE_SIZE) : 0;
+          if(coordReturnPage < (totalPages - 1)){
+            coordReturnPage += 1;
+            renderCoordReturnGrid(false);
+          }
+        });
+      }
+      renderCoordReturnGrid(true);
 
       function buildCoordSection(title, rows){
         if(!rows || typeof rows !== 'object'){ return null; }
@@ -5721,6 +5925,18 @@ add_shortcode('apf_inbox', function () {
             parts.push('Enviado em ' + group.submitted_label);
           }
           coordReturnSubtitle.textContent = parts.join(' • ');
+        }
+        if(coordReturnCounts){
+          const approved = group.counts && typeof group.counts.approved === 'number' ? group.counts.approved : 0;
+          const rejected = group.counts && typeof group.counts.rejected === 'number' ? group.counts.rejected : 0;
+          if(coordReturnCountApproved){
+            const num = coordReturnCountApproved.querySelector('strong');
+            if(num){ num.textContent = approved; }
+          }
+          if(coordReturnCountRejected){
+            const num = coordReturnCountRejected.querySelector('strong');
+            if(num){ num.textContent = rejected; }
+          }
         }
         updateFaepaBox(group);
         if(group.message){

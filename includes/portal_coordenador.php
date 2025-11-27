@@ -783,10 +783,17 @@ add_shortcode( 'apf_portal_coordenador', function () {
     }
     $visible_request_groups   = $coordinator_request_groups;
     $archived_request_groups  = array();
-    $max_visible_request_cards = 3;
-    if ( count( $coordinator_request_groups ) > $max_visible_request_cards ) {
-        $visible_request_groups  = array_slice( $coordinator_request_groups, 0, $max_visible_request_cards );
-        $archived_request_groups = array_slice( $coordinator_request_groups, $max_visible_request_cards );
+    $max_visible_request_cards = count( $coordinator_request_groups );
+    $coord_request_months = array();
+    foreach ( $coordinator_request_groups as $bundle ) {
+        if ( empty( $bundle['created_at'] ) ) {
+            continue;
+        }
+        $month_key = date_i18n( 'Y-m', (int) $bundle['created_at'] );
+        $coord_request_months[ $month_key ] = date_i18n( 'm/Y', (int) $bundle['created_at'] );
+    }
+    if ( ! empty( $coord_request_months ) ) {
+        krsort( $coord_request_months );
     }
     $has_archived_requests = ! empty( $archived_request_groups );
     $archive_icon_url = plugins_url( 'imgs/box-archive-svgrepo-com.svg', dirname( __DIR__ ) . '/fomulario_pagamento_faepa.php' );
@@ -933,11 +940,29 @@ add_shortcode( 'apf_portal_coordenador', function () {
             <?php endif; ?>
 
             <?php if ( ! empty( $visible_request_groups ) ) : ?>
+              <div class="apf-coord-requests__controls">
+                <label class="apf-coord-requests__filter">
+                  <span>Filtrar por mês</span>
+                  <select id="apfCoordReqMonth">
+                    <option value=""><?php echo esc_html( 'Todos os meses' ); ?></option>
+                    <?php foreach ( $coord_request_months as $month_key => $month_label ) : ?>
+                      <option value="<?php echo esc_attr( $month_key ); ?>"><?php echo esc_html( $month_label ); ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </label>
+                <div class="apf-coord-requests__pager" aria-label="Paginação das solicitações">
+                  <button type="button" class="apf-coord-btn apf-coord-btn--ghost apf-coord-requests__pager-btn" id="apfCoordReqPrev" aria-label="Página anterior">&larr;</button>
+                  <span id="apfCoordReqLabel">1/1</span>
+                  <button type="button" class="apf-coord-btn apf-coord-btn--ghost apf-coord-requests__pager-btn" id="apfCoordReqNext" aria-label="Próxima página">&rarr;</button>
+                </div>
+              </div>
               <div class="apf-coord-requests__cards">
                 <?php foreach ( $visible_request_groups as $group ) :
                     $group_id     = $group['id'];
                     $group_title  = $group['title'] ?: 'Solicitação do financeiro';
-                    $group_sent   = ! empty( $group['created_at'] ) ? date_i18n( 'd/m/Y H:i', (int) $group['created_at'] ) : '';
+                    $group_created= isset( $group['created_at'] ) ? (int) $group['created_at'] : 0;
+                    $group_sent   = $group_created ? date_i18n( 'd/m/Y H:i', $group_created ) : '';
+                    $group_month  = $group_created ? date_i18n( 'Y-m', $group_created ) : '';
                     $group_total  = count( $group['items'] );
                     $group_pending  = isset( $group['pending'] ) ? (int) $group['pending'] : 0;
                     $group_approved = isset( $group['approved'] ) ? (int) $group['approved'] : 0;
@@ -967,7 +992,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
                         $badge_state = 'progress';
                     }
                 ?>
-                  <article class="apf-coord-request-card" data-status="<?php echo esc_attr( $badge_state ); ?>" data-submitted="<?php echo $group_submitted ? '1' : '0'; ?>">
+                  <article class="apf-coord-request-card" data-status="<?php echo esc_attr( $badge_state ); ?>" data-submitted="<?php echo $group_submitted ? '1' : '0'; ?>" data-coord-month="<?php echo esc_attr( $group_month ); ?>">
                     <header class="apf-coord-request-card__header">
                       <div>
                         <strong><?php echo esc_html( $group_title ); ?></strong>
@@ -997,6 +1022,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
                   </article>
                 <?php endforeach; ?>
               </div>
+              <p class="apf-coord-requests__empty" id="apfCoordReqEmpty" hidden>Nenhuma solicitação encontrada.</p>
             <?php else : ?>
               <p class="apf-coord-requests__empty">Nenhuma solicitação disponível para este curso.</p>
             <?php endif; ?>
@@ -1365,18 +1391,18 @@ add_shortcode( 'apf_portal_coordenador', function () {
       }
       .apf-coord-requests__cards{
         display:grid;
-        grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
-        gap:14px;
+        grid-template-columns:1fr;
+        gap:12px;
       }
       .apf-coord-request-card{
         border:1px solid #d0d5dd;
         border-radius:16px;
         background:#fff;
-        padding:16px;
+        padding:14px;
         display:flex;
         flex-direction:column;
         gap:12px;
-        min-height:200px;
+        min-height:0;
       }
       .apf-coord-request-card[data-status="pending"]{
         border-color:#fde68a;
@@ -1444,6 +1470,63 @@ add_shortcode( 'apf_portal_coordenador', function () {
         color:#475467;
         margin-top:auto;
       }
+      .apf-coord-requests__controls{
+        display:flex;
+        justify-content:space-between;
+        align-items:flex-end;
+        gap:12px;
+        flex-wrap:wrap;
+        margin:0 0 10px;
+      }
+      .apf-coord-requests__filter{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+        min-width:200px;
+        font-size:12px;
+        color:#475467;
+        margin-right:auto;
+      }
+      .apf-coord-requests__filter select{
+        height:36px;
+        border:1px solid #d0d5dd;
+        border-radius:10px;
+        padding:0 10px;
+      }
+      .apf-coord-requests__filter select:focus{
+        border-color:#2563eb;
+        outline:none;
+        box-shadow:0 0 0 3px rgba(37,99,235,.18);
+      }
+      .apf-coord-requests__pager{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        font-size:13px;
+        color:#475467;
+      }
+      .apf-coord-requests__pager-btn{
+        padding:6px 10px;
+        min-width:36px;
+      }
+      .apf-coord-requests__hidden{ display:none !important; }
+      .apf-coord-requests__controls{
+        display:flex;
+        justify-content:flex-end;
+        margin:0 0 10px;
+      }
+      .apf-coord-requests__pager{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        font-size:13px;
+        color:#475467;
+      }
+      .apf-coord-requests__pager-btn{
+        padding:6px 10px;
+        min-width:36px;
+      }
+      .apf-coord-requests__hidden{ display:none !important; }
       .apf-coord-requests__empty{
         margin:0;
         font-size:13px;
@@ -1785,6 +1868,12 @@ add_shortcode( 'apf_portal_coordenador', function () {
         font-size:15px;
         color:#0f172a;
       }
+      .apf-coord-collab__company{
+        font-size:12px;
+        color:#475467;
+        display:block;
+        width:100%;
+      }
       .apf-coord-collab__value{
         font-size:13px;
         color:#0f172a;
@@ -1882,11 +1971,20 @@ add_shortcode( 'apf_portal_coordenador', function () {
         text-transform:uppercase;
         letter-spacing:.04em;
         color:#1e293b;
+        padding-bottom:6px;
+        border-bottom:1px solid #e2e8f0;
       }
       .apf-coord-collab__section dd{
         margin:0;
         font-size:13px;
         color:#0f172a;
+        padding-bottom:6px;
+        border-bottom:1px solid #e2e8f0;
+      }
+      .apf-coord-collab__section dl > dt:last-of-type,
+      .apf-coord-collab__section dl > dd:last-of-type{
+        border-bottom:none;
+        padding-bottom:0;
       }
       .apf-coord-collab__description{
         white-space:pre-line;
@@ -2477,6 +2575,13 @@ add_shortcode( 'apf_portal_coordenador', function () {
       const requestModalClose = requestModal ? $$('[data-req-close]', requestModal) : [];
       const requestCache = document.querySelector('.apf-coord-request-cache');
       const requestButtons = $$('[data-request-modal]');
+      const requestCardsContainer = document.querySelector('.apf-coord-requests__cards');
+      const requestMonthSelect = document.getElementById('apfCoordReqMonth');
+      let requestCards = requestCardsContainer ? Array.from(requestCardsContainer.querySelectorAll('.apf-coord-request-card')) : [];
+      const requestPagerPrev = document.getElementById('apfCoordReqPrev');
+      const requestPagerNext = document.getElementById('apfCoordReqNext');
+      const requestPagerLabel = document.getElementById('apfCoordReqLabel');
+      const requestEmptyState = document.getElementById('apfCoordReqEmpty');
       let requestModalLastFocus = null;
       let activeRequestDetail = null;
       const archiveToggle = document.getElementById('apfCoordArchiveToggle');
@@ -2509,6 +2614,66 @@ add_shortcode( 'apf_portal_coordenador', function () {
         const archiveOpen = archiveModal && archiveModal.getAttribute('aria-hidden') === 'false';
         document.body.style.overflow = (requestOpen || archiveOpen) ? 'hidden' : '';
       };
+
+      const REQUEST_PAGE_SIZE = 5;
+      let requestPage = 0;
+      const renderRequestPager = (reset = false) => {
+        if(!requestCardsContainer){ return; }
+        if(reset){ requestPage = 0; }
+        const monthFilter = requestMonthSelect ? requestMonthSelect.value : '';
+        const filtered = [];
+        requestCards.forEach(card=>{
+          const month = card.getAttribute('data-coord-month') || '';
+          if(!monthFilter || month === monthFilter){
+            filtered.push(card);
+          }else{
+            card.classList.add('apf-coord-requests__hidden');
+          }
+        });
+        const total = filtered.length;
+        const totalPages = total ? Math.ceil(total / REQUEST_PAGE_SIZE) : 0;
+        if(requestPage >= totalPages){ requestPage = Math.max(0, totalPages - 1); }
+        requestCards.forEach(card=>card.classList.add('apf-coord-requests__hidden'));
+        filtered.forEach((card, idx)=>{
+          const hide = totalPages === 0 || idx < (requestPage * REQUEST_PAGE_SIZE) || idx >= ((requestPage + 1) * REQUEST_PAGE_SIZE);
+          card.classList.toggle('apf-coord-requests__hidden', hide);
+        });
+        if(requestEmptyState){
+          requestEmptyState.hidden = total !== 0;
+        }
+        if(requestPagerLabel){
+          requestPagerLabel.textContent = totalPages ? ((requestPage + 1) + '/' + totalPages) : '0/0';
+        }
+        if(requestPagerPrev){
+          requestPagerPrev.disabled = totalPages === 0 || requestPage === 0;
+        }
+        if(requestPagerNext){
+          requestPagerNext.disabled = totalPages === 0 || requestPage >= (totalPages - 1);
+        }
+      };
+
+      if(requestMonthSelect){
+        requestMonthSelect.addEventListener('change', ()=>renderRequestPager(true));
+      }
+
+      if(requestPagerPrev){
+        requestPagerPrev.addEventListener('click', ()=>{
+          if(requestPage > 0){
+            requestPage -= 1;
+            renderRequestPager(false);
+          }
+        });
+      }
+      if(requestPagerNext){
+        requestPagerNext.addEventListener('click', ()=>{
+          const totalPages = requestCards.length ? Math.ceil(requestCards.length / REQUEST_PAGE_SIZE) : 0;
+          if(requestPage < (totalPages - 1)){
+            requestPage += 1;
+            renderRequestPager(false);
+          }
+        });
+      }
+      renderRequestPager(true);
 
       const closeRequestModal = () => {
         if(!requestModal){ return; }

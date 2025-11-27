@@ -309,6 +309,10 @@ $apf_portal_faepa_cb = function () {
       </div>
 
       <div class="apf-faepa-calendar" id="apfFaepaCalendar" data-events="<?php echo $calendar_attr; ?>">
+        <div class="apf-faepa-calendar__tabs" role="tablist">
+          <button type="button" class="apf-faepa-calendar__tab is-active" data-faepa-group="providers" aria-pressed="true">Colaboradores</button>
+          <button type="button" class="apf-faepa-calendar__tab" data-faepa-group="coordinators" aria-pressed="false">Coordenadores</button>
+        </div>
         <div class="apf-faepa-calendar__body"></div>
         <div class="apf-faepa-calendar__legend" aria-label="Legenda do calendário">
           <span><span class="apf-faepa-calendar__dot apf-faepa-calendar__dot--providers" aria-hidden="true"></span> Colaboradores</span>
@@ -336,39 +340,58 @@ $apf_portal_faepa_cb = function () {
         <?php if ( empty( $faepa_returns ) ) : ?>
           <p class="apf-faepa-return__empty">Nenhum retorno recebido do financeiro até o momento.</p>
         <?php else : ?>
-          <div class="apf-faepa-return__grid">
+          <div class="apf-faepa-return__table" role="table" aria-label="Retornos do financeiro">
+            <div class="apf-faepa-return__table-head" role="row">
+              <span class="apf-faepa-return__cell apf-faepa-return__cell--title" role="columnheader">Lote</span>
+              <span class="apf-faepa-return__cell" role="columnheader">Enviado</span>
+              <span class="apf-faepa-return__cell" role="columnheader">Coordenador</span>
+              <span class="apf-faepa-return__cell" role="columnheader">Curso</span>
+              <span class="apf-faepa-return__cell" role="columnheader">Colaboradores</span>
+              <span class="apf-faepa-return__cell apf-faepa-return__cell--actions" role="columnheader">Detalhes</span>
+            </div>
+
             <?php foreach ( $faepa_returns as $return ) :
                 $counts = $return['counts'];
                 $course = $return['coordinator']['course'] ?? '';
                 $coord  = $return['coordinator']['name'] ?? '';
                 $forwarded_label = $return['forwarded_label'];
             ?>
-              <article class="apf-faepa-return__card">
-                <header>
-                  <div>
-                    <h4><?php echo esc_html( $return['title'] ); ?></h4>
-                    <?php if ( $forwarded_label ) : ?>
-                      <small>Enviado pelo financeiro em <?php echo esc_html( $forwarded_label ); ?></small>
-                    <?php endif; ?>
-                    <?php if ( $course || $coord ) : ?>
-                      <p class="apf-faepa-return__meta">
-                        <?php if ( $coord ) : ?>
-                          Coordenador: <?php echo esc_html( $coord ); ?>
-                        <?php endif; ?>
-                        <?php if ( $course ) : ?>
-                          <?php if ( $coord ) : ?> • <?php endif; ?>
-                          Curso: <?php echo esc_html( $course ); ?>
-                        <?php endif; ?>
-                      </p>
-                    <?php endif; ?>
-                  </div>
-                  <div class="apf-faepa-return__chips">
+              <details class="apf-faepa-return__row" role="row">
+                <summary>
+                  <span class="apf-faepa-return__cell apf-faepa-return__cell--title">
+                    <strong><?php echo esc_html( $return['title'] ); ?></strong>
+                  </span>
+                  <span class="apf-faepa-return__cell"><?php echo esc_html( $forwarded_label ?: '—' ); ?></span>
+                  <span class="apf-faepa-return__cell"><?php echo esc_html( $coord ?: '—' ); ?></span>
+                  <span class="apf-faepa-return__cell"><?php echo esc_html( $course ?: '—' ); ?></span>
+                  <span class="apf-faepa-return__cell">
                     <span class="apf-faepa-chip apf-faepa-chip--info"><?php echo esc_html( $counts['total'] . ' colaborador(es)' ); ?></span>
-                  </div>
-                </header>
+                  </span>
+                  <span class="apf-faepa-return__cell apf-faepa-return__cell--caret" aria-hidden="true">
+                    <span class="apf-faepa-return__caret">&#9662;</span>
+                  </span>
+                </summary>
 
-                <details class="apf-faepa-return__details">
-                  <summary>Ver colaboradores (<?php echo esc_html( $counts['total'] ); ?>)</summary>
+                <div class="apf-faepa-return__row-details">
+                  <?php if ( $forwarded_label ) : ?>
+                    <p class="apf-faepa-return__meta"><strong>Enviado pelo financeiro:</strong> <?php echo esc_html( $forwarded_label ); ?></p>
+                  <?php endif; ?>
+                  <?php if ( $course || $coord ) : ?>
+                    <p class="apf-faepa-return__meta">
+                      <?php if ( $coord ) : ?>
+                        Coordenador: <?php echo esc_html( $coord ); ?>
+                      <?php endif; ?>
+                      <?php if ( $course ) : ?>
+                        <?php if ( $coord ) : ?> • <?php endif; ?>
+                        Curso: <?php echo esc_html( $course ); ?>
+                      <?php endif; ?>
+                    </p>
+                  <?php endif; ?>
+                  <?php if ( ! empty( $return['faepa_note'] ) ) : ?>
+                    <p class="apf-faepa-return__note"><?php echo esc_html( $return['faepa_note'] ); ?></p>
+                  <?php endif; ?>
+
+                  <h5 class="apf-faepa-return__section-title">Colaboradores (<?php echo esc_html( $counts['total'] ); ?>)</h5>
                   <div class="apf-faepa-return__list">
                     <?php foreach ( $return['items'] as $item ) :
                         if ( isset( $item['status'] ) && 'approved' !== $item['status'] ) {
@@ -377,12 +400,24 @@ $apf_portal_faepa_cb = function () {
                         $detail_payment = $item['details']['payment'] ?? array();
                         $detail_service = $item['details']['service'] ?? array();
                         $detail_payout  = $item['details']['payout'] ?? array();
+                        $company_label  = '';
+                        if ( isset( $detail_payment['Empresa (PJ)'] ) ) {
+                            $company_label = sanitize_text_field( (string) $detail_payment['Empresa (PJ)'] );
+                        } elseif ( isset( $detail_payment['Nome da Empresa'] ) ) {
+                            $company_label = sanitize_text_field( (string) $detail_payment['Nome da Empresa'] );
+                        }
+                        if ( '—' === $company_label ) {
+                            $company_label = '';
+                        }
                     ?>
                       <article class="apf-faepa-entry">
                         <details>
                           <summary class="apf-faepa-entry__head">
                             <div>
                               <strong><?php echo esc_html( $item['name'] ?: 'Colaborador' ); ?></strong>
+                              <?php if ( $company_label && $company_label !== ( $item['name'] ?? '' ) ) : ?>
+                                <div class="apf-faepa-entry__company"><?php echo esc_html( $company_label ); ?></div>
+                              <?php endif; ?>
                               <?php if ( $item['value'] ) : ?>
                                 <span class="apf-faepa-entry__value"><?php echo esc_html( $item['value'] ); ?></span>
                               <?php endif; ?>
@@ -441,8 +476,8 @@ $apf_portal_faepa_cb = function () {
                       </article>
                     <?php endforeach; ?>
                   </div>
-                </details>
-              </article>
+                </div>
+              </details>
             <?php endforeach; ?>
           </div>
         <?php endif; ?>
@@ -473,6 +508,10 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa__hero h2{margin:0;font-size:24px;line-height:1.2}
       .apf-faepa__lede{margin:8px 0 0;font-size:14px;max-width:720px;color:#d9edff}
       .apf-faepa-calendar{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:16px;box-shadow:0 12px 28px rgba(15,23,42,.06)}
+      .apf-faepa-calendar__tabs{display:inline-flex;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:12px}
+      .apf-faepa-calendar__tab{border:none;background:#f8fafc;padding:8px 14px;font-size:13px;color:#475467;cursor:pointer;transition:background .15s ease,color .15s ease}
+      .apf-faepa-calendar__tab + .apf-faepa-calendar__tab{border-left:1px solid #e5e7eb}
+      .apf-faepa-calendar__tab.is-active{background:#1f6feb;color:#fff;font-weight:600}
       .apf-faepa-calendar__body{display:flex;flex-direction:column;gap:12px}
       .apf-faepa-calendar__inner{display:flex;flex-direction:column;gap:12px}
       .apf-faepa-calendar__header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -507,22 +546,32 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-return__head p{margin:6px 0 0;font-size:13px;color:#475467;max-width:720px}
       .apf-faepa-return__badge{border:1px solid #e4e7ec;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:#475467;background:#f8fafc}
       .apf-faepa-return__empty{margin:6px 0 0;font-size:13px;color:#b42318;font-weight:600}
-      .apf-faepa-return__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
-      .apf-faepa-return__card{border:1px solid #e4e7ec;border-radius:14px;padding:14px;background:#f9fbff;display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 20px rgba(15,23,42,.04)}
-      .apf-faepa-return__card h4{margin:0;font-size:16px;color:#0f172a}
-      .apf-faepa-return__card small{display:block;margin-top:2px;font-size:12px;color:#475467}
-      .apf-faepa-return__meta{margin:6px 0 0;font-size:12px;color:#475467}
-      .apf-faepa-return__chips{display:flex;flex-wrap:wrap;gap:6px}
+      .apf-faepa-return__table{border:1px solid #e4e7ec;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 10px 20px rgba(15,23,42,.04)}
+      .apf-faepa-return__table-head{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 1fr 70px;gap:10px;align-items:center;padding:12px 14px;background:#f8fafc;font-size:12px;font-weight:700;color:#475467}
+      .apf-faepa-return__cell{font-size:12px;color:#475467}
+      .apf-faepa-return__cell--title strong{font-size:14px;color:#0f172a}
+      .apf-faepa-return__row{border-top:1px solid #e4e7ec}
+      .apf-faepa-return__row summary{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 1fr 70px;gap:10px;align-items:center;padding:12px 14px;cursor:pointer;list-style:none;outline:none}
+      .apf-faepa-return__row summary:focus-visible{box-shadow:0 0 0 2px rgba(14,165,233,.4)}
+      .apf-faepa-return__row summary::-webkit-details-marker{display:none}
+      .apf-faepa-return__row[open] summary{background:#ecfeff}
+      .apf-faepa-return__cell--caret{text-align:right}
+      .apf-faepa-return__caret{transition:transform .15s ease;font-size:12px;color:#475467}
+      .apf-faepa-return__row[open] .apf-faepa-return__caret{transform:rotate(180deg)}
       .apf-faepa-chip{padding:4px 8px;border-radius:10px;font-size:12px;font-weight:700}
       .apf-faepa-chip--info{background:rgba(14,165,233,.16);color:#075985;border:1px solid rgba(14,165,233,.3)}
+      .apf-faepa-return__row-details{padding:12px 14px;background:#f9fbff;border-top:1px solid #e4e7ec;display:flex;flex-direction:column;gap:10px}
+      .apf-faepa-return__meta{margin:0;font-size:12px;color:#475467}
       .apf-faepa-return__note{margin:0;font-size:13px;color:#0f172a;background:#e0f2fe;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px}
-      .apf-faepa-return__details summary{cursor:pointer;font-weight:700;color:#0f172a}
-      .apf-faepa-return__list{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+      .apf-faepa-return__section-title{margin:0;font-size:13px;font-weight:700;color:#0f172a}
+      .apf-faepa-return__list{display:flex;flex-direction:column;gap:10px}
       .apf-faepa-entry{border:1px solid #e4e7ec;border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column;gap:8px}
-      .apf-faepa-entry details summary{cursor:pointer;list-style:none}
+      .apf-faepa-entry details summary{cursor:pointer;list-style:none;outline:none}
+      .apf-faepa-entry details summary:focus-visible{box-shadow:0 0 0 2px rgba(14,165,233,.35)}
       .apf-faepa-entry details summary::-webkit-details-marker{display:none}
       .apf-faepa-entry__head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px}
       .apf-faepa-entry__head strong{font-size:13px}
+      .apf-faepa-entry__company{font-size:12px;color:#475467;margin-top:2px}
       .apf-faepa-entry__value{margin-left:8px;font-weight:600;color:#0ea5e9;font-size:12px}
       .apf-faepa-pill{padding:4px 8px;border-radius:10px;font-size:12px;font-weight:700;background:#e5e7eb;color:#0f172a}
       .apf-faepa-pill--approved{background:rgba(16,185,129,.18);color:#047857}
@@ -531,8 +580,10 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-entry__meta{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#475467}
       .apf-faepa-entry__block{border-top:1px dashed #e4e7ec;padding-top:8px;margin-top:4px}
       .apf-faepa-entry__block dl{display:grid;grid-template-columns: minmax(140px,1fr) 2fr;gap:6px 12px;margin:6px 0 0}
-      .apf-faepa-entry__block dt{font-size:12px;color:#475467}
-      .apf-faepa-entry__block dd{margin:0;font-size:13px;color:#0f172a;word-break:break-word}
+      .apf-faepa-entry__block dt{font-size:12px;color:#475467;padding-bottom:6px;border-bottom:1px solid #e4e7ec}
+      .apf-faepa-entry__block dd{margin:0;font-size:13px;color:#0f172a;word-break:break-word;padding-bottom:6px;border-bottom:1px solid #e4e7ec}
+      .apf-faepa-entry__block dl > dt:last-of-type,
+      .apf-faepa-entry__block dl > dd:last-of-type{border-bottom:none;padding-bottom:0}
       .apf-faepa-entry__admin{font-size:13px;color:#0f172a;font-weight:700;text-decoration:none;margin-top:6px;display:inline-flex;gap:6px;align-items:center}
       .apf-faepa-entry__admin:hover{text-decoration:underline}
       .apf-faepa-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;z-index:2000;opacity:0;pointer-events:none;transition:opacity .18s ease}
@@ -561,11 +612,20 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-recipient__name{font-weight:700;color:#0f172a}
       .apf-faepa-recipient__meta{font-size:12px;color:#475467;margin-top:4px}
       .apf-faepa-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:#ecfeff;color:#0f172a;font-size:12px;font-weight:700}
+      @media(max-width:900px){
+        .apf-faepa-return__table-head,
+        .apf-faepa-return__row summary{grid-template-columns:1.2fr 1fr 1fr 1fr 1fr 60px}
+      }
       @media(max-width:720px){
         .apf-faepa-calendar__weekdays,
         .apf-faepa-calendar__days{grid-template-columns:repeat(7,minmax(30px,1fr))}
         .apf-faepa-calendar__day{height:48px;font-size:14px}
         .apf-faepa-modal__dialog{padding:16px}
+        .apf-faepa-return__table-head{display:none}
+        .apf-faepa-return__row summary{grid-template-columns:1fr;align-items:flex-start}
+        .apf-faepa-return__cell{display:block}
+        .apf-faepa-return__cell--caret{text-align:left}
+        .apf-faepa-return__cell + .apf-faepa-return__cell{margin-top:4px}
       }
       @media(max-width:540px){
         .apf-faepa-calendar__weekdays,
@@ -586,6 +646,13 @@ $apf_portal_faepa_cb = function () {
       let modalLastFocus = null;
 
       if(!calendarNode){ return; }
+      const groupTabs = calendarNode.querySelectorAll('[data-faepa-group]');
+      let activeGroup = 'providers';
+      groupTabs.forEach(btn=>{
+        if(btn.classList.contains('is-active')){
+          activeGroup = btn.getAttribute('data-faepa-group') === 'coordinators' ? 'coordinators' : 'providers';
+        }
+      });
 
       const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
       const WEEKDAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
@@ -635,7 +702,7 @@ $apf_portal_faepa_cb = function () {
 
       function openModal(date){
         if(!modal || !modalList || !modalEmpty){ return; }
-        const info = eventsByDate.get(date);
+        const info = getInfoForDate(date);
         modalList.innerHTML = '';
         if(modalTitle){ modalTitle.textContent = 'Avisos de ' + formatDateBr(date); }
 
@@ -823,6 +890,33 @@ $apf_portal_faepa_cb = function () {
         return parts.join(' | ');
       }
 
+      function getInfoForDate(date){
+        const info = eventsByDate.get(date);
+        if(!info){ return null; }
+        const entries = Array.isArray(info.events) ? info.events.filter(entry=>{
+          const groups = Array.isArray(entry.groups) && entry.groups.length
+            ? entry.groups
+            : ['providers'];
+          return groups.includes(activeGroup);
+        }).map(entry=>{
+          const clone = Object.assign({}, entry);
+          const entryGroups = Array.isArray(entry.groups) && entry.groups.length ? entry.groups : ['providers'];
+          clone.groups = entryGroups.includes(activeGroup) ? [activeGroup] : [activeGroup];
+          return clone;
+        }) : [];
+        if(!entries.length){ return null; }
+        const titles = {};
+        if(info.titles && Array.isArray(info.titles[activeGroup])){
+          titles[activeGroup] = info.titles[activeGroup];
+        }
+        return {
+          date: info.date,
+          groups: [activeGroup],
+          titles: titles,
+          events: entries,
+        };
+      }
+
       function renderCalendar(){
         if(!body){ return; }
         const container = document.createElement('div');
@@ -888,7 +982,11 @@ $apf_portal_faepa_cb = function () {
             const iso = year + '-' + String(monthIndex + 1).padStart(2,'0') + '-' + String(dayNumber).padStart(2,'0');
             div.textContent = String(dayNumber);
             if(eventsByDate.has(iso)){
-              const info = eventsByDate.get(iso);
+              const info = getInfoForDate(iso);
+              if(!info){
+                daysGrid.appendChild(div);
+                continue;
+              }
               div.classList.add('apf-faepa-calendar__day--has-event');
               const hasProviders = (info.groups || []).includes('providers');
               const hasCoordinators = (info.groups || []).includes('coordinators');
@@ -935,6 +1033,17 @@ $apf_portal_faepa_cb = function () {
         body.innerHTML = '';
         body.appendChild(container);
       }
+
+      groupTabs.forEach(tab=>{
+        tab.addEventListener('click', ()=>{
+          activeGroup = tab.getAttribute('data-faepa-group') === 'coordinators' ? 'coordinators' : 'providers';
+          groupTabs.forEach(btn=>{
+            btn.classList.toggle('is-active', btn === tab);
+            btn.setAttribute('aria-pressed', btn === tab ? 'true' : 'false');
+          });
+          renderCalendar();
+        });
+      });
 
       renderCalendar();
     })();

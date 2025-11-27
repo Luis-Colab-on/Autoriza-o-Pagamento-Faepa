@@ -87,6 +87,7 @@ add_shortcode('apf_portal', function($atts){
             'valor'          => $valor_norm,
             'pessoa_tipo'    => $pessoa_tipo,
             'nome_empresa'   => $clean($_POST['nome_empresa'] ?? ''),
+            'nome_colaborador'=> $clean($_POST['nome_colaborador'] ?? ''),
             'cnpj'           => $only_num($_POST['cnpj'] ?? ''),
             'nome_prof'      => $clean($_POST['nome_prof'] ?? ''),
             'cpf'            => $only_num($_POST['cpf'] ?? ''),
@@ -106,7 +107,7 @@ add_shortcode('apf_portal', function($atts){
         // ====== cria sempre um novo registro ======
         $titulo = 'Solicitação - ' . (
             $pessoa_tipo === 'pj'
-                ? ( $payload['nome_empresa'] ?: 'PJ' )
+                ? ( $payload['nome_colaborador'] ?: $payload['nome_empresa'] ?: 'PJ' )
                 : ( $payload['nome_prof'] ?: 'PF' )
         ) . ' - ' . current_time('Y-m-d H:i');
 
@@ -265,7 +266,10 @@ add_shortcode('apf_portal', function($atts){
             <?php if ($q->have_posts()): while($q->have_posts()): $q->the_post();
               $row_id = get_the_ID();
               $tipo   = get_post_meta($row_id,'apf_pessoa_tipo',true);
-              $nome   = ($tipo==='pj') ? get_post_meta($row_id,'apf_nome_empresa',true) : get_post_meta($row_id,'apf_nome_prof',true);
+              $empresa= get_post_meta($row_id,'apf_nome_empresa',true);
+              $nome   = ($tipo==='pj')
+                ? ( get_post_meta($row_id,'apf_nome_colaborador',true) ?: $empresa )
+                : get_post_meta($row_id,'apf_nome_prof',true);
               $valor  = get_post_meta($row_id,'apf_valor',true);
               $valor_fmt = ($valor!=='') ? number_format((float)$valor,2,',','.') : '—';
               $curso  = get_post_meta($row_id,'apf_nome_curto',true);
@@ -273,7 +277,12 @@ add_shortcode('apf_portal', function($atts){
               <tr>
                 <td><?php echo esc_html(get_the_date('d/m/Y H:i')); ?></td>
                 <td style="text-transform:uppercase;"><?php echo esc_html($tipo ?: '—'); ?></td>
-                <td><?php echo esc_html($nome ?: '—'); ?></td>
+                <td>
+                  <div class="apf-table__title"><?php echo esc_html($nome ?: '—'); ?></div>
+                  <?php if ($tipo==='pj' && $empresa && $empresa !== $nome): ?>
+                    <div class="apf-table__subtitle"><?php echo esc_html($empresa); ?></div>
+                  <?php endif; ?>
+                </td>
                 <td><?php echo esc_html($valor_fmt); ?></td>
                 <td><?php echo esc_html($curso ?: '—'); ?></td>
               </tr>
@@ -377,6 +386,9 @@ add_shortcode('apf_portal', function($atts){
               <label>Nome da Empresa
                 <input type="text" name="nome_empresa" value="<?php echo esc_attr($g('nome_empresa')); ?>">
               </label>
+              <label>Nome do colaborador
+                <input type="text" name="nome_colaborador" value="<?php echo esc_attr($g('nome_colaborador')); ?>">
+              </label>
               <label>CNPJ
                 <input type="text" name="cnpj" placeholder="00.000.000/0000-00" value="<?php echo esc_attr($g('cnpj')); ?>">
               </label>
@@ -477,6 +489,8 @@ add_shortcode('apf_portal', function($atts){
       .apf-table{width:100%;min-width:640px;border-collapse:collapse}
       .apf-table thead th{background:#f7f8fb;text-align:left;padding:10px 12px;border-bottom:1px solid #e6e9ef;font-weight:600;color:#475467}
       .apf-table tbody td{padding:10px 12px;border-bottom:1px solid #f0f2f5}
+      .apf-table__title{font-weight:700;color:#0f172a}
+      .apf-table__subtitle{font-size:12px;color:#667085;margin-top:2px}
       .apf-tabs{display:flex;gap:8px;padding:8px 0 10px}
       .apf-tabs button{border:1px solid #e6e9ef;background:#f7f8fb;border-radius:10px;padding:8px 10px;cursor:pointer;flex:1 1 auto;min-width:140px}
       .apf-tabs button.is-active{background:#e8f1ff;border-color:#bcd4ff;color:#1849a9;font-weight:600}
@@ -717,6 +731,16 @@ add_shortcode('apf_portal', function($atts){
         const pf = (v === 'pf');
         boxPF.style.display = pf ? '' : 'none';
         boxPJ.style.display = pf ? 'none' : '';
+        const nomeProf = form.querySelector('input[name="nome_prof"]');
+        const cpf      = form.querySelector('input[name="cpf"]');
+        const nomeEmp  = form.querySelector('input[name="nome_empresa"]');
+        const nomeColab= form.querySelector('input[name="nome_colaborador"]');
+        const cnpj     = form.querySelector('input[name="cnpj"]');
+        if (nomeProf)  nomeProf.required = pf;
+        if (cpf)       cpf.required = pf;
+        if (nomeEmp)   nomeEmp.required = !pf;
+        if (nomeColab) nomeColab.required = !pf;
+        if (cnpj)      cnpj.required = !pf;
       }
       radios.forEach(r => r.addEventListener('change', togglePessoa));
       togglePessoa();
