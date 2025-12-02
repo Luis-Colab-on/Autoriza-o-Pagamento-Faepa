@@ -486,6 +486,8 @@ add_shortcode( 'apf_portal_coordenador', function () {
             if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
                 continue;
             }
+            $event_id = isset( $event['id'] ) ? sanitize_text_field( (string) $event['id'] ) : '';
+            $providers_only_faepa = ( '' !== $event_id && strpos( $event_id, 'faepa_pay_' ) === 0 );
             $title = isset( $event['title'] ) ? sanitize_text_field( $event['title'] ) : '';
             if ( '' === $title ) {
                 continue;
@@ -506,6 +508,10 @@ add_shortcode( 'apf_portal_coordenador', function () {
                 $recipient_group = isset( $recipient['group'] ) ? sanitize_key( $recipient['group'] ) : '';
                 if ( ! in_array( $recipient_group, array( 'providers', 'coordinators' ), true ) ) {
                     $recipient_group = 'providers';
+                }
+                if ( $providers_only_faepa && 'coordinators' === $recipient_group ) {
+                    // Para avisos FAEPA, não listamos na agenda pessoal do coordenador.
+                    continue;
                 }
                 $recipient_user  = isset( $recipient['user_id'] ) ? (int) $recipient['user_id'] : 0;
                 $recipient_email = isset( $recipient['email'] ) ? strtolower( sanitize_email( $recipient['email'] ) ) : '';
@@ -1145,6 +1151,10 @@ add_shortcode( 'apf_portal_coordenador', function () {
           </div>
 
           <div class="apf-coord-calendar" id="apfCoordCalendar" data-events="<?php echo $coord_calendar_attr; ?>">
+            <div class="apf-coord-calendar__filters" aria-label="Filtrar agenda">
+              <button type="button" class="apf-coord-calendar__filter is-active" data-calendar-filter="coordinators">Minha agenda</button>
+              <button type="button" class="apf-coord-calendar__filter" data-calendar-filter="providers">Agenda dos colaboradores</button>
+            </div>
             <div class="apf-coord-calendar__body"></div>
             <div class="apf-coord-calendar__legend" aria-label="Legenda do calendário">
               <span><span class="apf-coord-calendar__legend-dot apf-coord-calendar__legend-dot--providers" aria-hidden="true"></span> Colaboradores</span>
@@ -1154,7 +1164,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
         <?php if ( empty( $calendar_events ) ) : ?>
           <p class="apf-coord-calendar__empty">Nenhum aviso programado até o momento.</p>
         <?php else : ?>
-          <p class="apf-coord-calendar__hint">Use as setas para navegar e clique nos dias destacados para ver os avisos do financeiro.</p>
+          <p class="apf-coord-calendar__hint">Alterne a agenda para ver avisos dos seus colaboradores ou apenas os enviados diretamente a você.</p>
         <?php endif; ?>
         <div class="apf-coord-modal" id="apfCoordModal" aria-hidden="true">
           <div class="apf-coord-modal__overlay" data-modal-close></div>
@@ -2036,6 +2046,29 @@ add_shortcode( 'apf_portal_coordenador', function () {
         background:#f7f8fb;
         padding:16px;
       }
+      .apf-coord-calendar__filters{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        align-items:center;
+        margin-bottom:8px;
+      }
+      .apf-coord-calendar__filter{
+        border:1px solid #d0d5dd;
+        border-radius:999px;
+        padding:6px 12px;
+        background:#fff;
+        color:#0f172a;
+        font-size:12px;
+        font-weight:700;
+        cursor:pointer;
+        transition:background .15s ease,border-color .15s ease,color .15s ease;
+      }
+      .apf-coord-calendar__filter.is-active{
+        background:#0f172a;
+        color:#fff;
+        border-color:#0f172a;
+      }
       .apf-coord-calendar__body{
         display:flex;
         flex-direction:column;
@@ -2259,6 +2292,34 @@ add_shortcode( 'apf_portal_coordenador', function () {
       .apf-coord-modal__meta strong{
         color:#0f172a;
       }
+      .apf-coord-modal__collabs summary{
+        cursor:pointer;
+        font-size:13px;
+        font-weight:700;
+        color:#0f172a;
+        list-style:none;
+      }
+      .apf-coord-modal__collabs summary::-webkit-details-marker{display:none}
+      .apf-coord-modal__collab-list{
+        list-style:none;
+        margin:6px 0 0;
+        padding:0;
+        display:flex;
+        flex-direction:column;
+        gap:4px;
+        font-size:13px;
+        color:#0f172a;
+      }
+      .apf-coord-modal__collab-list.is-scroll{
+        max-height:200px;
+        overflow:auto;
+        padding-right:6px;
+      }
+      .apf-coord-modal__collab-list li{
+        padding:4px 0;
+        border-bottom:1px solid #e5e7eb;
+      }
+      .apf-coord-modal__collab-list li:last-child{border-bottom:none}
       @media(max-width:640px){
         .apf-coord-card{
           margin:16px;
@@ -2940,6 +3001,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
         const WEEKDAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
         let monthDate = new Date();
         monthDate.setDate(1);
+        let activeFilter = 'coordinators';
 
         const eventsByDate = new Map();
         const groupLabels = {
@@ -3052,14 +3114,35 @@ add_shortcode( 'apf_portal_coordenador', function () {
           return parts.join(' | ');
         }
 
-        function renderCoordModal(date, info){
+        const filterButtons = calendarNode.querySelectorAll('[data-calendar-filter]');
+        if(filterButtons.length){
+          filterButtons.forEach(btn=>{
+            btn.addEventListener('click', ()=>{
+              const key = btn.getAttribute('data-calendar-filter') || '';
+              if(key !== 'providers' && key !== 'coordinators'){ return; }
+              activeFilter = key;
+              filterButtons.forEach(other=>other.classList.toggle('is-active', other === btn));
+              renderCalendar();
+            });
+          });
+        }
+
+        function renderCoordModal(date, info, groupsFilter){
           if(!coordModalItems || !coordModalEmpty){ return; }
           coordModalDate = date;
           if(coordModalTitle){
             coordModalTitle.textContent = 'Avisos de ' + formatDateBr(date);
           }
           coordModalItems.innerHTML = '';
-          const entries = Array.isArray(info.events) ? info.events : [];
+          const visibleGroups = Array.isArray(groupsFilter) && groupsFilter.length
+            ? groupsFilter
+            : (Array.isArray(info.groups) ? info.groups : []);
+          const entries = Array.isArray(info.events)
+            ? info.events.filter(entry => {
+                const entryGroups = Array.isArray(entry.groups) ? entry.groups : [];
+                return entryGroups.some(g => visibleGroups.includes(g));
+              })
+            : [];
           if(!entries.length){
             coordModalEmpty.hidden = false;
             return;
@@ -3076,45 +3159,28 @@ add_shortcode( 'apf_portal_coordenador', function () {
             const meta = document.createElement('div');
             meta.className = 'apf-coord-modal__meta';
 
-            const audience = document.createElement('div');
-            const audienceLabel = document.createElement('strong');
-            audienceLabel.textContent = 'Público:';
-            audience.appendChild(audienceLabel);
-            audience.append(' ' + ((Array.isArray(entry.groups) && entry.groups.length)
-              ? entry.groups.map(group => groupLabels[group] || group).join(', ')
-              : '—'));
-            meta.appendChild(audience);
-
             const providersList = entry.recipients && Array.isArray(entry.recipients.providers)
               ? entry.recipients.providers.filter(Boolean)
               : [];
-            const coordinatorsList = entry.recipients && Array.isArray(entry.recipients.coordinators)
-              ? entry.recipients.coordinators.filter(Boolean)
-              : [];
 
             if(providersList.length){
+              const acc = document.createElement('details');
+              acc.className = 'apf-coord-modal__collabs';
+              const summary = document.createElement('summary');
+              summary.textContent = 'Colaboradores (' + providersList.length + ')';
+              acc.appendChild(summary);
+              const list = document.createElement('ul');
+              list.className = 'apf-coord-modal__collab-list' + (providersList.length > 10 ? ' is-scroll' : '');
+              providersList.forEach(raw=>{
+                const li = document.createElement('li');
+                li.textContent = raw;
+                list.appendChild(li);
+              });
+              acc.appendChild(list);
+              meta.appendChild(acc);
+            } else {
               const row = document.createElement('div');
-              const label = document.createElement('strong');
-              label.textContent = 'Colaboradores:';
-              row.appendChild(label);
-              row.append(' ' + providersList.join('; '));
-              meta.appendChild(row);
-            }
-            if(coordinatorsList.length){
-              const row = document.createElement('div');
-              const label = document.createElement('strong');
-              label.textContent = 'Coordenadores:';
-              row.appendChild(label);
-              row.append(' ' + coordinatorsList.join('; '));
-              meta.appendChild(row);
-            }
-
-            if(!providersList.length && !coordinatorsList.length){
-              const row = document.createElement('div');
-              const label = document.createElement('strong');
-              label.textContent = 'Destinatários:';
-              row.appendChild(label);
-              row.append(' Sem dados disponíveis.');
+              row.textContent = 'Nenhum colaborador listado.';
               meta.appendChild(row);
             }
 
@@ -3123,11 +3189,11 @@ add_shortcode( 'apf_portal_coordenador', function () {
           });
         }
 
-        function openCoordModal(date){
+        function openCoordModal(date, groupsFilter){
           if(!coordModal){ return; }
           const info = eventsByDate.get(date);
           if(!info){ return; }
-          renderCoordModal(date, info);
+          renderCoordModal(date, info, groupsFilter);
           coordModalLastFocus = document.activeElement;
           coordModal.setAttribute('aria-hidden','false');
           document.body.style.overflow = 'hidden';
@@ -3235,42 +3301,45 @@ add_shortcode( 'apf_portal_coordenador', function () {
               div.textContent = String(dayNumber);
               if(eventsByDate.has(iso)){
                 const info = eventsByDate.get(iso);
-                div.classList.add('apf-coord-calendar__day--has-event');
-                const hasProviders = (info.groups || []).includes('providers');
-                const hasCoordinators = (info.groups || []).includes('coordinators');
-                if(hasProviders && hasCoordinators){
-                  div.classList.add('apf-coord-calendar__day--group-mixed');
-                }else if(hasCoordinators){
-                  div.classList.add('apf-coord-calendar__day--group-coordinators');
-                }else{
-                  div.classList.add('apf-coord-calendar__day--group-providers');
-                }
-                const markers = document.createElement('div');
-                markers.className = 'apf-coord-calendar__markers';
-                (info.groups || []).forEach(group=>{
-                  const safeGroup = (group === 'coordinators') ? 'coordinators' : 'providers';
-                  const marker = document.createElement('span');
-                  marker.className = 'apf-coord-calendar__marker apf-coord-calendar__marker--' + safeGroup;
-                  marker.title = groupLabels[safeGroup] || '';
-                  markers.appendChild(marker);
-                });
-                div.appendChild(markers);
-                const tooltip = buildTooltip(info);
-                if(tooltip){
-                  div.title = tooltip;
-                }
-                div.setAttribute('role','button');
-                div.setAttribute('tabindex','0');
-                div.setAttribute('aria-label', 'Ver avisos de ' + formatDateBr(iso));
-                div.addEventListener('click', ()=>{
-                  openCoordModal(iso);
-                });
-                div.addEventListener('keydown', (event)=>{
-                  if(event.key === 'Enter' || event.key === ' '){
-                    event.preventDefault();
-                    openCoordModal(iso);
+                const filteredGroups = (info.groups || []).filter(g => g === activeFilter);
+                if(filteredGroups.length){
+                  div.classList.add('apf-coord-calendar__day--has-event');
+                  const hasProviders = filteredGroups.includes('providers');
+                  const hasCoordinators = filteredGroups.includes('coordinators');
+                  if(hasProviders && hasCoordinators){
+                    div.classList.add('apf-coord-calendar__day--group-mixed');
+                  }else if(hasCoordinators){
+                    div.classList.add('apf-coord-calendar__day--group-coordinators');
+                  }else{
+                    div.classList.add('apf-coord-calendar__day--group-providers');
                   }
-                });
+                  const markers = document.createElement('div');
+                  markers.className = 'apf-coord-calendar__markers';
+                  filteredGroups.forEach(group=>{
+                    const safeGroup = (group === 'coordinators') ? 'coordinators' : 'providers';
+                    const marker = document.createElement('span');
+                    marker.className = 'apf-coord-calendar__marker apf-coord-calendar__marker--' + safeGroup;
+                    marker.title = groupLabels[safeGroup] || '';
+                    markers.appendChild(marker);
+                  });
+                  div.appendChild(markers);
+                  const tooltip = buildTooltip({ groups: filteredGroups, titles: info.titles });
+                  if(tooltip){
+                    div.title = tooltip;
+                  }
+                  div.setAttribute('role','button');
+                  div.setAttribute('tabindex','0');
+                  div.setAttribute('aria-label', 'Ver avisos de ' + formatDateBr(iso));
+                  div.addEventListener('click', ()=>{
+                    openCoordModal(iso, filteredGroups);
+                  });
+                  div.addEventListener('keydown', (event)=>{
+                    if(event.key === 'Enter' || event.key === ' '){
+                      event.preventDefault();
+                      openCoordModal(iso, filteredGroups);
+                    }
+                  });
+                }
               }
             }
 
