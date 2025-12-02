@@ -1788,6 +1788,12 @@ add_shortcode('apf_inbox', function () {
                     'decision_label' => $decision_at ? date_i18n( 'd/m/Y H:i', $decision_at ) : '',
                     'note'           => isset( $entry['decision_note'] ) ? sanitize_textarea_field( $entry['decision_note'] ) : '',
                     'details'        => $details,
+                    'faepa_paid'     => ! empty( $entry['faepa_paid'] ),
+                    'faepa_paid_at'  => isset( $entry['faepa_paid_at'] ) ? (int) $entry['faepa_paid_at'] : 0,
+                    'faepa_paid_label'=> ( ! empty( $entry['faepa_paid_at'] ) ) ? date_i18n( 'd/m/Y H:i', (int) $entry['faepa_paid_at'] ) : '',
+                    'faepa_payment_note' => isset( $entry['faepa_payment_note'] ) ? sanitize_textarea_field( $entry['faepa_payment_note'] ) : '',
+                    'faepa_payment_attachment' => isset( $entry['faepa_payment_attachment'] ) ? esc_url_raw( $entry['faepa_payment_attachment'] ) : '',
+                    'faepa_payment_attachment_id' => isset( $entry['faepa_payment_attachment_id'] ) ? (int) $entry['faepa_payment_attachment_id'] : 0,
                 );
             }
         }
@@ -4119,6 +4125,7 @@ add_shortcode('apf_inbox', function () {
       .apf-coord-modal__pill--approved{ background:rgba(34,197,94,.2); color:#22c55e; }
       .apf-coord-modal__pill--rejected{ background:rgba(248,113,113,.2); color:#f87171; }
       .apf-coord-modal__pill--pending{ background:rgba(250,204,21,.2); color:#facc15; }
+      .apf-coord-modal__pill--paid{ background:rgba(59,130,246,.2); color:#1d4ed8; }
       .apf-coord-modal__chevron{
         width:12px;
         height:12px;
@@ -5905,11 +5912,11 @@ add_shortcode('apf_inbox', function () {
         if(!group){
           coordReturnBody.innerHTML = '<p class="apf-coord-return-modal__empty">Nenhum dado disponível.</p>';
           updateFaepaBox(null);
-          return;
-        }
-        coordReturnBody.innerHTML = '';
-        if(coordReturnTitle){
-          coordReturnTitle.textContent = group.title || 'Retorno do coordenador';
+        return;
+      }
+      coordReturnBody.innerHTML = '';
+      if(coordReturnTitle){
+        coordReturnTitle.textContent = group.title || 'Retorno do coordenador';
         }
         if(coordReturnSubtitle){
           const parts = [];
@@ -5945,6 +5952,7 @@ add_shortcode('apf_inbox', function () {
           message.textContent = group.message;
           coordReturnBody.appendChild(message);
         }
+        const paidCount = group.items ? group.items.filter(it=>!!it.faepa_paid).length : 0;
         const items = Array.isArray(group.items) ? group.items : [];
         if(!items.length){
           const empty = document.createElement('p');
@@ -5987,6 +5995,12 @@ add_shortcode('apf_inbox', function () {
             dateLabel.textContent = prefix + item.decision_label;
             meta.appendChild(dateLabel);
           }
+          if(item.faepa_paid_label){
+            const paidLabel = document.createElement('span');
+            paidLabel.className = 'apf-coord-modal__pill apf-coord-modal__pill--paid';
+            paidLabel.textContent = 'Pago em ' + item.faepa_paid_label;
+            meta.appendChild(paidLabel);
+          }
           toggle.appendChild(meta);
           const chevron = document.createElement('span');
           chevron.className = 'apf-coord-modal__chevron';
@@ -5996,14 +6010,47 @@ add_shortcode('apf_inbox', function () {
           detailsWrap.className = 'apf-coord-modal__details';
           detailsWrap.hidden = true;
           if(item.note){
+            if(item.status === 'rejected'){
+              const noteTitle = document.createElement('h5');
+              noteTitle.className = 'apf-coord-modal__note-title';
+              noteTitle.textContent = 'Motivo da recusa:';
+              detailsWrap.appendChild(noteTitle);
+            }
             const note = document.createElement('p');
             note.className = 'apf-coord-modal__note';
             note.textContent = item.note;
             detailsWrap.appendChild(note);
           }
+          if(item.faepa_payment_note || item.faepa_payment_attachment){
+            const proofBox = document.createElement('div');
+            proofBox.className = 'apf-coord-modal__proof';
+            const proofTitle = document.createElement('h5');
+            proofTitle.textContent = 'Comprovante do pagamento';
+            proofBox.appendChild(proofTitle);
+            if(item.faepa_payment_note){
+              const note = document.createElement('p');
+              note.textContent = item.faepa_payment_note;
+              proofBox.appendChild(note);
+              const coordNote = document.createElement('p');
+              coordNote.textContent = 'Mensagem ao coordenador: ' + item.faepa_payment_note;
+              proofBox.appendChild(coordNote);
+              const collabNote = document.createElement('p');
+              collabNote.textContent = 'Mensagem ao colaborador: ' + item.faepa_payment_note;
+              proofBox.appendChild(collabNote);
+            }
+            if(item.faepa_payment_attachment){
+              const link = document.createElement('a');
+              link.href = item.faepa_payment_attachment;
+              link.target = '_blank';
+              link.rel = 'noopener';
+              link.textContent = 'Ver anexo';
+              proofBox.appendChild(link);
+            }
+            detailsWrap.appendChild(proofBox);
+          }
           if(item.details){
-            const paySection = buildCoordSection('Dados do pagamento', item.details.payment);
-            const serviceSection = buildCoordSection('Prestação do serviço', item.details.service);
+            const paySection = buildCoordSection('Informações de pagamento', item.details.payment);
+            const serviceSection = buildCoordSection('Prestação de serviço', item.details.service);
             const payoutSection = buildCoordSection('Dados para pagamento', item.details.payout);
             if(paySection){ detailsWrap.appendChild(paySection); }
             if(serviceSection){ detailsWrap.appendChild(serviceSection); }
@@ -6148,9 +6195,9 @@ add_shortcode('apf_inbox', function () {
               detailWrap.appendChild(note);
             }
             if(item.details){
-              const paySection = buildCoordSection('Dados do pagamento', item.details.payment);
-              const serviceSection = buildCoordSection('Prestação do serviço', item.details.service);
-              const payoutSection = buildCoordSection('Dados para pagamento', item.details.payout);
+            const paySection = buildCoordSection('Informações de pagamento', item.details.payment);
+            const serviceSection = buildCoordSection('Prestação de serviço', item.details.service);
+            const payoutSection = buildCoordSection('Dados para pagamento', item.details.payout);
               if(paySection){ detailWrap.appendChild(paySection); }
               if(serviceSection){ detailWrap.appendChild(serviceSection); }
               if(payoutSection){ detailWrap.appendChild(payoutSection); }

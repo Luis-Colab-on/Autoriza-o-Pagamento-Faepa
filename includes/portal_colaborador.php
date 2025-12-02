@@ -219,9 +219,27 @@ add_shortcode('apf_portal', function($atts){
                 continue;
             }
 
+            $event_type = 'finance';
+            $event_id   = isset( $event['id'] ) ? sanitize_text_field( (string) $event['id'] ) : '';
+            if ( '' !== $event_id && strpos( $event_id, 'faepa_pay_' ) === 0 ) {
+                $event_type = 'faepa';
+            } else {
+                foreach ( $event['recipients'] as $recipient ) {
+                    if ( ! is_array( $recipient ) ) {
+                        continue;
+                    }
+                    $recipient_group = isset( $recipient['group'] ) ? sanitize_key( $recipient['group'] ) : '';
+                    if ( 'coordinators' === $recipient_group ) {
+                        $event_type = 'coordinator';
+                        break;
+                    }
+                }
+            }
+
             $calendar_events[] = array(
                 'date'  => $date,
                 'title' => $title,
+                'type'  => $event_type,
             );
         }
     }
@@ -302,8 +320,24 @@ add_shortcode('apf_portal', function($atts){
         <?php if ( empty( $calendar_events ) ) : ?>
           <p class="apf-portal-calendar__empty">Nenhum aviso programado até o momento.</p>
         <?php else : ?>
-          <p class="apf-portal-calendar__hint">Passe o mouse sobre os dias destacados para visualizar o aviso.</p>
+          <p class="apf-portal-calendar__hint">Clique em um dia destacado para ver os avisos completos.</p>
         <?php endif; ?>
+        <div class="apf-portal-modal" id="apfPortalEventModal" aria-hidden="true">
+          <div class="apf-portal-modal__overlay" data-portal-modal-close></div>
+          <div class="apf-portal-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="apfPortalEventTitle">
+            <div class="apf-portal-modal__head">
+              <div>
+                <p class="apf-portal-modal__eyebrow">Avisos do dia</p>
+                <h4 id="apfPortalEventTitle">Eventos</h4>
+                <p class="apf-portal-modal__date" data-portal-modal-date></p>
+              </div>
+              <button type="button" class="apf-portal-modal__close" data-portal-modal-close aria-label="Fechar">&times;</button>
+            </div>
+            <div class="apf-portal-modal__content" data-portal-modal-list>
+              <p class="apf-portal-modal__empty">Nenhum aviso para esta data.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ====== FORMULÁRIO DE EDIÇÃO (3 abas), PRÉ-PREENCHIDO COM O QUE ESTÁ NO ADMIN ====== -->
@@ -550,10 +584,29 @@ add_shortcode('apf_portal', function($atts){
       .apf-portal-calendar__day{position:relative;height:44px;border-radius:10px;border:1px solid #d0d5dd;background:#fff;color:#1d2939;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center}
       .apf-portal-calendar__day--muted{opacity:.35}
       .apf-portal-calendar__day--has-event{border-color:#1f6feb;background:rgba(31,111,235,.12)}
-      .apf-portal-calendar__tooltip{position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:6px 10px;border-radius:8px;font-size:12px;white-space:nowrap;box-shadow:0 10px 20px rgba(15,23,42,.18);pointer-events:none;opacity:0;transition:opacity .15s ease}
-      .apf-portal-calendar__day--has-event:hover .apf-portal-calendar__tooltip{opacity:1}
       .apf-portal-calendar__empty{margin:10px 0 0;font-size:13px;color:#667085}
       .apf-portal-calendar__hint{margin:10px 0 0;font-size:12px;color:#5f6b7a}
+      .apf-portal-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;transition:opacity .18s ease}
+      .apf-portal-modal[aria-hidden="false"]{opacity:1;pointer-events:auto}
+      .apf-portal-modal__overlay{position:absolute;inset:0;background:rgba(15,23,42,.45)}
+      .apf-portal-modal__dialog{position:relative;background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,.35);padding:18px 20px;max-width:460px;width:90%;max-height:80vh;overflow:auto}
+      .apf-portal-modal__head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+      .apf-portal-modal__eyebrow{margin:0;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#1f6feb}
+      .apf-portal-modal__head h4{margin:2px 0 4px;font-size:18px}
+      .apf-portal-modal__date{margin:0;font-size:13px;color:#475467}
+      .apf-portal-modal__close{border:none;background:transparent;font-size:24px;line-height:1;color:#475467;cursor:pointer;padding:4px}
+      .apf-portal-modal__content{display:flex;flex-direction:column;gap:10px}
+      .apf-portal-modal__event{border:1px solid #e4e7ec;border-radius:12px;padding:12px 14px;background:#f8fafc}
+      .apf-portal-modal__event--finance{border-color:#0b326e;background:rgba(11,50,110,.08)}
+      .apf-portal-modal__event--faepa{border-color:#1f6feb;background:rgba(31,111,235,.1)}
+      .apf-portal-modal__event--coordinator{border-color:#d97706;background:rgba(217,119,6,.1)}
+      .apf-portal-modal__event h5{margin:0 0 4px;font-size:15px;color:#111827}
+      .apf-portal-modal__event p{margin:0;font-size:13px;color:#4b5563;white-space:pre-wrap}
+      .apf-portal-modal__event-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:4px 8px;border-radius:999px;margin-bottom:6px}
+      .apf-portal-modal__event-tag--finance{background:rgba(11,50,110,.12);color:#0b326e}
+      .apf-portal-modal__event-tag--faepa{background:rgba(31,111,235,.14);color:#0b4fa8}
+      .apf-portal-modal__event-tag--coordinator{background:rgba(217,119,6,.16);color:#b45309}
+      .apf-portal-modal__empty{margin:0;font-size:13px;color:#4b5563}
       @media(max-width:900px){
         .apf-hero{flex-direction:column;align-items:flex-start}
         .apf-hero .apf-actions{width:100%;justify-content:flex-start}
@@ -587,6 +640,13 @@ add_shortcode('apf_portal', function($atts){
     (function(){
       const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
       const WEEKDAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+      const formatDateBr = (iso) => {
+        const parts = (iso || '').split('-').map(p => parseInt(p, 10));
+        if (parts.length === 3 && !Number.isNaN(parts[0])) {
+          return String(parts[2]).padStart(2,'0') + '/' + String(parts[1]).padStart(2,'0') + '/' + parts[0];
+        }
+        return iso || '';
+      };
 
       const calendarNode = document.getElementById('apfPortalCalendar');
       if (calendarNode) {
@@ -594,6 +654,11 @@ add_shortcode('apf_portal', function($atts){
         monthDate.setDate(1);
         let events = [];
         const eventsByDate = new Map();
+        const modal      = document.getElementById('apfPortalEventModal');
+        const modalDate  = modal ? modal.querySelector('[data-portal-modal-date]') : null;
+        const modalList  = modal ? modal.querySelector('[data-portal-modal-list]') : null;
+        const modalCloseTriggers = modal ? modal.querySelectorAll('[data-portal-modal-close]') : [];
+        let modalLastFocus = null;
 
         try {
           const raw = JSON.parse(calendarNode.getAttribute('data-events') || '[]');
@@ -612,6 +677,75 @@ add_shortcode('apf_portal', function($atts){
         });
 
         const body = calendarNode.querySelector('.apf-portal-calendar__body');
+
+        function closeModal(){
+          if(!modal){ return; }
+          modal.setAttribute('aria-hidden','true');
+          document.body.style.overflow = '';
+          if(modalLastFocus){ modalLastFocus.focus(); }
+        }
+
+        function renderModal(dateIso){
+          if(!modal || !modalList){ return; }
+          const list = eventsByDate.get(dateIso) || [];
+          modalList.innerHTML = '';
+          if (modalDate) {
+            modalDate.textContent = formatDateBr(dateIso);
+          }
+          if(!list.length){
+            const empty = document.createElement('p');
+            empty.className = 'apf-portal-modal__empty';
+            empty.textContent = 'Nenhum aviso para esta data.';
+            modalList.appendChild(empty);
+          } else {
+            list.forEach(evt => {
+              const card = document.createElement('article');
+              const type = (evt.type || '').toLowerCase();
+              const typeClass = type === 'coordinator' ? 'apf-portal-modal__event--coordinator'
+                : (type === 'faepa' ? 'apf-portal-modal__event--faepa' : 'apf-portal-modal__event--finance');
+              card.className = 'apf-portal-modal__event ' + typeClass;
+              if (type) {
+                const tag = document.createElement('span');
+                const tagClass = type === 'coordinator' ? 'apf-portal-modal__event-tag--coordinator'
+                  : (type === 'faepa' ? 'apf-portal-modal__event-tag--faepa' : 'apf-portal-modal__event-tag--finance');
+                tag.className = 'apf-portal-modal__event-tag ' + tagClass;
+                tag.textContent = type === 'coordinator' ? 'Aviso do Coordenador' : (type === 'faepa' ? 'Aviso FAEPA' : 'Aviso Financeiro');
+                card.appendChild(tag);
+              }
+              const title = document.createElement('h5');
+              title.textContent = evt.title || 'Aviso';
+              const msg = document.createElement('p');
+              const text = evt.text || evt.message || evt.title || '';
+              msg.textContent = text;
+              card.appendChild(title);
+              card.appendChild(msg);
+              modalList.appendChild(card);
+            });
+          }
+        }
+
+        function openModal(dateIso){
+          if(!modal){ return; }
+          renderModal(dateIso);
+          modal.setAttribute('aria-hidden','false');
+          modalLastFocus = document.activeElement;
+          document.body.style.overflow = 'hidden';
+          const focusable = modal.querySelector('.apf-portal-modal__close') || modal;
+          focusable.focus();
+        }
+
+        if(modalCloseTriggers && modalCloseTriggers.length){
+          modalCloseTriggers.forEach(btn=>{
+            btn.addEventListener('click', closeModal);
+          });
+        }
+        if(modal){
+          modal.addEventListener('keydown', function(e){
+            if(e.key === 'Escape'){
+              closeModal();
+            }
+          });
+        }
 
         function renderCalendar() {
           if (!body) { return; }
@@ -680,10 +814,15 @@ add_shortcode('apf_portal', function($atts){
               const iso = year + '-' + String(monthIndex + 1).padStart(2, '0') + '-' + String(dayNumber).padStart(2, '0');
               if (eventsByDate.has(iso)) {
                 div.classList.add('apf-portal-calendar__day--has-event');
-                const tooltip = document.createElement('span');
-                tooltip.className = 'apf-portal-calendar__tooltip';
-                tooltip.textContent = eventsByDate.get(iso).map(evt => evt.title).join(', ');
-                div.appendChild(tooltip);
+                div.setAttribute('role','button');
+                div.setAttribute('tabindex','0');
+                div.addEventListener('click', () => openModal(iso));
+                div.addEventListener('keydown', (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openModal(iso);
+                  }
+                });
               }
             }
             daysGrid.appendChild(div);

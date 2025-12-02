@@ -360,7 +360,11 @@ add_shortcode( 'apf_portal_coordenador', function () {
         } else {
             $action     = sanitize_text_field( wp_unslash( $_POST['apf_coord_request_action'] ) );
             $request_id = isset( $_POST['apf_coord_request_id'] ) ? sanitize_text_field( wp_unslash( $_POST['apf_coord_request_id'] ) ) : '';
-            $allowed    = array( 'approve' => 'approved', 'reject' => 'rejected' );
+            $allowed    = array(
+                'approve' => 'approved',
+                'reject'  => 'rejected',
+                'revert'  => 'pending',
+            );
             $note_raw   = isset( $_POST['apf_coord_request_note'] ) ? wp_unslash( $_POST['apf_coord_request_note'] ) : '';
             $note_sanitized = sanitize_textarea_field( $note_raw );
             if ( '' === $note_sanitized && isset( $_POST['apf_coord_request_note_noscript'] ) ) {
@@ -398,7 +402,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
                     if ( ! $belongs_to_current_request( $target ) ) {
                         $request_notice      = 'Esta solicitação não está vinculada ao seu curso.';
                         $request_notice_type = 'error';
-                    } elseif ( isset( $target['status'] ) && 'pending' !== $target['status'] ) {
+                    } elseif ( 'revert' !== $action && isset( $target['status'] ) && 'pending' !== $target['status'] ) {
                         $request_notice      = 'Esta solicitação já foi respondida.';
                         $request_notice_type = 'error';
                     } elseif ( ! empty( $target['batch_submitted'] ) ) {
@@ -413,16 +417,20 @@ add_shortcode( 'apf_portal_coordenador', function () {
                         $updated = apf_set_coordinator_request_status( $request_id, $status, $extra_payload );
                         if ( $updated ) {
                             $decision_label = date_i18n( 'd/m/Y H:i' );
-                            $request_notice = ( 'approved' === $status )
-                                ? 'Solicitação aprovada com sucesso.'
-                                : 'Solicitação recusada.';
+                            if ( 'pending' === $status ) {
+                                $request_notice = 'Solicitação reaberta para edição.';
+                            } else {
+                                $request_notice = ( 'approved' === $status )
+                                    ? 'Solicitação aprovada com sucesso.'
+                                    : 'Solicitação recusada.';
+                            }
                             $request_notice_type = 'success';
                             if ( $is_ajax_request ) {
                                 wp_send_json_success( array(
                                     'request_id'    => $request_id,
                                     'status'        => $status,
-                                    'status_label'  => ( 'approved' === $status ) ? 'Aprovado' : 'Recusado',
-                                    'decision_label'=> $decision_label,
+                                    'status_label'  => ( 'approved' === $status ) ? 'Aprovado' : ( 'pending' === $status ? 'Pendente' : 'Recusado' ),
+                                    'decision_label'=> ( 'pending' === $status ) ? '' : $decision_label,
                                     'note'          => ( 'rejected' === $status ) ? $note_sanitized : '',
                                     'message'       => $request_notice,
                                 ) );
@@ -1896,6 +1904,26 @@ add_shortcode( 'apf_portal_coordenador', function () {
         gap:10px;
         flex-wrap:wrap;
       }
+      .apf-coord-request__actions--inline{
+        justify-content:flex-end;
+      }
+      .apf-coord-request__edit-link-form{
+        margin-left:auto;
+      }
+      .apf-coord-edit-link{
+        background:none;
+        border:none;
+        padding:0;
+        font-size:12px;
+        color:#0d47a1;
+        text-decoration:underline;
+        cursor:pointer;
+      }
+      .apf-coord-edit-link:hover,
+      .apf-coord-edit-link:focus{
+        color:#0a2f73;
+        text-decoration:underline;
+      }
       .apf-coord-request__note-noscript textarea{
         width:100%;
         min-height:70px;
@@ -2377,8 +2405,14 @@ add_shortcode( 'apf_portal_coordenador', function () {
         if(!form || !payload){ return; }
         const wrapper = form.closest('.apf-coord-collab');
         if(!wrapper){ return; }
+        const detail = wrapper.closest('.apf-coord-request-detail');
+        const isSubmitted = detail ? detail.getAttribute('data-submitted') === '1' : false;
+        const requestIdInput = form.querySelector('input[name="apf_coord_request_id"]');
+        const nonceInput = form.querySelector('input[name="apf_coord_request_nonce"]');
+        const requestId = requestIdInput ? requestIdInput.value : '';
+        const nonceVal = nonceInput ? nonceInput.value : '';
         const status = payload.status || '';
-        const statusLabel = payload.status_label || payload.status || '';
+        const statusLabel = payload.status_label || payload.status || 'Pendente';
         const decisionLabel = payload.decision_label || '';
         const note = payload.note || '';
         wrapper.classList.remove('apf-coord-collab--pending','apf-coord-collab--approved','apf-coord-collab--rejected');
@@ -2389,18 +2423,92 @@ add_shortcode( 'apf_portal_coordenador', function () {
         const actions = wrapper.querySelector('.apf-coord-collab__actions');
         if(actions){
           actions.innerHTML = '';
-          const p = document.createElement('p');
-          p.className = 'apf-coord-collab__note';
-          p.textContent = decisionLabel ? (statusLabel + ' — ' + decisionLabel) : statusLabel;
-          actions.appendChild(p);
-          if(status === 'rejected' && note){
-            const detail = document.createElement('p');
-            detail.className = 'apf-coord-collab__note-detail';
-            const strong = document.createElement('strong');
-            strong.textContent = 'Motivo:';
-            detail.appendChild(strong);
-            detail.appendChild(document.createTextNode(' ' + note));
-            actions.appendChild(detail);
+          if(status === 'pending' || !status){
+            const pendingForm = document.createElement('form');
+            pendingForm.method = 'post';
+            pendingForm.className = 'apf-coord-request__actions';
+            if(nonceVal){
+              const nonceField = document.createElement('input');
+              nonceField.type = 'hidden';
+              nonceField.name = 'apf_coord_request_nonce';
+              nonceField.value = nonceVal;
+              pendingForm.appendChild(nonceField);
+            }
+            if(requestId){
+              const idField = document.createElement('input');
+              idField.type = 'hidden';
+              idField.name = 'apf_coord_request_id';
+              idField.value = requestId;
+              pendingForm.appendChild(idField);
+            }
+            const noteField = document.createElement('input');
+            noteField.type = 'hidden';
+            noteField.name = 'apf_coord_request_note';
+            noteField.value = '';
+            pendingForm.appendChild(noteField);
+
+            const approveBtn = document.createElement('button');
+            approveBtn.type = 'submit';
+            approveBtn.name = 'apf_coord_request_action';
+            approveBtn.value = 'approve';
+            approveBtn.className = 'apf-coord-btn apf-coord-btn--success';
+            approveBtn.textContent = 'Validar';
+
+            const rejectBtn = document.createElement('button');
+            rejectBtn.type = 'submit';
+            rejectBtn.name = 'apf_coord_request_action';
+            rejectBtn.value = 'reject';
+            rejectBtn.className = 'apf-coord-btn apf-coord-btn--danger';
+            rejectBtn.textContent = 'Recusar';
+
+            pendingForm.appendChild(approveBtn);
+            pendingForm.appendChild(rejectBtn);
+            actions.appendChild(pendingForm);
+            enhanceRequestForms(actions);
+          } else {
+            const p = document.createElement('p');
+            p.className = 'apf-coord-collab__note';
+            p.textContent = decisionLabel ? (statusLabel + ' — ' + decisionLabel) : statusLabel;
+            actions.appendChild(p);
+            if(status === 'rejected' && note){
+              const detailNote = document.createElement('p');
+              detailNote.className = 'apf-coord-collab__note-detail';
+              const strong = document.createElement('strong');
+              strong.textContent = 'Motivo:';
+              detailNote.appendChild(strong);
+              detailNote.appendChild(document.createTextNode(' ' + note));
+              actions.appendChild(detailNote);
+            }
+            if(!isSubmitted && requestId && nonceVal){
+              const revertForm = document.createElement('form');
+              revertForm.method = 'post';
+              revertForm.className = 'apf-coord-request__actions apf-coord-request__actions--inline apf-coord-request__edit-link-form';
+              const nonceField = document.createElement('input');
+              nonceField.type = 'hidden';
+              nonceField.name = 'apf_coord_request_nonce';
+              nonceField.value = nonceVal;
+              revertForm.appendChild(nonceField);
+              const idField = document.createElement('input');
+              idField.type = 'hidden';
+              idField.name = 'apf_coord_request_id';
+              idField.value = requestId;
+              revertForm.appendChild(idField);
+              const noteField = document.createElement('input');
+              noteField.type = 'hidden';
+              noteField.name = 'apf_coord_request_note';
+              noteField.value = '';
+              revertForm.appendChild(noteField);
+              const revertBtn = document.createElement('button');
+              revertBtn.type = 'submit';
+              revertBtn.name = 'apf_coord_request_action';
+              revertBtn.value = 'revert';
+              revertBtn.className = 'apf-coord-edit-link';
+              revertBtn.setAttribute('data-edit-request','');
+              revertBtn.textContent = 'Editar solicitação';
+              revertForm.appendChild(revertBtn);
+              actions.appendChild(revertForm);
+              enhanceRequestForms(actions);
+            }
           }
         }
       };
@@ -2494,9 +2602,9 @@ add_shortcode( 'apf_portal_coordenador', function () {
         const detailRef = form.closest('.apf-coord-request-detail');
         const fallbackDecision = new Date().toLocaleString('pt-BR');
         const fallbackPayload = {
-          status: actionValue === 'reject' ? 'rejected' : 'approved',
-          status_label: actionValue === 'reject' ? 'Recusado' : 'Aprovado',
-          decision_label: fallbackDecision,
+          status: actionValue === 'reject' ? 'rejected' : (actionValue === 'revert' ? 'pending' : 'approved'),
+          status_label: actionValue === 'reject' ? 'Recusado' : (actionValue === 'revert' ? 'Pendente' : 'Aprovado'),
+          decision_label: actionValue === 'revert' ? '' : fallbackDecision,
           note: actionValue === 'reject' && hiddenNote ? (hiddenNote.value || '') : '',
         };
         try{

@@ -255,6 +255,7 @@ if ( ! function_exists( 'apf_set_coordinator_request_status' ) ) {
 
         $requests = apf_get_coordinator_requests();
         $updated  = false;
+        $now      = time();
         foreach ( $requests as $index => $request ) {
             if ( ! is_array( $request ) || ! isset( $request['id'] ) ) {
                 continue;
@@ -267,11 +268,16 @@ if ( ! function_exists( 'apf_set_coordinator_request_status' ) ) {
                 return false;
             }
             $requests[ $index ]['status']      = $status;
-            $requests[ $index ]['updated_at']  = time();
-            $requests[ $index ]['decision_at'] = time();
-            $requests[ $index ]['decision_by'] = isset( $extra['user_id'] ) ? (int) $extra['user_id'] : get_current_user_id();
-            if ( isset( $extra['note'] ) ) {
-                $requests[ $index ]['decision_note'] = sanitize_text_field( $extra['note'] );
+            $requests[ $index ]['updated_at']  = $now;
+            if ( 'pending' === $status ) {
+                // Reabre a solicitação antes do envio ao financeiro.
+                unset( $requests[ $index ]['decision_at'], $requests[ $index ]['decision_by'], $requests[ $index ]['decision_note'] );
+            } else {
+                $requests[ $index ]['decision_at'] = $now;
+                $requests[ $index ]['decision_by'] = isset( $extra['user_id'] ) ? (int) $extra['user_id'] : get_current_user_id();
+                if ( isset( $extra['note'] ) ) {
+                    $requests[ $index ]['decision_note'] = sanitize_text_field( $extra['note'] );
+                }
             }
             $updated = true;
             break;
@@ -310,8 +316,9 @@ function apf_mark_coordinator_batch_submitted( $batch_id, $extra = array() ) {
             if ( $request['batch_id'] !== $batch_id ) {
                 continue;
             }
-            if ( isset( $request['status'] ) && 'approved' !== $request['status'] ) {
-                // Apenas aprovados seguem para o financeiro/FAEPA.
+            $current_status = isset( $request['status'] ) ? sanitize_key( $request['status'] ) : 'pending';
+            if ( 'pending' === $current_status ) {
+                // Não enviar pendentes; aguardam decisão do coordenador.
                 continue;
             }
             if ( ! empty( $request['batch_submitted'] ) ) {
@@ -329,6 +336,64 @@ function apf_mark_coordinator_batch_submitted( $batch_id, $extra = array() ) {
 
     return $updated;
 }
+}
+
+if ( ! function_exists( 'apf_mark_coordinator_request_paid' ) ) {
+    /**
+     * Marca uma solicitação como paga pela FAEPA.
+     *
+     * @param string $request_id
+     * @param array  $args { user_id?:int, timestamp?:int }
+     * @return bool
+     */
+    function apf_mark_coordinator_request_paid( $request_id, $args = array() ) {
+        $request_id = sanitize_text_field( (string) $request_id );
+        if ( '' === $request_id ) {
+            return false;
+        }
+        $requests  = apf_get_coordinator_requests();
+        $timestamp = isset( $args['timestamp'] ) ? (int) $args['timestamp'] : time();
+        $user_id   = isset( $args['user_id'] ) ? (int) $args['user_id'] : get_current_user_id();
+        $note      = isset( $args['note'] ) ? sanitize_textarea_field( $args['note'] ) : '';
+        $attachment_id = isset( $args['attachment_id'] ) ? (int) $args['attachment_id'] : 0;
+        $attachment_url = '';
+        if ( $attachment_id > 0 ) {
+            $maybe_url = wp_get_attachment_url( $attachment_id );
+            $attachment_url = $maybe_url ? esc_url_raw( $maybe_url ) : '';
+        }
+        $updated   = false;
+
+        foreach ( $requests as $index => $request ) {
+            if ( ! is_array( $request ) || ! isset( $request['id'] ) || $request['id'] !== $request_id ) {
+                continue;
+            }
+            $status = isset( $request['status'] ) ? sanitize_key( $request['status'] ) : 'pending';
+            if ( 'approved' !== $status ) {
+                // Apenas aprovados podem ser marcados como pagos.
+                return false;
+            }
+            $requests[ $index ]['faepa_paid']     = true;
+            $requests[ $index ]['faepa_paid_at']  = $timestamp;
+            $requests[ $index ]['faepa_paid_by']  = $user_id;
+            if ( '' !== $note ) {
+                $requests[ $index ]['faepa_payment_note'] = $note;
+            }
+            if ( $attachment_id > 0 ) {
+                $requests[ $index ]['faepa_payment_attachment_id']  = $attachment_id;
+                if ( $attachment_url ) {
+                    $requests[ $index ]['faepa_payment_attachment'] = $attachment_url;
+                }
+            }
+            $updated = true;
+            break;
+        }
+
+        if ( $updated ) {
+            apf_store_coordinator_requests( $requests );
+        }
+
+        return $updated;
+    }
 }
 
 if ( ! function_exists( 'apf_mark_coordinator_batch_forwarded' ) ) {
@@ -667,13 +732,13 @@ if ( ! function_exists( 'apf_coord_render_request_detail_inner' ) ) {
               <div class="apf-coord-collab__header">
                 <button type="button" class="apf-coord-collab__toggle" data-collab-toggle="<?php echo esc_attr( $panel_id ); ?>" aria-expanded="false" aria-controls="<?php echo esc_attr( $panel_id ); ?>">
                   <span class="apf-coord-collab__name"><?php echo esc_html( $entry['provider_name'] ?? '—' ); ?></span>
-                  <?php if ( $company_label && $company_label !== ( $entry['provider_name'] ?? '' ) ) : ?>
-                    <span class="apf-coord-collab__company"><?php echo esc_html( $company_label ); ?></span>
-                  <?php endif; ?>
                   <?php if ( $value_label ) : ?>
                     <span class="apf-coord-collab__value"><?php echo esc_html( $value_label ); ?></span>
                   <?php endif; ?>
                   <span class="apf-coord-collab__status-label"><?php echo esc_html( $status_label ); ?></span>
+                  <?php if ( $company_label && $company_label !== ( $entry['provider_name'] ?? '' ) ) : ?>
+                    <span class="apf-coord-collab__company"><?php echo esc_html( $company_label ); ?></span>
+                  <?php endif; ?>
                 </button>
                 <div class="apf-coord-collab__actions">
                   <?php if ( 'pending' === $status && ! $options['lock_actions'] ) : ?>
@@ -702,6 +767,14 @@ if ( ! function_exists( 'apf_coord_render_request_detail_inner' ) ) {
                       <p class="apf-coord-collab__note-detail">
                         <strong>Motivo:</strong> <?php echo esc_html( $entry['decision_note'] ); ?>
                       </p>
+                    <?php endif; ?>
+                    <?php if ( ! $options['lock_actions'] && 'pending' !== $status && empty( $entry['batch_submitted'] ) ) : ?>
+                      <form method="post" class="apf-coord-request__actions apf-coord-request__actions--inline apf-coord-request__edit-link-form">
+                        <?php wp_nonce_field( 'apf_coord_request', 'apf_coord_request_nonce' ); ?>
+                        <input type="hidden" name="apf_coord_request_id" value="<?php echo esc_attr( $entry['id'] ?? '' ); ?>">
+                        <input type="hidden" name="apf_coord_request_note" value="">
+                        <button type="submit" name="apf_coord_request_action" value="revert" class="apf-coord-edit-link" data-edit-request>Editar solicitação</button>
+                      </form>
                     <?php endif; ?>
                   <?php endif; ?>
                 </div>
@@ -754,7 +827,10 @@ if ( ! function_exists( 'apf_coord_render_request_detail_inner' ) ) {
                 <?php if ( 'rejected' === $status && ! empty( $entry['decision_note'] ) ) : ?>
                   <div class="apf-coord-collab__section">
                     <h5>Motivo da recusa</h5>
-                    <p class="apf-coord-collab__description"><?php echo esc_html( $entry['decision_note'] ); ?></p>
+                    <p class="apf-coord-collab__description">
+                      <strong>Motivo da recusa:</strong><br>
+                      <?php echo esc_html( $entry['decision_note'] ); ?>
+                    </p>
                   </div>
                 <?php endif; ?>
               </div>
