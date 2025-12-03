@@ -62,6 +62,20 @@ add_shortcode( 'apf_portal_coordenador', function () {
             $request_notice_type = 'error';
         }
     }
+    $build_collab_token = function( $email, $course, $dir_key ) {
+        $email = strtolower( trim( sanitize_email( (string) $email ) ) );
+        $course = strtolower( trim( sanitize_text_field( (string) $course ) ) );
+        $dir_key = strtolower( trim( sanitize_text_field( (string) $dir_key ) ) );
+        return 'collab_' . md5( $email . '|' . $course . '|' . $dir_key );
+    };
+    $alert_notice      = '';
+    $alert_notice_type = 'success';
+    if ( isset( $_GET['apf_coord_alert_notice'] ) ) {
+        $alert_notice = sanitize_text_field( wp_unslash( $_GET['apf_coord_alert_notice'] ) );
+        if ( isset( $_GET['apf_coord_alert_status'] ) && 'error' === sanitize_text_field( wp_unslash( $_GET['apf_coord_alert_status'] ) ) ) {
+            $alert_notice_type = 'error';
+        }
+    }
 
     if ( ! empty( $_POST['apf_coord_submit'] ) ) {
         if ( ! isset( $_POST['apf_coord_nonce'] ) || ! wp_verify_nonce( $_POST['apf_coord_nonce'], 'apf_coord_portal' ) ) {
@@ -488,6 +502,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
             }
             $event_id = isset( $event['id'] ) ? sanitize_text_field( (string) $event['id'] ) : '';
             $providers_only_faepa = ( '' !== $event_id && strpos( $event_id, 'faepa_pay_' ) === 0 );
+            $event_created_by = isset( $event['created_by'] ) ? (int) $event['created_by'] : 0;
             $title = isset( $event['title'] ) ? sanitize_text_field( $event['title'] ) : '';
             if ( '' === $title ) {
                 continue;
@@ -501,6 +516,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
             $providers_display = array();
             $coordinators_display = array();
 
+            $event_target_token = '';
             foreach ( $event['recipients'] as $recipient ) {
                 if ( ! is_array( $recipient ) ) {
                     continue;
@@ -538,6 +554,14 @@ add_shortcode( 'apf_portal_coordenador', function () {
                     $recipient_dir_key = isset( $recipient['director_key'] ) ? sanitize_text_field( $recipient['director_key'] ) : '';
                     $recipient_course  = isset( $recipient['course'] ) ? sanitize_text_field( $recipient['course'] ) : '';
                     $recipient_name_raw = isset( $recipient['director_name'] ) ? sanitize_text_field( $recipient['director_name'] ) : '';
+                    $recipient_token = '';
+                    if ( ! empty( $recipient['email'] ) ) {
+                        $recipient_token = $build_collab_token(
+                            sanitize_email( $recipient['email'] ),
+                            $recipient_course,
+                            $recipient_dir_key
+                        );
+                    }
                     $recipient_course_norm = strtolower( trim( $recipient_course ) );
                     $recipient_name_norm   = strtolower( trim( $recipient_name_raw ) );
 
@@ -561,6 +585,9 @@ add_shortcode( 'apf_portal_coordenador', function () {
                         $matched_providers = true;
                         if ( '' !== $recipient_display ) {
                             $providers_display[] = $recipient_display;
+                        }
+                        if ( '' === $event_target_token && $recipient_token ) {
+                            $event_target_token = $recipient_token;
                         }
                     }
                 }
@@ -598,8 +625,13 @@ add_shortcode( 'apf_portal_coordenador', function () {
                 $event_groups[] = 'providers';
             }
 
+            $event_editable = ( strpos( $event_id, 'coord_msg_' ) === 0 && $event_created_by === $user_id && $event_target_token );
             $calendar_events_map[ $date ]['events'][] = array(
+                'id'         => $event_id,
                 'title'      => $title,
+                'editable'   => (bool) $event_editable,
+                'target_token' => $event_target_token,
+                'created_by' => $event_created_by,
                 'groups'     => $event_groups,
                 'recipients' => array(
                     'providers'    => array_values( array_unique( array_map( 'sanitize_text_field', $providers_display ) ) ),
@@ -660,9 +692,13 @@ add_shortcode( 'apf_portal_coordenador', function () {
                     }
 
                     $events_payload[] = array(
-                        'title'      => $entry_title,
-                        'groups'     => $entry_groups,
-                        'recipients' => $entry_recipients,
+                        'id'          => isset( $entry['id'] ) ? sanitize_text_field( (string) $entry['id'] ) : '',
+                        'title'       => $entry_title,
+                        'editable'    => ! empty( $entry['editable'] ),
+                        'target_token'=> isset( $entry['target_token'] ) ? sanitize_text_field( (string) $entry['target_token'] ) : '',
+                        'created_by'  => isset( $entry['created_by'] ) ? (int) $entry['created_by'] : 0,
+                        'groups'      => $entry_groups,
+                        'recipients'  => $entry_recipients,
                     );
                 }
             }
@@ -686,6 +722,58 @@ add_shortcode( 'apf_portal_coordenador', function () {
     }
 
     $coord_calendar_attr = esc_attr( wp_json_encode( $calendar_events, JSON_UNESCAPED_UNICODE ) );
+    $coord_editable_events = array();
+    if ( $has_portal_access && function_exists( 'apf_scheduler_get_events' ) ) {
+        $scheduler_events = apf_scheduler_get_events();
+        if ( is_array( $scheduler_events ) ) {
+            foreach ( $scheduler_events as $evt ) {
+                if ( ! is_array( $evt ) ) {
+                    continue;
+                }
+                $evt_id = isset( $evt['id'] ) ? sanitize_text_field( (string) $evt['id'] ) : '';
+                if ( '' === $evt_id || strpos( $evt_id, 'coord_msg_' ) !== 0 ) {
+                    continue;
+                }
+                $evt_created_by = isset( $evt['created_by'] ) ? (int) $evt['created_by'] : 0;
+                if ( $evt_created_by !== $user_id ) {
+                    continue;
+                }
+                $evt_date = isset( $evt['date'] ) ? preg_replace( '/[^0-9\-]/', '', (string) $evt['date'] ) : '';
+                if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $evt_date ) ) {
+                    continue;
+                }
+                $evt_title = isset( $evt['title'] ) ? sanitize_text_field( $evt['title'] ) : '';
+                $evt_rec   = isset( $evt['recipients'] ) && is_array( $evt['recipients'] ) ? $evt['recipients'] : array();
+                $target_token = '';
+                foreach ( $evt_rec as $recipient ) {
+                    if ( ! is_array( $recipient ) ) {
+                        continue;
+                    }
+                    $group = isset( $recipient['group'] ) ? sanitize_key( $recipient['group'] ) : 'providers';
+                    if ( 'providers' !== $group ) {
+                        continue;
+                    }
+                    $email   = isset( $recipient['email'] ) ? sanitize_email( $recipient['email'] ) : '';
+                    $course  = isset( $recipient['course'] ) ? sanitize_text_field( $recipient['course'] ) : $current_course;
+                    $dir_key = isset( $recipient['director_key'] ) ? sanitize_text_field( $recipient['director_key'] ) : $coordinator_key;
+                    $candidate_token = $build_collab_token( $email, $course, $dir_key );
+                    if ( '' === $target_token && '' !== $candidate_token ) {
+                        $target_token = $candidate_token;
+                    }
+                }
+                if ( '' === $target_token ) {
+                    continue;
+                }
+                $coord_editable_events[] = array(
+                    'id'     => $evt_id,
+                    'date'   => $evt_date,
+                    'title'  => $evt_title,
+                    'token'  => $target_token,
+                );
+            }
+        }
+    }
+    $coord_editable_events_attr = esc_attr( wp_json_encode( $coord_editable_events, JSON_UNESCAPED_UNICODE ) );
 
     $coordinator_requests       = array();
     $coordinator_pending_count  = 0;
@@ -795,6 +883,50 @@ add_shortcode( 'apf_portal_coordenador', function () {
         }
         unset( $group_info );
     }
+    $coord_alert_default_date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : date_i18n( 'Y-m-d' );
+    $coord_collaborators      = array();
+    $coord_collaborators_index = array();
+    if ( $has_portal_access && ! empty( $coordinator_requests ) ) {
+        $seen_emails = array();
+        foreach ( $coordinator_requests as $entry ) {
+            if ( ! is_array( $entry ) ) {
+                continue;
+            }
+            $email = isset( $entry['provider_email'] ) ? sanitize_email( $entry['provider_email'] ) : '';
+            if ( '' === $email ) {
+                continue;
+            }
+            $email_lower = strtolower( $email );
+            if ( isset( $seen_emails[ $email_lower ] ) ) {
+                continue;
+            }
+
+            $name   = isset( $entry['provider_name'] ) ? sanitize_text_field( $entry['provider_name'] ) : '';
+            $course = isset( $entry['course'] ) ? sanitize_text_field( $entry['course'] ) : $current_course;
+            $dir_key = isset( $entry['coordinator_key'] ) ? sanitize_text_field( $entry['coordinator_key'] ) : $coordinator_key;
+            $token        = $build_collab_token( $email, $course, $dir_key );
+
+            $collab_payload = array(
+                'token'         => $token,
+                'name'          => $name ?: $email,
+                'email'         => $email,
+                'course'        => $course,
+                'director_key'  => $dir_key ?: $coordinator_key,
+                'director_name' => isset( $entry['coordinator_name'] ) ? sanitize_text_field( $entry['coordinator_name'] ) : $current_name,
+                'user_id'       => isset( $entry['provider_user_id'] ) ? (int) $entry['provider_user_id'] : 0,
+            );
+
+            $coord_collaborators[]          = $collab_payload;
+            $coord_collaborators_index[ $token ] = $collab_payload;
+            $seen_emails[ $email_lower ]    = true;
+        }
+        if ( ! empty( $coord_collaborators ) ) {
+            usort( $coord_collaborators, function( $a, $b ) {
+                return strcasecmp( $a['name'] ?? '', $b['name'] ?? '' );
+            } );
+        }
+    }
+
     $visible_request_groups   = $coordinator_request_groups;
     $archived_request_groups  = array();
     $max_visible_request_cards = count( $coordinator_request_groups );
@@ -811,6 +943,178 @@ add_shortcode( 'apf_portal_coordenador', function () {
     }
     $has_archived_requests = ! empty( $archived_request_groups );
     $archive_icon_url = plugins_url( 'imgs/box-archive-svgrepo-com.svg', dirname( __DIR__ ) . '/fomulario_pagamento_faepa.php' );
+
+    if ( isset( $_POST['apf_coord_alert_submit'] ) ) {
+        if ( ! isset( $_POST['apf_coord_alert_nonce'] ) || ! wp_verify_nonce( $_POST['apf_coord_alert_nonce'], 'apf_coord_alert' ) ) {
+            $alert_notice      = 'Não foi possível validar sua solicitação. Recarregue a página e tente novamente.';
+            $alert_notice_type = 'error';
+        } elseif ( ! $has_portal_access ) {
+            $alert_notice      = 'Aguarde a aprovação do financeiro para enviar avisos.';
+            $alert_notice_type = 'error';
+        } elseif ( empty( $coord_collaborators_index ) ) {
+            $alert_notice      = 'Nenhum colaborador disponível para receber avisos.';
+            $alert_notice_type = 'error';
+        } elseif ( ! function_exists( 'apf_scheduler_get_events' ) || ! function_exists( 'apf_scheduler_store_events' ) || ! function_exists( 'apf_scheduler_make_recipient_key' ) ) {
+            $alert_notice      = 'Módulo de avisos indisponível no momento.';
+            $alert_notice_type = 'error';
+        } else {
+            $action = isset( $_POST['apf_coord_alert_action'] ) ? sanitize_key( wp_unslash( $_POST['apf_coord_alert_action'] ) ) : 'add';
+            $event_id = isset( $_POST['apf_coord_alert_event'] ) ? sanitize_text_field( wp_unslash( $_POST['apf_coord_alert_event'] ) ) : '';
+            $title = isset( $_POST['apf_coord_alert_title'] ) ? sanitize_text_field( wp_unslash( $_POST['apf_coord_alert_title'] ) ) : '';
+            if ( function_exists( 'mb_substr' ) ) {
+                $title = trim( mb_substr( $title, 0, 120 ) );
+            } else {
+                $title = trim( substr( $title, 0, 120 ) );
+            }
+            $date = isset( $_POST['apf_coord_alert_date'] )
+                ? preg_replace( '/[^0-9\-]/', '', (string) wp_unslash( $_POST['apf_coord_alert_date'] ) )
+                : '';
+            if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
+                $date = $coord_alert_default_date;
+            }
+            $tokens = array();
+            if ( isset( $_POST['apf_coord_alert_targets'] ) ) {
+                $raw_tokens = wp_unslash( $_POST['apf_coord_alert_targets'] );
+                if ( is_array( $raw_tokens ) ) {
+                    foreach ( $raw_tokens as $raw_token ) {
+                        $token = sanitize_text_field( (string) $raw_token );
+                        if ( '' !== $token ) {
+                            $tokens[] = $token;
+                        }
+                    }
+                }
+            }
+            $tokens = array_values( array_unique( $tokens ) );
+
+            $selected = array();
+            foreach ( $tokens as $token ) {
+                if ( isset( $coord_collaborators_index[ $token ] ) ) {
+                    $selected[] = $coord_collaborators_index[ $token ];
+                }
+            }
+
+            $scheduler_events = apf_scheduler_get_events();
+            $event_index      = null;
+            if ( '' !== $event_id && is_array( $scheduler_events ) ) {
+                foreach ( $scheduler_events as $idx => $evt ) {
+                    $evt_id = isset( $evt['id'] ) ? sanitize_text_field( (string) $evt['id'] ) : '';
+                    if ( $evt_id === $event_id ) {
+                        $event_index = $idx;
+                        break;
+                    }
+                }
+            }
+
+            $editable_target = false;
+            if ( null !== $event_index && isset( $scheduler_events[ $event_index ] ) ) {
+                $evt = $scheduler_events[ $event_index ];
+                $editable_target = (
+                    is_array( $evt )
+                    && isset( $evt['created_by'] )
+                    && (int) $evt['created_by'] === $user_id
+                    && isset( $evt['id'] )
+                    && strpos( (string) $evt['id'], 'coord_msg_' ) === 0
+                );
+            }
+
+            if ( 'delete' === $action ) {
+                if ( ! $editable_target || null === $event_index ) {
+                    $alert_notice      = 'Você só pode excluir avisos criados por você.';
+                    $alert_notice_type = 'error';
+                } else {
+                    unset( $scheduler_events[ $event_index ] );
+                    $scheduler_events = array_values( $scheduler_events );
+                    apf_scheduler_store_events( $scheduler_events );
+                    $alert_notice      = 'Aviso excluído.';
+                    $alert_notice_type = 'success';
+                }
+            } else {
+                if ( '' === $title ) {
+                    $alert_notice      = 'Descreva rapidamente o assunto do aviso.';
+                    $alert_notice_type = 'error';
+                } elseif ( empty( $selected ) ) {
+                    $alert_notice      = 'Selecione ao menos um colaborador.';
+                    $alert_notice_type = 'error';
+                } else {
+                    $recipient_payload = array();
+                    $recipient_keys    = array();
+
+                    foreach ( $selected as $collab ) {
+                        $recipient_key = apf_scheduler_make_recipient_key(
+                            isset( $collab['user_id'] ) ? (int) $collab['user_id'] : 0,
+                            $collab['email'],
+                            'providers'
+                        );
+                        if ( '' === $recipient_key ) {
+                            $recipient_key = 'email_' . strtolower( $collab['email'] ) . '_providers';
+                        }
+                        if ( isset( $recipient_keys[ $recipient_key ] ) ) {
+                            continue;
+                        }
+                        $recipient_keys[ $recipient_key ] = true;
+                        $recipient_payload[] = array(
+                            'key'           => $recipient_key,
+                            'user_id'       => isset( $collab['user_id'] ) ? (int) $collab['user_id'] : 0,
+                            'name'          => $collab['name'] ?: $collab['email'],
+                            'email'         => $collab['email'],
+                            'group'         => 'providers',
+                            'director_key'  => $collab['director_key'] ?: $coordinator_key,
+                            'director_name' => $collab['director_name'] ?: $current_name,
+                            'course'        => $collab['course'] ?: $current_course,
+                        );
+                    }
+
+                    if ( empty( $recipient_payload ) ) {
+                        $alert_notice      = 'Não foi possível montar os destinatários do aviso.';
+                        $alert_notice_type = 'error';
+                    } else {
+                        if ( 'update' === $action ) {
+                            if ( ! $editable_target || null === $event_index ) {
+                                $alert_notice      = 'Você só pode editar avisos criados por você.';
+                                $alert_notice_type = 'error';
+                            } else {
+                                $scheduler_events[ $event_index ]['date']       = $date;
+                                $scheduler_events[ $event_index ]['title']      = $title;
+                                $scheduler_events[ $event_index ]['recipients'] = $recipient_payload;
+                                $scheduler_events[ $event_index ]['updated_at'] = time();
+                                $scheduler_events[ $event_index ]['updated_by'] = $user_id;
+                                apf_scheduler_store_events( $scheduler_events );
+                                $alert_notice      = 'Aviso atualizado.';
+                                $alert_notice_type = 'success';
+                            }
+                        } else {
+                            $scheduler_events[] = array(
+                                'id'         => 'coord_msg_' . uniqid(),
+                                'date'       => $date,
+                                'title'      => $title,
+                                'recipients' => $recipient_payload,
+                                'created_by' => $user_id,
+                                'created_at' => time(),
+                            );
+                            apf_scheduler_store_events( $scheduler_events );
+                            $alert_notice      = 'Aviso enviado aos colaboradores selecionados.';
+                            $alert_notice_type = 'success';
+                        }
+                    }
+                }
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_coord_alert_notice', 'apf_coord_alert_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_coord_alert_notice' => $alert_notice,
+            'apf_coord_alert_status' => ( 'success' === $alert_notice_type ) ? 'success' : 'error',
+        ), $target );
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
 
     $status_message = '';
     $status_class   = 'info';
@@ -981,15 +1285,6 @@ add_shortcode( 'apf_portal_coordenador', function () {
                     $group_pending  = isset( $group['pending'] ) ? (int) $group['pending'] : 0;
                     $group_approved = isset( $group['approved'] ) ? (int) $group['approved'] : 0;
                     $group_rejected = isset( $group['rejected'] ) ? (int) $group['rejected'] : 0;
-                    $group_summary = $group['message']
-                        ? wp_trim_words( $group['message'], 28, '…' )
-                        : 'Sem observações adicionais.';
-                    $names = array();
-                    foreach ( $group['items'] as $item ) {
-                        $names[] = $item['entry']['provider_name'] ?? '—';
-                    }
-                    $preview_names = array_slice( $names, 0, 3 );
-                    $extra_names   = max( 0, $group_total - count( $preview_names ) );
                     $group_submitted = ! empty( $group['batch_submitted'] );
                     $badge_state = 'pending';
                     if ( $group_submitted ) {
@@ -1016,17 +1311,6 @@ add_shortcode( 'apf_portal_coordenador', function () {
                       </div>
                       <span class="apf-coord-request-card__badge"><?php echo esc_html( $badge_text ); ?></span>
                     </header>
-                    <p class="apf-coord-request-card__excerpt"><?php echo esc_html( $group_summary ); ?></p>
-                    <?php if ( ! empty( $preview_names ) ) : ?>
-                      <ul class="apf-coord-request-card__people">
-                        <?php foreach ( $preview_names as $name ) : ?>
-                          <li><?php echo esc_html( $name ); ?></li>
-                        <?php endforeach; ?>
-                        <?php if ( $extra_names > 0 ) : ?>
-                          <li>+<?php echo esc_html( $extra_names . ' colaborador(es)' ); ?></li>
-                        <?php endif; ?>
-                      </ul>
-                    <?php endif; ?>
                     <div class="apf-coord-request-card__foot">
                       <span><?php echo esc_html( $group_total . ' colaborador(es)' ); ?></span>
                       <button type="button" class="apf-coord-btn apf-coord-btn--primary" data-request-modal="<?php echo esc_attr( $group_id ); ?>">
@@ -1150,15 +1434,69 @@ add_shortcode( 'apf_portal_coordenador', function () {
             </div>
           </div>
 
-          <div class="apf-coord-calendar" id="apfCoordCalendar" data-events="<?php echo $coord_calendar_attr; ?>">
+          <div class="apf-coord-calendar" id="apfCoordCalendar" data-events="<?php echo $coord_calendar_attr; ?>" data-compose-events="<?php echo $coord_editable_events_attr; ?>" data-user-id="<?php echo esc_attr( $user_id ); ?>">
             <div class="apf-coord-calendar__filters" aria-label="Filtrar agenda">
               <button type="button" class="apf-coord-calendar__filter is-active" data-calendar-filter="coordinators">Minha agenda</button>
               <button type="button" class="apf-coord-calendar__filter" data-calendar-filter="providers">Agenda dos colaboradores</button>
             </div>
-            <div class="apf-coord-calendar__body"></div>
-            <div class="apf-coord-calendar__legend" aria-label="Legenda do calendário">
-              <span><span class="apf-coord-calendar__legend-dot apf-coord-calendar__legend-dot--providers" aria-hidden="true"></span> Colaboradores</span>
-              <span><span class="apf-coord-calendar__legend-dot apf-coord-calendar__legend-dot--coordinators" aria-hidden="true"></span> Coordenadores</span>
+            <div class="apf-coord-calendar__wrap">
+              <div class="apf-coord-calendar__body"></div>
+              <div class="apf-coord-calendar__compose" id="apfCoordCompose" aria-hidden="true">
+                <div class="apf-coord-calendar__compose-head">
+                  <div>
+                    <p class="apf-coord-calendar__eyebrow">Agenda dos colaboradores</p>
+                    <h4>Enviar aviso</h4>
+                    <p class="apf-coord-calendar__hint">Selecione um dia no calendário, escolha o destinatário e envie a mensagem.</p>
+                  </div>
+                  <span class="apf-coord-alerts__pill">Somente seu curso</span>
+                </div>
+                <?php if ( $alert_notice ) : ?>
+                  <div class="apf-coord-notice apf-coord-notice--<?php echo esc_attr( $alert_notice_type ); ?>">
+                    <?php echo esc_html( $alert_notice ); ?>
+                  </div>
+                <?php endif; ?>
+                <form method="post" class="apf-coord-calendar__form" id="apfCoordAlertForm">
+                  <?php wp_nonce_field( 'apf_coord_alert', 'apf_coord_alert_nonce' ); ?>
+                  <input type="hidden" name="apf_coord_alert_submit" value="1">
+                  <input type="hidden" name="apf_coord_alert_action" id="apfCoordComposeAction" value="add">
+                  <input type="hidden" name="apf_coord_alert_event" id="apfCoordComposeEvent" value="">
+                  <input type="hidden" name="apf_coord_alert_date" id="apfCoordComposeDate" value="<?php echo esc_attr( $coord_alert_default_date ); ?>">
+                  <div class="apf-coord-calendar__form-grid">
+                    <div class="apf-coord-calendar__field">
+                      <span>Dia selecionado</span>
+                      <strong id="apfCoordComposeDateLabel"><?php echo esc_html( date_i18n( 'd/m/Y', strtotime( $coord_alert_default_date ) ) ); ?></strong>
+                      <p class="apf-coord-calendar__form-hint">Clique em um dia na agenda dos colaboradores para alterar.</p>
+                    </div>
+                    <label class="apf-coord-calendar__field">
+                      <span>Colaborador</span>
+                      <select name="apf_coord_alert_targets[]" id="apfCoordComposeTarget" required>
+                        <option value="">Selecione</option>
+                        <?php foreach ( $coord_collaborators as $collab ) : ?>
+                          <option value="<?php echo esc_attr( $collab['token'] ); ?>">
+                            <?php echo esc_html( $collab['name'] ); ?> — <?php echo esc_html( $collab['email'] ); ?>
+                          </option>
+                        <?php endforeach; ?>
+                      </select>
+                      <?php if ( empty( $coord_collaborators ) ) : ?>
+                        <p class="apf-coord-calendar__form-hint">Nenhum colaborador disponível ainda.</p>
+                      <?php endif; ?>
+                    </label>
+                    <label class="apf-coord-calendar__field apf-coord-calendar__field--wide">
+                      <span>Mensagem</span>
+                      <input type="text" name="apf_coord_alert_title" maxlength="120" placeholder="Ex.: Enviar nota fiscal até sexta-feira" required>
+                    </label>
+                  </div>
+                  <div class="apf-coord-calendar__form-actions">
+                    <button type="submit" class="apf-coord-btn" <?php echo empty( $coord_collaborators ) ? 'disabled' : ''; ?>>Enviar aviso</button>
+                    <button type="button" class="apf-coord-btn apf-coord-btn--ghost-danger" id="apfCoordComposeDelete" hidden>Excluir aviso</button>
+                    <p class="apf-coord-calendar__form-hint">O aviso aparecerá no dia selecionado para o colaborador escolhido.</p>
+                  </div>
+                </form>
+              </div>
+            </div>
+            <div class="apf-coord-calendar__legend" aria-label="Legenda do calendário" id="apfCoordLegend">
+              <span data-legend="providers-other"><span class="apf-coord-calendar__legend-dot apf-coord-calendar__legend-dot--providers" aria-hidden="true"></span> Avisos do financeiro</span>
+              <span data-legend="providers-own"><span class="apf-coord-calendar__legend-dot apf-coord-calendar__legend-dot--providers-own" aria-hidden="true"></span> Avisos que eu enviei</span>
             </div>
           </div>
         <?php if ( empty( $calendar_events ) ) : ?>
@@ -1173,22 +1511,44 @@ add_shortcode( 'apf_portal_coordenador', function () {
               <h4 id="apfCoordModalTitle">Avisos da data</h4>
               <button type="button" class="apf-coord-modal__close" data-modal-close aria-label="Fechar">&times;</button>
             </div>
-            <div class="apf-coord-modal__content">
-              <p class="apf-coord-modal__empty">Nenhum aviso programado para esta data.</p>
-              <div class="apf-coord-modal__items"></div>
-            </div>
+          <div class="apf-coord-modal__content">
+            <p class="apf-coord-modal__empty">Nenhum aviso programado para esta data.</p>
+            <div class="apf-coord-modal__items"></div>
           </div>
         </div>
-        <?php elseif ( $blocked_message ) : ?>
-          <div class="apf-coord-blocked">
-            <p><?php echo esc_html( $blocked_message ); ?></p>
+      </div>
+      <div class="apf-coord-alert-edit" id="apfCoordAlertEdit" aria-hidden="true">
+        <div class="apf-coord-alert-edit__overlay" data-alert-edit-close></div>
+        <div class="apf-coord-alert-edit__dialog" role="dialog" aria-modal="true" aria-labelledby="apfCoordAlertEditTitle">
+          <div class="apf-coord-alert-edit__head">
+            <h5 id="apfCoordAlertEditTitle">Editar aviso</h5>
+            <p>Altere o destinatário ou a mensagem e salve.</p>
           </div>
-        <?php endif; ?>
+          <label class="apf-coord-alert-edit__field">
+            <span>Colaborador</span>
+            <select id="apfCoordAlertEditTarget" required>
+              <option value="">Selecione</option>
+            </select>
+          </label>
+          <label class="apf-coord-alert-edit__field">
+            <span>Mensagem</span>
+            <input type="text" id="apfCoordAlertEditMessage" maxlength="120" placeholder="Ex.: Enviar nota fiscal até sexta-feira" required>
+          </label>
+          <div class="apf-coord-alert-edit__actions">
+            <button type="button" class="apf-coord-btn apf-coord-btn--ghost" data-alert-edit-cancel>Cancelar</button>
+            <button type="button" class="apf-coord-btn" data-alert-edit-save>Salvar alterações</button>
+          </div>
+        </div>
+      </div>
+      <?php elseif ( $blocked_message ) : ?>
+        <div class="apf-coord-blocked">
+          <p><?php echo esc_html( $blocked_message ); ?></p>
+        </div>
+      <?php endif; ?>
       </div>
     </div>
     <style>
       .apf-coord-card{
-        max-width:520px;
         margin:24px auto;
         background:#fff;
         border-radius:16px;
@@ -2039,12 +2399,106 @@ add_shortcode( 'apf_portal_coordenador', function () {
       .apf-coord-btn--danger:hover{
         background:#991b1b;
       }
+      .apf-coord-alerts__pill{
+        align-self:flex-start;
+        background:#eef2ff;
+        color:#3730a3;
+        border-radius:999px;
+        padding:6px 10px;
+        font-size:12px;
+        font-weight:700;
+        border:1px solid #c7d2fe;
+      }
       .apf-coord-calendar{
         margin-top:16px;
         border:1px solid #e4e7ec;
         border-radius:16px;
         background:#f7f8fb;
         padding:16px;
+      }
+      .apf-coord-calendar__wrap{
+        display:grid;
+        grid-template-columns:1fr;
+        gap:12px;
+        align-items:start;
+      }
+      .apf-coord-calendar__wrap.has-compose{
+        grid-template-columns:2fr 1fr;
+      }
+      .apf-coord-calendar__compose{
+        border:1px dashed #d0d5dd;
+        border-radius:14px;
+        padding:14px;
+        background:#fff;
+        margin-bottom:0;
+        display:none;
+        flex-direction:column;
+        gap:12px;
+      }
+      .apf-coord-calendar__compose[aria-hidden="false"]{
+        display:flex;
+      }
+      .apf-coord-calendar__compose-head{
+        display:flex;
+        justify-content:space-between;
+        gap:12px;
+        align-items:flex-start;
+      }
+      .apf-coord-calendar__compose h4{
+        margin:2px 0 6px;
+        font-size:18px;
+        color:#0f172a;
+      }
+      .apf-coord-calendar__eyebrow{
+        margin:0;
+        font-size:12px;
+        font-weight:700;
+        text-transform:uppercase;
+        letter-spacing:.05em;
+        color:#475467;
+      }
+      .apf-coord-calendar__form{
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+      }
+      .apf-coord-calendar__form-grid{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        gap:12px;
+      }
+      .apf-coord-calendar__field{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+        font-size:13px;
+        color:#344054;
+      }
+      .apf-coord-calendar__field strong{
+        font-size:16px;
+        color:#0f172a;
+      }
+      .apf-coord-calendar__field input,
+      .apf-coord-calendar__field select{
+        border:1px solid #d0d5dd;
+        border-radius:10px;
+        padding:10px 12px;
+        font-size:14px;
+        background:#fff;
+      }
+      .apf-coord-calendar__field--wide{
+        grid-column:1 / -1;
+      }
+      .apf-coord-calendar__form-hint{
+        margin:0;
+        font-size:12px;
+        color:#667085;
+      }
+      .apf-coord-calendar__form-actions{
+        display:flex;
+        align-items:center;
+        gap:12px;
+        flex-wrap:wrap;
       }
       .apf-coord-calendar__filters{
         display:flex;
@@ -2082,6 +2536,15 @@ add_shortcode( 'apf_portal_coordenador', function () {
         font-size:12px;
         color:#475467;
       }
+      .apf-coord-calendar__day--selectable{
+        cursor:pointer;
+        box-shadow:0 0 0 1px transparent;
+      }
+      .apf-coord-calendar__day--selected{
+        border-color:#0f172a;
+        background:#e0f2fe;
+        box-shadow:0 0 0 2px rgba(31,111,235,0.2);
+      }
       .apf-coord-calendar__legend-dot{
         display:inline-block;
         width:10px;
@@ -2092,8 +2555,8 @@ add_shortcode( 'apf_portal_coordenador', function () {
       .apf-coord-calendar__legend-dot--providers{
         background:#1f6feb;
       }
-      .apf-coord-calendar__legend-dot--coordinators{
-        background:#f97316;
+      .apf-coord-calendar__legend-dot--providers-own{
+        background:#7c3aed;
       }
       .apf-coord-calendar__inner{
         display:flex;
@@ -2162,6 +2625,9 @@ add_shortcode( 'apf_portal_coordenador', function () {
       .apf-coord-calendar__day--group-providers{
         border-color:#1f6feb;
       }
+      .apf-coord-calendar__day--group-providers-own{
+        border-color:#7c3aed;
+      }
       .apf-coord-calendar__day--group-coordinators{
         border-color:#f97316;
       }
@@ -2187,6 +2653,9 @@ add_shortcode( 'apf_portal_coordenador', function () {
       }
       .apf-coord-calendar__marker--coordinators{
         background:#f97316;
+      }
+      .apf-coord-calendar__marker--providers-own{
+        background:#7c3aed;
       }
       .apf-coord-calendar__empty,
       .apf-coord-calendar__hint{
@@ -2320,10 +2789,123 @@ add_shortcode( 'apf_portal_coordenador', function () {
         border-bottom:1px solid #e5e7eb;
       }
       .apf-coord-modal__collab-list li:last-child{border-bottom:none}
+      .apf-coord-alert-edit{
+        position:fixed;
+        inset:0;
+        z-index:1400;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        background:rgba(15,23,42,.45);
+        opacity:0;
+        visibility:hidden;
+        pointer-events:none;
+        transition:opacity .2s ease;
+      }
+      .apf-coord-alert-edit[aria-hidden="false"]{
+        opacity:1;
+        visibility:visible;
+        pointer-events:auto;
+      }
+      .apf-coord-alert-edit__overlay{
+        position:absolute;
+        inset:0;
+      }
+      .apf-coord-alert-edit__dialog{
+        position:relative;
+        width:min(440px, calc(100vw - 32px));
+        background:#fff;
+        border-radius:16px;
+        border:1px solid #e4e7ec;
+        box-shadow:0 26px 50px rgba(15,23,42,.35);
+        padding:18px 20px;
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+      }
+      .apf-coord-alert-edit__head h5{
+        margin:0;
+        font-size:17px;
+        color:#0f172a;
+      }
+      .apf-coord-alert-edit__head p{
+        margin:4px 0 0;
+        font-size:13px;
+        color:#475467;
+      }
+      .apf-coord-alert-edit__field{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+        font-size:13px;
+        color:#344054;
+      }
+      .apf-coord-alert-edit__field input,
+      .apf-coord-alert-edit__field select{
+        border:1px solid #d0d5dd;
+        border-radius:10px;
+        padding:9px 10px;
+        font-size:14px;
+        background:#fff;
+      }
+      .apf-coord-alert-edit__actions{
+        display:flex;
+        gap:10px;
+        flex-wrap:wrap;
+        align-items:center;
+        margin-top:6px;
+      }
+      .apf-coord-modal__actions{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        align-items:center;
+      }
+      .apf-coord-modal__edit{
+        margin-top:8px;
+        padding-top:10px;
+        border-top:1px solid #e4e7ec;
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+      }
+      .apf-coord-modal__field{
+        display:flex;
+        flex-direction:column;
+        gap:4px;
+        font-size:13px;
+        color:#344054;
+      }
+      .apf-coord-modal__field input,
+      .apf-coord-modal__field select{
+        border:1px solid #d0d5dd;
+        border-radius:10px;
+        padding:8px 10px;
+        font-size:14px;
+        background:#fff;
+      }
+      .apf-coord-modal__edit-actions{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        align-items:center;
+      }
       @media(max-width:640px){
         .apf-coord-card{
           margin:16px;
           padding:20px;
+        }
+        .apf-coord-calendar__wrap,
+        .apf-coord-calendar__wrap.has-compose{
+          grid-template-columns:1fr;
+        }
+        .apf-coord-alerts__grid{
+          grid-template-columns:1fr;
+        }
+        .apf-coord-alerts__head,
+        .apf-coord-alerts__list-head{
+          flex-direction:column;
+          align-items:flex-start;
         }
         .apf-coord-calendar__weekdays,
         .apf-coord-calendar__days{
@@ -2347,7 +2929,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
         try{
           const url = new URL(window.location.href);
           let changed = false;
-          ['apf_coord_notice','apf_coord_status','apf_coord_req_notice','apf_coord_req_status'].forEach(param=>{
+          ['apf_coord_notice','apf_coord_status','apf_coord_req_notice','apf_coord_req_status','apf_coord_alert_notice','apf_coord_alert_status'].forEach(param=>{
             if(url.searchParams.has(param)){
               url.searchParams.delete(param);
               changed = true;
@@ -2407,6 +2989,11 @@ add_shortcode( 'apf_portal_coordenador', function () {
       if(form){
         form.addEventListener('submit', dismissCoordMessages);
         form.addEventListener('input', dismissCoordMessages, { once:true });
+      }
+      const alertForm = document.getElementById('apfCoordAlertForm');
+      if(alertForm){
+        alertForm.addEventListener('submit', dismissCoordMessages);
+        alertForm.addEventListener('input', dismissCoordMessages, { once:true });
       }
       let rejectModalForm = null;
       let rejectModalNoteInput = null;
@@ -2976,6 +3563,11 @@ add_shortcode( 'apf_portal_coordenador', function () {
           closeRejectOverlay();
           return;
         }
+        if(e.key === 'Escape' && alertEditOverlay && alertEditOverlay.getAttribute('aria-hidden') === 'false'){
+          e.preventDefault();
+          closeAlertEditOverlay();
+          return;
+        }
         if(e.key === 'Escape' && requestModal && requestModal.getAttribute('aria-hidden') === 'false'){
           e.preventDefault();
           closeRequestModal();
@@ -2993,8 +3585,122 @@ add_shortcode( 'apf_portal_coordenador', function () {
       const coordModalItems = coordModal ? coordModal.querySelector('.apf-coord-modal__items') : null;
       const coordModalEmpty = coordModal ? coordModal.querySelector('.apf-coord-modal__empty') : null;
       const coordModalClose = coordModal ? $$('[data-modal-close]', coordModal) : [];
+      const composeBox = document.getElementById('apfCoordCompose');
+      const calendarWrap = calendarNode ? calendarNode.querySelector('.apf-coord-calendar__wrap') : null;
+      const composeForm = document.getElementById('apfCoordAlertForm');
+      const composeDateInput = document.getElementById('apfCoordComposeDate');
+      const composeDateLabel = document.getElementById('apfCoordComposeDateLabel');
+      const composeTarget = document.getElementById('apfCoordComposeTarget');
+      const composeAction = document.getElementById('apfCoordComposeAction');
+      const composeEvent = document.getElementById('apfCoordComposeEvent');
+      const composeDelete = document.getElementById('apfCoordComposeDelete');
+      const composeMessage = composeForm ? composeForm.querySelector('input[name="apf_coord_alert_title"]') : null;
+      const composeEvents = calendarNode ? JSON.parse(calendarNode.getAttribute('data-compose-events') || '[]') : [];
+      const currentUserId = calendarNode ? parseInt(calendarNode.getAttribute('data-user-id') || '0', 10) || 0 : 0;
       let coordModalLastFocus = null;
       let coordModalDate = '';
+      const alertEditOverlay = document.getElementById('apfCoordAlertEdit');
+      const alertEditTarget = document.getElementById('apfCoordAlertEditTarget');
+      const alertEditMessage = document.getElementById('apfCoordAlertEditMessage');
+      const alertEditSave = alertEditOverlay ? alertEditOverlay.querySelector('[data-alert-edit-save]') : null;
+      const alertEditCancel = alertEditOverlay ? alertEditOverlay.querySelector('[data-alert-edit-cancel]') : null;
+      const alertEditClose = alertEditOverlay ? alertEditOverlay.querySelectorAll('[data-alert-edit-close]') : [];
+      let alertEditPayload = null;
+      const ensureTargetOption = (token, label) => {
+        if(!composeTarget || !token){ return; }
+        const exists = Array.from(composeTarget.options || []).some(opt => opt.value === token);
+        if(!exists){
+          const opt = document.createElement('option');
+          opt.value = token;
+          opt.textContent = label || token;
+          composeTarget.appendChild(opt);
+        }
+      };
+      const submitComposeAction = (action, payload) => {
+        if(!composeForm){ alert('Não foi possível carregar o formulário de avisos.'); return; }
+        if(composeAction){ composeAction.value = action || 'add'; }
+        if(composeEvent){ composeEvent.value = (payload && payload.id) ? payload.id : ''; }
+        if(composeDateInput && payload && payload.date){ composeDateInput.value = payload.date; }
+        if(composeTarget && payload && payload.token){
+          ensureTargetOption(payload.token, payload.token);
+          composeTarget.value = payload.token;
+        }
+        if(composeMessage && payload && typeof payload.title === 'string'){
+          composeMessage.value = payload.title;
+        }
+        if(typeof composeForm.requestSubmit === 'function'){
+          composeForm.requestSubmit();
+        }else{
+          composeForm.submit();
+        }
+      };
+      const openAlertEditOverlay = (payload) => {
+        if(!alertEditOverlay || !alertEditTarget || !alertEditMessage){ return; }
+        alertEditPayload = payload || null;
+        if(alertEditTarget && composeTarget){
+          alertEditTarget.innerHTML = '';
+          composeTarget.querySelectorAll('option').forEach(opt=>{
+            alertEditTarget.appendChild(opt.cloneNode(true));
+          });
+        }
+        alertEditTarget.value = (payload && payload.token) ? payload.token : '';
+        alertEditMessage.value = (payload && payload.title) ? payload.title : '';
+        alertEditOverlay.setAttribute('aria-hidden','false');
+        setTimeout(()=>{
+          (alertEditMessage.value ? alertEditMessage : alertEditTarget).focus();
+        }, 20);
+      };
+      const closeAlertEditOverlay = () => {
+        if(!alertEditOverlay){ return; }
+        alertEditOverlay.setAttribute('aria-hidden','true');
+        alertEditPayload = null;
+      };
+      if(alertEditCancel){
+        alertEditCancel.addEventListener('click', closeAlertEditOverlay);
+      }
+      if(alertEditClose && alertEditClose.length){
+        alertEditClose.forEach(btn=>{
+          btn.addEventListener('click', closeAlertEditOverlay);
+        });
+      }
+      if(alertEditOverlay){
+        alertEditOverlay.addEventListener('click', (e)=>{
+          if(e.target === alertEditOverlay){
+            closeAlertEditOverlay();
+          }
+        });
+      }
+      if(alertEditSave){
+        alertEditSave.addEventListener('click', ()=>{
+          if(!alertEditPayload){ closeAlertEditOverlay(); return; }
+          const token = alertEditTarget ? alertEditTarget.value : '';
+          const title = alertEditMessage ? alertEditMessage.value.trim() : '';
+          if(!token || !title){
+            alert('Preencha o colaborador e a mensagem.');
+            return;
+          }
+          submitComposeAction('update', {
+            id: alertEditPayload.id || '',
+            date: alertEditPayload.date || '',
+            token,
+            title,
+          });
+          closeAlertEditOverlay();
+        });
+      }
+      if(composeDelete && composeForm){
+        composeDelete.addEventListener('click', ()=>{
+          if(!composeEvent || !composeEvent.value){ return; }
+          const confirmDelete = window.confirm('Deseja excluir este aviso?');
+          if(!confirmDelete){ return; }
+          if(composeAction){ composeAction.value = 'delete'; }
+          if(typeof composeForm.requestSubmit === 'function'){
+            composeForm.requestSubmit();
+          }else{
+            composeForm.submit();
+          }
+        });
+      }
 
       if(calendarNode){
         const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -3002,17 +3708,72 @@ add_shortcode( 'apf_portal_coordenador', function () {
         let monthDate = new Date();
         monthDate.setDate(1);
         let activeFilter = 'coordinators';
+        let composeDate = composeDateInput ? composeDateInput.value : '';
 
         const eventsByDate = new Map();
         const groupLabels = {
           providers: 'Colaboradores',
           coordinators: 'Coordenadores',
         };
+        const legend = document.getElementById('apfCoordLegend');
+        const updateLegend = () => {
+          if(!legend){ return; }
+          const showProviders = activeFilter === 'providers';
+          legend.style.display = showProviders ? '' : 'none';
+        };
 
         const formatDateBr = (value) => {
           if(!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)){ return value || '—'; }
           return value.slice(8,10) + '/' + value.slice(5,7) + '/' + value.slice(0,4);
         };
+
+        const setComposeDate = (iso) => {
+          if(!iso){ return; }
+          composeDate = iso;
+          if(composeDateInput){ composeDateInput.value = iso; }
+          if(composeDateLabel){ composeDateLabel.textContent = formatDateBr(iso); }
+          renderCalendar();
+        };
+
+        const resetComposeMode = () => {
+          if(composeAction){ composeAction.value = 'add'; }
+          if(composeEvent){ composeEvent.value = ''; }
+          if(composeDelete){ composeDelete.hidden = true; }
+          if(composeForm){ composeForm.querySelector('button[type="submit"]').textContent = 'Enviar aviso'; }
+          if(composeMessage){ composeMessage.value = ''; }
+          if(composeTarget){ composeTarget.value = ''; }
+        };
+
+        const enterEditMode = (payload) => {
+          if(!payload){ return; }
+          if(composeAction){ composeAction.value = 'update'; }
+          if(composeEvent && payload.id){ composeEvent.value = payload.id; }
+          if(composeDelete){ composeDelete.hidden = false; }
+          if(composeForm){ composeForm.querySelector('button[type="submit"]').textContent = 'Atualizar aviso'; }
+          if(payload.date){ setComposeDate(payload.date); }
+          if(composeTarget && payload.token){ composeTarget.value = payload.token; }
+          if(composeMessage && payload.title){ composeMessage.value = payload.title; }
+          if(calendarWrap){ calendarWrap.classList.add('has-compose'); }
+          if(composeBox){
+            composeBox.hidden = false;
+            composeBox.setAttribute('aria-hidden','false');
+          }
+        };
+
+        const toggleComposeBox = () => {
+          if(!composeBox){ return; }
+          const show = activeFilter === 'providers';
+          composeBox.hidden = !show;
+          composeBox.setAttribute('aria-hidden', show ? 'false' : 'true');
+          composeBox.style.display = show ? '' : 'none';
+          if(calendarWrap){
+            calendarWrap.classList.toggle('has-compose', show);
+          }
+          if(!show){
+            resetComposeMode();
+          }
+        };
+        toggleComposeBox();
 
         const normalizeGroups = (groups) => {
           if(!Array.isArray(groups)){ return []; }
@@ -3058,6 +3819,10 @@ add_shortcode( 'apf_portal_coordenador', function () {
                     const entryGroups = normalizeGroups(entry.groups || []);
                     const recipients = (entry.recipients && typeof entry.recipients === 'object') ? entry.recipients : {};
                     return {
+                      id: (entry.id || '').toString(),
+                      editable: !!entry.editable,
+                      target_token: (entry.target_token || '').toString(),
+                      created_by: entry.created_by || 0,
                       title: (entry.title || '').toString(),
                       groups: entryGroups.length ? entryGroups : (normalizedGroups.length ? normalizedGroups : ['providers']),
                       recipients: {
@@ -3122,10 +3887,13 @@ add_shortcode( 'apf_portal_coordenador', function () {
               if(key !== 'providers' && key !== 'coordinators'){ return; }
               activeFilter = key;
               filterButtons.forEach(other=>other.classList.toggle('is-active', other === btn));
+              toggleComposeBox();
+              updateLegend();
               renderCalendar();
             });
           });
         }
+        updateLegend();
 
         function renderCoordModal(date, info, groupsFilter){
           if(!coordModalItems || !coordModalEmpty){ return; }
@@ -3185,6 +3953,36 @@ add_shortcode( 'apf_portal_coordenador', function () {
             }
 
             card.appendChild(meta);
+            if(entry.editable){
+              const actions = document.createElement('div');
+              actions.className = 'apf-coord-modal__actions';
+              const editBtn = document.createElement('button');
+              editBtn.type = 'button';
+              editBtn.className = 'apf-coord-btn apf-coord-btn--ghost';
+              editBtn.textContent = 'Editar';
+              const removeBtn = document.createElement('button');
+              removeBtn.type = 'button';
+              removeBtn.className = 'apf-coord-btn apf-coord-btn--ghost-danger';
+              removeBtn.textContent = 'Remover';
+              actions.appendChild(editBtn);
+              actions.appendChild(removeBtn);
+              card.appendChild(actions);
+
+              editBtn.addEventListener('click', ()=>{
+                openAlertEditOverlay({
+                  id: entry.id || '',
+                  date,
+                  token: entry.target_token || '',
+                  title: entry.title || '',
+                });
+              });
+              removeBtn.addEventListener('click', ()=>{
+                if(!window.confirm('Deseja remover este aviso?')){ return; }
+                const token = entry.target_token || '';
+                const title = entry.title || 'Aviso';
+                submitComposeAction('delete', { id: entry.id || '', date, token, title });
+              });
+            }
             coordModalItems.appendChild(card);
           });
         }
@@ -3299,47 +4097,117 @@ add_shortcode( 'apf_portal_coordenador', function () {
             }else{
               const iso = year + '-' + String(monthIndex + 1).padStart(2,'0') + '-' + String(dayNumber).padStart(2,'0');
               div.textContent = String(dayNumber);
+              let filteredGroups = [];
+              let providerOwn = false;
+              let providerOther = false;
               if(eventsByDate.has(iso)){
                 const info = eventsByDate.get(iso);
-                const filteredGroups = (info.groups || []).filter(g => g === activeFilter);
+                if(activeFilter === 'providers'){
+                  (info.events || []).forEach(evt=>{
+                    if(!evt){ return; }
+                    const evtGroups = Array.isArray(evt.groups) ? evt.groups : [];
+                    if(!evtGroups.includes('providers')){ return; }
+                    const creatorId = evt.created_by ? parseInt(evt.created_by, 10) || 0 : 0;
+                    const isOwn = (creatorId === currentUserId)
+                      && !!evt.id
+                      && String(evt.id).indexOf('coord_msg_') === 0;
+                    if(isOwn){
+                      providerOwn = true;
+                    }else{
+                      providerOther = true;
+                    }
+                  });
+                  if(providerOwn || providerOther){
+                    filteredGroups = ['providers'];
+                  }
+                }else{
+                  filteredGroups = (info.groups || []).filter(g => g === activeFilter);
+                }
                 if(filteredGroups.length){
                   div.classList.add('apf-coord-calendar__day--has-event');
-                  const hasProviders = filteredGroups.includes('providers');
-                  const hasCoordinators = filteredGroups.includes('coordinators');
-                  if(hasProviders && hasCoordinators){
-                    div.classList.add('apf-coord-calendar__day--group-mixed');
-                  }else if(hasCoordinators){
-                    div.classList.add('apf-coord-calendar__day--group-coordinators');
-                  }else{
-                    div.classList.add('apf-coord-calendar__day--group-providers');
-                  }
                   const markers = document.createElement('div');
                   markers.className = 'apf-coord-calendar__markers';
-                  filteredGroups.forEach(group=>{
-                    const safeGroup = (group === 'coordinators') ? 'coordinators' : 'providers';
-                    const marker = document.createElement('span');
-                    marker.className = 'apf-coord-calendar__marker apf-coord-calendar__marker--' + safeGroup;
-                    marker.title = groupLabels[safeGroup] || '';
-                    markers.appendChild(marker);
-                  });
+                  if(activeFilter === 'providers'){
+                    if(providerOther){
+                      const marker = document.createElement('span');
+                      marker.className = 'apf-coord-calendar__marker apf-coord-calendar__marker--providers';
+                      marker.title = 'Avisos do financeiro/FAEPA';
+                      markers.appendChild(marker);
+                    }
+                    if(providerOwn){
+                      const marker = document.createElement('span');
+                      marker.className = 'apf-coord-calendar__marker apf-coord-calendar__marker--providers-own';
+                      marker.title = 'Avisos enviados por você';
+                      markers.appendChild(marker);
+                    }
+                    if(providerOwn && providerOther){
+                      div.classList.add('apf-coord-calendar__day--group-mixed');
+                    }else if(providerOwn){
+                      div.classList.add('apf-coord-calendar__day--group-providers-own');
+                    }else{
+                      div.classList.add('apf-coord-calendar__day--group-providers');
+                    }
+                  }else{
+                    const hasProviders = filteredGroups.includes('providers');
+                    const hasCoordinators = filteredGroups.includes('coordinators');
+                    if(hasProviders && hasCoordinators){
+                      div.classList.add('apf-coord-calendar__day--group-mixed');
+                    }else if(hasCoordinators){
+                      div.classList.add('apf-coord-calendar__day--group-coordinators');
+                    }else{
+                      div.classList.add('apf-coord-calendar__day--group-providers');
+                    }
+                    filteredGroups.forEach(group=>{
+                      const safeGroup = (group === 'coordinators') ? 'coordinators' : 'providers';
+                      const marker = document.createElement('span');
+                      marker.className = 'apf-coord-calendar__marker apf-coord-calendar__marker--' + safeGroup;
+                      marker.title = groupLabels[safeGroup] || '';
+                      markers.appendChild(marker);
+                    });
+                  }
                   div.appendChild(markers);
                   const tooltip = buildTooltip({ groups: filteredGroups, titles: info.titles });
                   if(tooltip){
                     div.title = tooltip;
                   }
-                  div.setAttribute('role','button');
-                  div.setAttribute('tabindex','0');
-                  div.setAttribute('aria-label', 'Ver avisos de ' + formatDateBr(iso));
-                  div.addEventListener('click', ()=>{
+                }
+              }
+              if(composeDate && composeDate === iso){
+                div.classList.add('apf-coord-calendar__day--selected');
+              }
+              if(activeFilter === 'providers'){
+                div.classList.add('apf-coord-calendar__day--selectable');
+                div.setAttribute('tabindex','0');
+                div.setAttribute('role','button');
+                div.setAttribute('aria-label', 'Selecionar dia ' + formatDateBr(iso));
+                div.addEventListener('click', ()=>{
+                  setComposeDate(iso);
+                  if(filteredGroups.length){
                     openCoordModal(iso, filteredGroups);
-                  });
-                  div.addEventListener('keydown', (event)=>{
-                    if(event.key === 'Enter' || event.key === ' '){
-                      event.preventDefault();
+                  }
+                });
+                div.addEventListener('keydown', (event)=>{
+                  if(event.key === 'Enter' || event.key === ' '){
+                    event.preventDefault();
+                    setComposeDate(iso);
+                    if(filteredGroups.length){
                       openCoordModal(iso, filteredGroups);
                     }
-                  });
-                }
+                  }
+                });
+              }else if(filteredGroups.length){
+                div.setAttribute('role','button');
+                div.setAttribute('tabindex','0');
+                div.setAttribute('aria-label', 'Ver avisos de ' + formatDateBr(iso));
+                div.addEventListener('click', ()=>{
+                  openCoordModal(iso, filteredGroups);
+                });
+                div.addEventListener('keydown', (event)=>{
+                  if(event.key === 'Enter' || event.key === ' '){
+                    event.preventDefault();
+                    openCoordModal(iso, filteredGroups);
+                  }
+                });
               }
             }
 

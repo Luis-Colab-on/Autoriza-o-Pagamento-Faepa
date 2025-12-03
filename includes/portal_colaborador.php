@@ -223,6 +223,8 @@ add_shortcode('apf_portal', function($atts){
             $event_id   = isset( $event['id'] ) ? sanitize_text_field( (string) $event['id'] ) : '';
             if ( '' !== $event_id && strpos( $event_id, 'faepa_pay_' ) === 0 ) {
                 $event_type = 'faepa';
+            } elseif ( '' !== $event_id && strpos( $event_id, 'coord_msg_' ) === 0 ) {
+                $event_type = 'coordinator';
             } else {
                 foreach ( $event['recipients'] as $recipient ) {
                     if ( ! is_array( $recipient ) ) {
