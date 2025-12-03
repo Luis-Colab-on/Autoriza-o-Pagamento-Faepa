@@ -364,7 +364,11 @@ if ( ! function_exists( 'apf_mark_coordinator_request_paid' ) ) {
         $updated   = false;
 
         foreach ( $requests as $index => $request ) {
-            if ( ! is_array( $request ) || ! isset( $request['id'] ) || $request['id'] !== $request_id ) {
+            if ( ! is_array( $request ) || ! isset( $request['id'] ) ) {
+                continue;
+            }
+            $current_id = sanitize_text_field( (string) $request['id'] );
+            if ( '' === $current_id || $current_id !== $request_id ) {
                 continue;
             }
             $status = isset( $request['status'] ) ? sanitize_key( $request['status'] ) : 'pending';

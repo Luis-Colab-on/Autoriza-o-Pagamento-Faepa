@@ -14,6 +14,59 @@ $apf_portal_faepa_cb = function () {
     $faepa_notice      = '';
     $faepa_notice_type = 'success';
 
+    // Aprovação rápida sem anexo/mensagem
+    if ( isset( $_POST['apf_faepa_approve_action'] ) ) {
+        $is_ajax = ! empty( $_SERVER['HTTP_X_REQUESTED_WITH'] ) && 'xmlhttprequest' === strtolower( $_SERVER['HTTP_X_REQUESTED_WITH'] );
+
+        if ( ! isset( $_POST['apf_faepa_approve_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_faepa_approve_nonce'] ), 'apf_faepa_approve' ) ) {
+            $faepa_notice      = 'Não foi possível aprovar o pagamento. Recarregue a página e tente novamente.';
+            $faepa_notice_type = 'error';
+        } else {
+            $request_id = isset( $_POST['apf_faepa_request_id'] ) ? sanitize_text_field( wp_unslash( $_POST['apf_faepa_request_id'] ) ) : '';
+            if ( '' === $request_id ) {
+                $faepa_notice      = 'Seleção inválida. Recarregue a página e tente novamente.';
+                $faepa_notice_type = 'error';
+            } else {
+                $approved = apf_mark_coordinator_request_paid( $request_id, array(
+                    'user_id' => get_current_user_id(),
+                    'note'    => '',
+                    'attachment_id' => 0,
+                ) );
+                if ( $approved ) {
+                    $faepa_notice      = 'Pagamento aprovado.';
+                    $faepa_notice_type = 'success';
+                } else {
+                    $faepa_notice      = 'Não foi possível aprovar este pagamento.';
+                    $faepa_notice_type = 'error';
+                }
+            }
+        }
+
+        if ( $is_ajax ) {
+            if ( 'success' === $faepa_notice_type ) {
+                wp_send_json_success( array( 'message' => $faepa_notice ) );
+            } else {
+                wp_send_json_error( array( 'message' => $faepa_notice ) );
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_faepa_pay_notice', 'apf_faepa_pay_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_faepa_pay_notice' => $faepa_notice,
+            'apf_faepa_pay_status' => ( 'success' === $faepa_notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
     if ( isset( $_POST['apf_faepa_pay_action'] ) ) {
         if ( ! isset( $_POST['apf_faepa_pay_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_faepa_pay_nonce'] ), 'apf_faepa_pay' ) ) {
             $faepa_notice      = 'Não foi possível confirmar o pagamento. Recarregue a página e tente novamente.';
@@ -797,14 +850,11 @@ $apf_portal_faepa_cb = function () {
                     <span class="apf-faepa-chip apf-faepa-chip--info"><?php echo esc_html( $counts['total'] . ' colaborador(es)' ); ?></span>
                   </span>
                   <span class="apf-faepa-return__cell">
-                    <span class="apf-faepa-chip apf-faepa-chip--success"><?php echo esc_html( ( $counts['paid'] ?? 0 ) . ' pagos' ); ?></span>
+                    <span class="apf-faepa-chip apf-faepa-chip--success" data-faepa-notify-count><?php echo esc_html( ( $counts['paid'] ?? 0 ) . ' pagos' ); ?></span>
                   </span>
-                <span class="apf-faepa-return__cell apf-faepa-return__cell--caret" aria-hidden="true">
-                  <span class="apf-faepa-return__caret">&#9662;</span>
-                </span>
-              </summary>
+                </summary>
 
-                <div class="apf-faepa-return__row-details">
+                <div class="apf-faepa-return__row-details" data-faepa-batch="<?php echo esc_attr( $return['id'] ); ?>" data-faepa-total="<?php echo esc_attr( isset( $counts['total'] ) ? (int) $counts['total'] : 0 ); ?>" data-faepa-approved="<?php echo esc_attr( isset( $counts['paid'] ) ? (int) $counts['paid'] : 0 ); ?>">
                   <?php if ( $forwarded_label ) : ?>
                     <p class="apf-faepa-return__meta"><strong>Enviado pelo financeiro:</strong> <?php echo esc_html( $forwarded_label ); ?></p>
                   <?php endif; ?>
@@ -843,22 +893,33 @@ $apf_portal_faepa_cb = function () {
                         if ( '—' === $company_label ) {
                             $company_label = '';
                         }
+                        $value_label = '';
+                        if ( ! empty( $item['value'] ) ) {
+                            $value_label = trim( (string) $item['value'] );
+                            if ( stripos( $value_label, 'r$' ) !== 0 ) {
+                                $value_label = 'R$ ' . $value_label;
+                            }
+                        }
                     ?>
-                      <article class="apf-faepa-entry">
+                      <article class="apf-faepa-entry" data-faepa-approved="<?php echo ! empty( $item['faepa_paid'] ) ? '1' : '0'; ?>">
                         <details>
                           <summary class="apf-faepa-entry__head">
                             <div>
-                              <strong><?php echo esc_html( $item['name'] ?: 'Colaborador' ); ?></strong>
-                              <?php if ( $company_label && $company_label !== ( $item['name'] ?? '' ) ) : ?>
+                              <div class="apf-faepa-entry__title-line">
+                                <strong><?php echo esc_html( $item['name'] ?: 'Colaborador' ); ?></strong>
+                                <?php if ( $value_label ) : ?>
+                                  <span class="apf-faepa-entry__value">&nbsp;—&nbsp;<?php echo esc_html( $value_label ); ?></span>
+                                <?php endif; ?>
+                              </div>
+                            <?php if ( $company_label && $company_label !== ( $item['name'] ?? '' ) ) : ?>
                                 <div class="apf-faepa-entry__company"><?php echo esc_html( $company_label ); ?></div>
                               <?php endif; ?>
-                              <?php if ( $item['value'] ) : ?>
-                                <span class="apf-faepa-entry__value"><?php echo esc_html( $item['value'] ); ?></span>
-                              <?php endif; ?>
                             </div>
-                            <span class="apf-faepa-pill apf-faepa-pill--<?php echo esc_attr( $item['status'] ); ?>">
-                              <?php echo esc_html( $item['status_label'] ); ?>
-                            </span>
+                            <?php if ( ! empty( $item['faepa_paid'] ) ) : ?>
+                              <span class="apf-faepa-pill apf-faepa-pill--<?php echo esc_attr( $item['status'] ); ?>">
+                                <?php echo esc_html( $item['status_label'] ); ?>
+                              </span>
+                            <?php endif; ?>
                           </summary>
                           <div class="apf-faepa-entry__body">
                             <ul class="apf-faepa-entry__meta">
@@ -868,17 +929,30 @@ $apf_portal_faepa_cb = function () {
                               <?php if ( $item['note'] ) : ?>
                                 <li>Observação: <?php echo esc_html( $item['note'] ); ?></li>
                               <?php endif; ?>
-                            <?php if ( ! empty( $item['faepa_paid_label'] ) ) : ?>
-                                <li><strong>Pagamento confirmado:</strong> <?php echo esc_html( $item['faepa_paid_label'] ); ?></li>
-                              <?php endif; ?>
+                            <?php
+                              $paid_label = '';
+                              if ( ! empty( $item['faepa_paid_label'] ) ) {
+                                  $paid_label = $item['faepa_paid_label'];
+                              }
+                            ?>
+                              <li class="apf-faepa-payment-inline<?php echo $paid_label ? '' : ' is-hidden'; ?>"><strong>Pagamento confirmado:</strong> <span data-faepa-paid-label><?php echo esc_html( $paid_label ); ?></span></li>
                             </ul>
 
                             <?php if ( ! empty( $item['faepa_payment_notified'] ) ) : ?>
                               <p class="apf-faepa-entry__note">Notificação enviada<?php echo $item['faepa_payment_notified_label'] ? ' em ' . esc_html( $item['faepa_payment_notified_label'] ) : ''; ?>.</p>
                             <?php else : ?>
-                            <?php if ( empty( $item['faepa_paid'] ) && ! empty( $item['id'] ) ) : ?>
-                              <button type="button" class="apf-faepa-pay__btn" data-faepa-pay="<?php echo esc_attr( $item['id'] ); ?>">Comprovar pagamento</button>
-                            <?php endif; ?>
+                            <div class="apf-faepa-approve__actions">
+                              <?php if ( empty( $item['faepa_paid'] ) && ! empty( $item['id'] ) ) : ?>
+                                <form method="post">
+                                  <?php wp_nonce_field( 'apf_faepa_approve', 'apf_faepa_approve_nonce' ); ?>
+                                  <input type="hidden" name="apf_faepa_approve_action" value="1">
+                                  <input type="hidden" name="apf_faepa_request_id" value="<?php echo esc_attr( $item['id'] ); ?>">
+                                  <button type="submit" class="apf-faepa-approve__btn" data-faepa-approve data-faepa-batch="<?php echo esc_attr( $return['id'] ); ?>">Aprovar pagamento</button>
+                                  <p class="apf-faepa-approve__hint">Marque como aprovado para liberar a notificação.</p>
+                                </form>
+                              <?php endif; ?>
+                              <p class="apf-faepa-approve__status<?php echo ! empty( $item['faepa_paid'] ) ? ' is-visible' : ''; ?>">Aprovado</p>
+                            </div>
 
                             <?php if ( ! empty( $item['faepa_payment_note'] ) || ! empty( $item['faepa_payment_attachment'] ) ) : ?>
                               <div class="apf-faepa-entry__block">
@@ -944,15 +1018,14 @@ $apf_portal_faepa_cb = function () {
                     ?>
                     <?php if ( $all_notified ) : ?>
                       <p class="apf-faepa-return__note">Notificações enviadas para colaboradores, financeiro e coordenadores.</p>
-                    <?php elseif ( $all_paid ) : ?>
-                      <form method="post" class="apf-faepa-notify">
+                    <?php else : ?>
+                      <form method="post" class="apf-faepa-notify" data-faepa-notify-form>
                         <?php wp_nonce_field( 'apf_faepa_notify', 'apf_faepa_notify_nonce' ); ?>
                         <input type="hidden" name="apf_faepa_notify_action" value="1">
                         <input type="hidden" name="apf_faepa_batch_id" value="<?php echo esc_attr( $return['id'] ); ?>">
-                        <button type="submit" class="apf-faepa-notify__btn">Enviar notificações de pagamento</button>
+                        <button type="submit" class="apf-faepa-notify__btn<?php echo $all_paid ? '' : ' is-disabled'; ?>" data-faepa-notify-btn <?php echo $all_paid ? '' : 'disabled'; ?>>Enviar notificações de pagamento</button>
                       </form>
-                    <?php else : ?>
-                      <p class="apf-faepa-return__note">Confirme todos os pagamentos para liberar a notificação.</p>
+                      <p class="apf-faepa-return__note apf-faepa-return__note--muted" data-faepa-notify-hint><?php echo $all_paid ? 'Todos aprovados. Pode enviar a notificação.' : 'Aprove todos os pagamentos para liberar a notificação.'; ?></p>
                     <?php endif; ?>
                   </div>
                 </div>
@@ -978,78 +1051,170 @@ $apf_portal_faepa_cb = function () {
           <div class="apf-faepa-modal__list"></div>
     </div>
   </div>
-
-  <div class="apf-faepa-pay-modal" id="apfFaepaPayModal" aria-hidden="true">
-    <div class="apf-faepa-pay-modal__overlay" data-faepa-pay-close></div>
-    <div class="apf-faepa-pay-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="apfFaepaPayTitle">
-      <div class="apf-faepa-pay-modal__head">
-        <h4 id="apfFaepaPayTitle">Comprovar pagamento</h4>
-        <button type="button" class="apf-faepa-pay-modal__close" data-faepa-pay-close aria-label="Fechar">&times;</button>
-      </div>
-      <form method="post" enctype="multipart/form-data" class="apf-faepa-pay-modal__form" id="apfFaepaPayForm">
-        <?php wp_nonce_field( 'apf_faepa_pay', 'apf_faepa_pay_nonce' ); ?>
-        <input type="hidden" name="apf_faepa_request_id" value="">
-        <label>
-          <span>Mensagem</span>
-          <textarea name="apf_faepa_pay_note" rows="4" placeholder="Ex.: comprovante do pagamento anexado"></textarea>
-        </label>
-        <label>
-          <span>Anexo do comprovante</span>
-          <input type="file" name="apf_faepa_pay_file" accept=".pdf,.jpg,.jpeg,.png">
-        </label>
-        <p class="apf-faepa-pay__hint">Obrigatório informar mensagem ou anexar o comprovante.</p>
-        <div style="display:flex;gap:8px;justify-content:flex-end;">
-          <button type="button" class="apf-faepa-pay-modal__close apf-faepa-pay-modal__cancel" data-faepa-pay-close>Cancelar</button>
-          <button type="submit" name="apf_faepa_pay_action" value="1" class="apf-faepa-pay__btn">Confirmar pagamento</button>
-        </div>
-      </form>
-    </div>
-  </div>
   </div>
 
   <script>
-    document.addEventListener('DOMContentLoaded', function(){
-      var payModal = document.getElementById('apfFaepaPayModal');
-      var payForm  = document.getElementById('apfFaepaPayForm');
-      var payHidden= payForm ? payForm.querySelector('input[name="apf_faepa_request_id"]') : null;
-      var openBtns = document.querySelectorAll('[data-faepa-pay]');
-      var closeEls = document.querySelectorAll('[data-faepa-pay-close]');
+    (function(){
+      if (window.apfFaepaApproveInit) { return; }
+      window.apfFaepaApproveInit = true;
 
-      function closePayModal(){
-        if(!payModal) return;
-        payModal.setAttribute('aria-hidden','true');
+      function findParent(el, selector){
+        while(el){
+          if(el.matches && el.matches(selector)){ return el; }
+          el = el.parentElement;
+        }
+        return null;
       }
-      function openPayModal(id){
-        if(!payModal || !payForm || !payHidden) return;
-        payHidden.value = id || '';
-        payForm.reset();
-        payModal.setAttribute('aria-hidden','false');
-      }
-      openBtns.forEach(function(btn){
-        btn.addEventListener('click', function(){
-          var id = btn.getAttribute('data-faepa-pay') || '';
-          openPayModal(id);
-        });
-      });
-      closeEls.forEach(function(el){
-        el.addEventListener('click', function(){
-          closePayModal();
-        });
-      });
 
-      if(payForm){
-        payForm.addEventListener('submit', function(ev){
-          var noteField = payForm.querySelector('textarea[name="apf_faepa_pay_note"]');
-          var fileField = payForm.querySelector('input[name="apf_faepa_pay_file"]');
-          var note = noteField ? (noteField.value || '').trim() : '';
-          var hasFile = fileField && fileField.files && fileField.files.length > 0;
-          if(!note && !hasFile){
-            ev.preventDefault();
-            alert('Informe uma mensagem ou anexe o comprovante antes de confirmar o pagamento.');
+      function updateNotifyForBatch(batchEl){
+        if(!batchEl){ return; }
+        var entries = Array.prototype.slice.call(batchEl.querySelectorAll('.apf-faepa-entry[data-faepa-approved]'));
+        var total = entries.length;
+        var approved = entries.filter(function(entry){
+          return entry.getAttribute('data-faepa-approved') === '1';
+        }).length;
+        batchEl.setAttribute('data-faepa-total', total);
+        batchEl.setAttribute('data-faepa-approved', approved);
+        var canNotify = total > 0 && approved >= total;
+        var notifyBtn = batchEl.querySelector('[data-faepa-notify-btn]');
+        var notifyHint = batchEl.querySelector('[data-faepa-notify-hint]');
+        var notifyCount = batchEl.querySelector('[data-faepa-notify-count]');
+        if(!notifyCount){
+          var row = findParent(batchEl, '.apf-faepa-return__row');
+          if(row){
+            notifyCount = row.querySelector('[data-faepa-notify-count]');
           }
+        }
+        if(notifyBtn){
+          notifyBtn.disabled = !canNotify;
+          if(canNotify){
+            notifyBtn.classList.remove('is-disabled');
+          } else {
+            notifyBtn.classList.add('is-disabled');
+          }
+        }
+        if(notifyHint){
+          notifyHint.textContent = canNotify
+            ? 'Todos aprovados. Pode enviar a notificação.'
+            : 'Aprove todos os pagamentos para liberar a notificação.';
+        }
+        if(notifyCount){
+          notifyCount.textContent = approved + ' pagos';
+        }
+      }
+
+      function captureEntryState(article){
+        if(!article){ return null; }
+        var btn = article.querySelector('[data-faepa-approve]');
+        var status = article.querySelector('.apf-faepa-approve__status');
+        var paidLabel = article.querySelector('[data-faepa-paid-label]');
+        var paidLine = paidLabel ? paidLabel.closest('.apf-faepa-payment-inline') : null;
+        return {
+          approvedAttr: article.getAttribute('data-faepa-approved') || '0',
+          entryApproved: article.classList.contains('apf-faepa-entry--approved'),
+          statusVisible: status ? status.classList.contains('is-visible') : false,
+          btnDisabled: btn ? btn.disabled : false,
+          btnHidden: btn ? btn.classList.contains('is-hidden') : false,
+          paidText: paidLabel ? paidLabel.textContent : '',
+          paidVisible: paidLine ? !paidLine.classList.contains('is-hidden') : false
+        };
+      }
+
+      function applyApprovedState(article){
+        if(!article){ return; }
+        var btn = article.querySelector('[data-faepa-approve]');
+        if(btn){
+          btn.disabled = true;
+          btn.classList.add('is-hidden');
+        }
+        article.setAttribute('data-faepa-approved','1');
+        article.classList.add('apf-faepa-entry--approved');
+        var status = article.querySelector('.apf-faepa-approve__status');
+        if(status){ status.classList.add('is-visible'); }
+        var paidLabel = article.querySelector('[data-faepa-paid-label]');
+        if(paidLabel){
+          var now = new Date();
+          paidLabel.textContent = now.toLocaleString('pt-BR');
+          var li = paidLabel.closest('.apf-faepa-payment-inline');
+          if(li){ li.classList.remove('is-hidden'); }
+        }
+      }
+
+      function restoreEntryState(article, previous){
+        if(!article || !previous){ return; }
+        var btn = article.querySelector('[data-faepa-approve]');
+        if(btn){
+          btn.disabled = !!previous.btnDisabled;
+          btn.classList.toggle('is-hidden', !!previous.btnHidden);
+        }
+        article.setAttribute('data-faepa-approved', previous.approvedAttr || '0');
+        if(previous.entryApproved){
+          article.classList.add('apf-faepa-entry--approved');
+        } else {
+          article.classList.remove('apf-faepa-entry--approved');
+        }
+        var status = article.querySelector('.apf-faepa-approve__status');
+        if(status){
+          status.classList.toggle('is-visible', !!previous.statusVisible);
+        }
+        var paidLabel = article.querySelector('[data-faepa-paid-label]');
+        var paidLine = paidLabel ? paidLabel.closest('.apf-faepa-payment-inline') : null;
+        if(paidLabel && typeof previous.paidText === 'string'){
+          paidLabel.textContent = previous.paidText;
+        }
+        if(paidLine){
+          paidLine.classList.toggle('is-hidden', !previous.paidVisible);
+        }
+      }
+
+      function initFaepaApprove(){
+        document.querySelectorAll('.apf-faepa-approve__actions form').forEach(function(form){
+          form.addEventListener('submit', function(ev){
+            ev.preventDefault();
+            var btn = form.querySelector('[data-faepa-approve]');
+            var article = btn ? btn.closest('.apf-faepa-entry') : null;
+            var batchEl = form.closest('[data-faepa-batch]');
+            var previous = captureEntryState(article);
+
+            if(article){ applyApprovedState(article); }
+            if(batchEl){ updateNotifyForBatch(batchEl); }
+
+            var fd = new FormData(form);
+            fd.append('apf_faepa_approve_ajax', '1');
+            var action = form.getAttribute('action') || window.location.href;
+            fetch(action, {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'X-Requested-With': 'XMLHttpRequest' },
+              body: fd
+            }).then(function(res){
+              return res && res.ok ? res.json() : Promise.reject();
+            })
+            .then(function(payload){
+              if(!(payload && payload.success)){
+                if(article){ restoreEntryState(article, previous); }
+                if(batchEl){ updateNotifyForBatch(batchEl); }
+                var msg = (payload && payload.data && payload.data.message) ? payload.data.message : 'Não foi possível aprovar este pagamento.';
+                alert(msg);
+              }
+            }).catch(function(){
+              if(article){ restoreEntryState(article, previous); }
+              if(batchEl){ updateNotifyForBatch(batchEl); }
+              alert('Erro ao aprovar. Tente novamente.');
+            });
+          });
+        });
+        document.querySelectorAll('[data-faepa-batch]').forEach(function(batchEl){
+          updateNotifyForBatch(batchEl);
         });
       }
-    });
+
+      if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', initFaepaApprove);
+      } else {
+        initFaepaApprove();
+      }
+    })();
   </script>
 
   <style>
@@ -1124,7 +1289,9 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-entry details summary:focus-visible{box-shadow:0 0 0 2px rgba(14,165,233,.35)}
       .apf-faepa-entry details summary::-webkit-details-marker{display:none}
       .apf-faepa-entry__head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px}
+      .apf-faepa-entry__title-line{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
       .apf-faepa-entry__head strong{font-size:13px}
+      .apf-faepa-entry__value{color:#0f172a;font-weight:600}
       .apf-faepa-entry__company{font-size:12px;color:#475467;margin-top:2px}
       .apf-faepa-entry__value{margin-left:8px;font-weight:600;color:#0ea5e9;font-size:12px}
       .apf-faepa-pill{padding:4px 8px;border-radius:10px;font-size:12px;font-weight:700;background:#e5e7eb;color:#0f172a}
@@ -1139,23 +1306,21 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-entry__block dd{margin:0;font-size:13px;color:#0f172a;word-break:break-word;padding-bottom:6px;border-bottom:1px solid #e4e7ec}
       .apf-faepa-entry__block dl > dt:last-of-type,
       .apf-faepa-entry__block dl > dd:last-of-type{border-bottom:none;padding-bottom:0}
-      .apf-faepa-pay__btn{border:none;border-radius:10px;background:#0ea5e9;color:#fff;font-weight:600;font-size:13px;padding:10px 14px;cursor:pointer;box-shadow:0 8px 18px rgba(14,165,233,.25);transition:background .15s ease, box-shadow .15s ease}
-      .apf-faepa-pay__btn:hover{background:#0284c7;box-shadow:0 10px 22px rgba(2,132,199,.25)}
       .apf-faepa-pay__note{margin:4px 0 0;font-size:13px;color:#0f172a}
+      .apf-faepa-approve__actions{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:10px 0}
+      .apf-faepa-approve__btn{border:none;border-radius:10px;background:#22c55e;color:#0f172a;font-weight:700;font-size:13px;padding:10px 14px;cursor:pointer;box-shadow:0 8px 18px rgba(34,197,94,.25);transition:background .15s ease, box-shadow .15s ease}
+      .apf-faepa-approve__btn:hover{background:#16a34a;box-shadow:0 10px 22px rgba(22,163,74,.25)}
+      .apf-faepa-approve__btn.is-hidden{display:none}
+      .apf-faepa-approve__hint{margin:0;font-size:12px;color:#475467}
+      .apf-faepa-approve__status{display:none;font-size:12px;font-weight:700;color:#166534;background:#ecfdf3;border:1px solid #bbf7d0;border-radius:999px;padding:4px 10px;margin:4px 0 0}
+      .apf-faepa-approve__status.is-visible{display:inline-block}
+      .apf-faepa-entry--approved .apf-faepa-entry__head strong{color:#166534}
+      .apf-faepa-payment-inline.is-hidden{display:none}
       .apf-faepa-notify{display:grid;gap:8px;margin:10px 0}
       .apf-faepa-notify__btn{border:none;border-radius:10px;background:#15803d;color:#fff;font-weight:700;padding:10px 14px;font-size:13px;cursor:pointer;box-shadow:0 10px 18px rgba(21,128,61,.22);transition:background .15s ease, box-shadow .15s ease}
       .apf-faepa-notify__btn:hover{background:#166534;box-shadow:0 12px 22px rgba(22,101,52,.25)}
-      .apf-faepa-pay-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:3000;pointer-events:none;opacity:0;transition:opacity .18s ease}
-      .apf-faepa-pay-modal[aria-hidden=\"false\"]{pointer-events:auto;opacity:1;}
-      .apf-faepa-pay-modal__overlay{position:absolute;inset:0;background:rgba(15,23,42,.55)}
-      .apf-faepa-pay-modal__dialog{position:relative;z-index:1;background:#fff;border-radius:14px;max-width:520px;width:100%;padding:18px;box-shadow:0 24px 50px rgba(15,23,42,.35);display:grid;gap:12px}
-      .apf-faepa-pay-modal__head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-      .apf-faepa-pay-modal__head h4{margin:0;font-size:18px;color:#0f172a}
-      .apf-faepa-pay-modal__close{background:transparent;border:none;font-size:20px;cursor:pointer;color:#0f172a}
-      .apf-faepa-pay-modal__form{display:grid;gap:10px}
-      .apf-faepa-pay-modal__form label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:#0f172a}
-      .apf-faepa-pay-modal__form textarea{border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;font-size:14px;min-height:80px;resize:vertical}
-      .apf-faepa-pay-modal__form input[type=\"file\"], .apf-faepa-pay-modal__form input[type=\"hidden\"]{font-size:13px}
+      .apf-faepa-notify__btn.is-disabled{opacity:.5;cursor:not-allowed}
+      .apf-faepa-return__note--muted{background:#f8fafc;border-color:#e2e8f0;color:#475467}
       .apf-faepa-entry__admin{font-size:13px;color:#0f172a;font-weight:700;text-decoration:none;margin-top:6px;display:inline-flex;gap:6px;align-items:center}
       .apf-faepa-entry__admin:hover{text-decoration:underline}
       .apf-faepa-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;z-index:2000;opacity:0;pointer-events:none;transition:opacity .18s ease}
