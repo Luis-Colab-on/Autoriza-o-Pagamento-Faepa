@@ -1500,3 +1500,4 @@ require_once __DIR__ . '/includes/admin-meta.php';
 require_once __DIR__ . '/includes/portal_colaborador.php';
 require_once __DIR__ . '/includes/portal_coordenador.php';
 require_once __DIR__ . '/includes/portal_faepa.php';
+require_once __DIR__ . '/includes/class-faepa-chatbox.php';

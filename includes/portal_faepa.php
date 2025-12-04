@@ -478,6 +478,11 @@ $apf_portal_faepa_cb = function () {
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
             continue;
         }
+        $event_id = isset( $event['id'] ) ? sanitize_text_field( (string) $event['id'] ) : '';
+        if ( '' !== $event_id && strpos( $event_id, 'faepa_pay_' ) === 0 ) {
+            // Avisos automáticos de pagamento da FAEPA não precisam aparecer neste calendário.
+            continue;
+        }
         $title = isset( $event['title'] ) ? sanitize_text_field( $event['title'] ) : '';
         if ( '' === $title ) {
             continue;
