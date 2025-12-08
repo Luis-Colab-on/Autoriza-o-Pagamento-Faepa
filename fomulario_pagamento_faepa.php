@@ -1182,9 +1182,9 @@ add_shortcode('apf_form', function () {
         <input type="hidden" name="apf_submit" value="1">
 
         <div class="apf-steps">
-          <div class="apf-step is-active">1. Informações do Pagamento</div>
-          <div class="apf-step">2. Prestação do serviço</div>
-          <div class="apf-step">3. Dados para pagamento</div>
+          <div class="apf-step is-active" data-step="1">Informações do Pagamento</div>
+          <div class="apf-step" data-step="2">Prestação do serviço</div>
+          <div class="apf-step" data-step="3">Dados para pagamento</div>
         </div>
 
         <!-- STEP 1 -->
@@ -1298,7 +1298,7 @@ add_shortcode('apf_form', function () {
             </label>
 
             <label>Carga horária do curso
-              <input type="text" name="carga_horaria" inputmode="numeric" maxlength="5" placeholder="ex: 8">
+              <input type="text" name="carga_horaria" inputmode="numeric" maxlength="5" placeholder="ex: 8" required>
             </label>
           </div>
 
@@ -1331,24 +1331,221 @@ add_shortcode('apf_form', function () {
     </div>
 
     <style>
-      .apf-card{max-width:640px;margin:16px auto;padding:20px 22px;background:#fff;border-radius:12px;box-shadow:0 10px 28px rgba(0,0,0,.5);border: 1px solid #8d8d8d;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial}
-      .apf-card h2{margin:0 0 14px;font-size:22px;text-align:center}
-      .apf-steps{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:10px 0 16px}
-      .apf-step{background:#f2f4f7;border:1px solid #e6e9ef;border-radius:10px;padding:10px 12px;font-size:12.5px;text-align:center;color:#475467}
-      .apf-step.is-active{background:#e8f1ff;border-color:#bcd4ff;color:#1849a9;font-weight:600}
-      .apf-pane{display:none}
+      .apf-card{
+        --apf-primary:#1554e1;
+        --apf-primary-strong:#0f3fa6;
+        --apf-border:#d6deeb;
+        --apf-muted:#667085;
+        --apf-ink:#1d2939;
+        --apf-soft:#f5f7fb;
+        width:min(980px, 100%);
+        margin:12px auto 24px;
+        padding:clamp(16px, 2vw + 12px, 28px);
+        background:linear-gradient(135deg,#f8fbff 0%,#ffffff 45%,#f7f8fc 100%);
+        border-radius:16px;
+        border:1px solid var(--apf-border);
+        box-shadow:0 18px 48px rgba(15,23,42,.16);
+        font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+      }
+      .apf-card h2{
+        margin:0 0 12px;
+        font-size:24px;
+        line-height:1.2;
+        text-align:center;
+        color:var(--apf-ink);
+        letter-spacing:-0.01em;
+      }
+      .apf-steps{
+        display:flex;
+        gap:10px;
+        margin:8px 0 18px;
+        overflow-x:auto;
+        padding:4px;
+        scrollbar-width:thin;
+        scroll-snap-type:x mandatory;
+      }
+      .apf-steps::-webkit-scrollbar{height:6px}
+      .apf-steps::-webkit-scrollbar-thumb{background:#cdd5e0;border-radius:999px}
+      .apf-step{
+        flex:1;
+        min-width:190px;
+        display:flex;
+        align-items:center;
+        gap:10px;
+        background:var(--apf-soft);
+        border:1px solid var(--apf-border);
+        border-radius:12px;
+        padding:12px 14px;
+        font-size:13px;
+        color:var(--apf-muted);
+        font-weight:600;
+        box-shadow:inset 0 -1px 0 rgba(255,255,255,.6);
+        transition:border-color .2s, background .2s, color .2s, transform .2s;
+        scroll-snap-align:start;
+      }
+      .apf-step::before{
+        content:attr(data-step);
+        width:28px;
+        height:28px;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:999px;
+        background:#fff;
+        border:1px solid var(--apf-border);
+        color:var(--apf-ink);
+        font-weight:700;
+        box-shadow:0 1px 2px rgba(16,24,40,.16);
+        flex-shrink:0;
+      }
+      .apf-step.is-active{
+        background:#e8f0ff;
+        border-color:#b8ccff;
+        color:var(--apf-ink);
+        transform:translateY(-1px);
+      }
+      .apf-step.is-active::before{
+        background:var(--apf-primary);
+        border-color:var(--apf-primary);
+        color:#fff;
+      }
+      @media(max-width:767px){
+        .apf-steps{overflow:visible;padding:0;margin:6px 0 12px;gap:0;justify-content:center}
+        .apf-step{display:none;min-width:auto}
+        .apf-step.is-active{
+          display:inline-flex;
+          flex-direction:column;
+          align-items:center;
+          width:auto;
+          min-width:150px;
+          justify-content:center;
+          padding:12px 14px;
+          gap:8px;
+          font-size:14px;
+          line-height:1.25;
+          text-align:center;
+          margin:0 auto;
+        }
+        .apf-step.is-active::before{
+          width:46px;
+          height:46px;
+          font-size:16px;
+          font-weight:800;
+        }
+      }
+      .apf-pane{display:none;animation:apfFade .24s ease}
       .apf-pane.is-active{display:block}
-      .apf-grid{display:grid;grid-template-columns:1fr;gap:12px}
-      .apf-grid label{display:flex;flex-direction:column;font-size:13px;color:#344054}
-      .apf-grid input,.apf-grid textarea,.apf-grid select{border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;color:#344054;width:100%;max-width:100%;box-sizing:border-box}
-      .apf-grid select{appearance:none;-webkit-appearance:none;-moz-appearance:none;background-image:linear-gradient(45deg,transparent 50%,#475067 50%),linear-gradient(135deg,#475067 50%,transparent 50%),linear-gradient(to right,transparent,transparent);background-position:calc(100% - 18px) 55%,calc(100% - 13px) 55%,100% 0;background-size:5px 5px,5px 5px,40px 100%;background-repeat:no-repeat;padding-right:42px}
-      .apf-row{display:flex;gap:18px;border:none;margin:10px 0 0;padding:0}
-      .apf-radio{display:flex;align-items:center;gap:6px;font-size:14px}
-      .apf-actions{display:flex;justify-content:space-between;margin-top:16px}
-      .apf-actions button{background:#1f6feb;color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer}
-      .apf-actions .apf-prev{background:#a0a7b4}
+      @keyframes apfFade{from{opacity:.2;transform:translateY(6px);}to{opacity:1;transform:none;}}
+      .apf-pane .apf-grid{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+        gap:14px;
+      }
+      .apf-grid label{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+        font-size:13.5px;
+        color:var(--apf-muted);
+        background:#fff;
+        border:1px solid #e7ecf3;
+        border-radius:12px;
+        padding:10px 12px;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.8);
+      }
+      .apf-grid input,
+      .apf-grid textarea,
+      .apf-grid select{
+        border:1px solid #d0d5dd;
+        border-radius:10px;
+        padding:11px 12px;
+        font-size:15px;
+        background:#fdfdff;
+        color:var(--apf-ink);
+        width:100%;
+        max-width:100%;
+        box-sizing:border-box;
+        transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+        min-height:44px;
+      }
+      .apf-grid textarea{min-height:110px;resize:vertical}
+      .apf-grid input:focus,
+      .apf-grid textarea:focus,
+      .apf-grid select:focus{
+        border-color:var(--apf-primary);
+        box-shadow:0 0 0 3px rgba(21,84,225,.16);
+        outline:none;
+        background:#fff;
+      }
+      .apf-grid select{
+        appearance:none;
+        -webkit-appearance:none;
+        -moz-appearance:none;
+        background-image:linear-gradient(45deg,transparent 50%,#4a5568 50%),linear-gradient(135deg,#4a5568 50%,transparent 50%),linear-gradient(to right,transparent,transparent);
+        background-position:calc(100% - 18px) 55%,calc(100% - 13px) 55%,100% 0;
+        background-size:5px 5px,5px 5px,40px 100%;
+        background-repeat:no-repeat;
+        padding-right:42px;
+      }
+      .apf-row{
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        gap:12px;
+        border:1px dashed #d8e1ed;
+        margin:14px 0 6px;
+        padding:12px 14px;
+        border-radius:12px;
+        background:#f8fafc;
+        align-items:center;
+      }
+      .apf-row legend{
+        grid-column:1/-1;
+        font-weight:700;
+        color:var(--apf-ink);
+        padding:0 4px;
+        margin-bottom:2px;
+        font-size:13px;
+      }
+      .apf-radio{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        font-size:14px;
+        padding:10px 12px;
+        border:1px solid #dfe4ee;
+        border-radius:10px;
+        background:#fff;
+        width:100%;
+      }
+      .apf-actions{
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+        margin-top:18px;
+      }
+      .apf-actions button{
+        background:var(--apf-primary);
+        color:#fff;
+        border:none;
+        border-radius:12px;
+        padding:12px 14px;
+        cursor:pointer;
+        font-weight:700;
+        font-size:15px;
+        letter-spacing:0.01em;
+        box-shadow:0 10px 26px rgba(21,84,225,.25);
+        transition:background .2s ease, transform .15s ease, box-shadow .2s ease;
+      }
+      .apf-actions button:hover{background:var(--apf-primary-strong);box-shadow:0 14px 30px rgba(15,63,166,.28);transform:translateY(-1px)}
+      .apf-actions button:focus{outline:2px solid rgba(21,84,225,.35);outline-offset:2px}
+      .apf-actions .apf-prev{background:#a0a7b4;box-shadow:none}
+      .apf-actions .apf-prev:hover{background:#82899a}
+      .apf-actions .apf-prev:focus{outline-color:rgba(130,137,154,.4)}
       .apf-field-note{display:block;font-size:12px;color:#b42318;margin-top:6px}
-      @media(min-width:640px){ .apf-grid{grid-template-columns:1fr 1fr} }
+      @media(min-width:640px){
+        .apf-actions{flex-direction:row;justify-content:space-between;align-items:center}
+        .apf-actions button{width:auto;min-width:160px}
+      }
     </style>
 
     <script>
