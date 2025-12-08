@@ -11,6 +11,14 @@ $apf_portal_faepa_cb = function () {
         ) );
     }
 
+    if ( class_exists( 'Faepa_Chatbox' ) && function_exists( 'wp_add_inline_script' ) ) {
+        wp_add_inline_script(
+            Faepa_Chatbox::SCRIPT_HANDLE,
+            'window.faepaChatboxPortalReady = true; window.faepaChatboxPortalContext = "faepa";',
+            'before'
+        );
+    }
+
     $faepa_notice      = '';
     $faepa_notice_type = 'success';
 

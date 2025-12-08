@@ -1,4 +1,15 @@
 (function() {
+  const root = document.getElementById('faepaChatboxRoot');
+  if (!root) { return; }
+
+  const loggedIn = !!(document.body && document.body.classList.contains('logged-in'));
+  const isLoginCard = !!document.querySelector('.apf-login-card');
+  const forceHide = !!window.faepaChatboxForceHide;
+  if (!loggedIn || isLoginCard || forceHide) {
+    root.remove();
+    return;
+  }
+
   if (!window.faepaChatbox || !faepaChatbox.nonce) { return; }
 
   const state = {
@@ -13,10 +24,29 @@
   };
 
   const qs = (id) => document.getElementById(id);
-  const root = qs('faepaChatboxRoot');
-  if (!root) { return; }
 
   const isDesk = !!faepaChatbox.isFinanceDesk;
+  const portalReadyFlag = (typeof window.faepaChatboxPortalReady !== 'undefined') ? !!window.faepaChatboxPortalReady : null;
+  const portalContextFlag = (window.faepaChatboxPortalContext || '').trim();
+  const resolvedContext = (() => {
+    if (portalReadyFlag === false) {
+      return '';
+    }
+    let ctx = (faepaChatbox.context || '').trim();
+    if (portalReadyFlag === true && portalContextFlag) {
+      return portalContextFlag;
+    }
+    if (ctx) { return ctx; }
+    if (document.querySelector('.apf-coord-portal')) { return 'coordenador'; }
+    if (document.querySelector('#apfFaepaPortal')) { return 'faepa'; }
+    if (document.querySelector('.apf-portal')) { return 'colaborador'; }
+    return '';
+  })();
+  const blockedByFlag = (portalReadyFlag === false);
+  if ((!isDesk && (!resolvedContext || blockedByFlag)) || isLoginCard) {
+    root.remove();
+    return;
+  }
   const btn = qs('faepaChatboxButton');
   const badge = qs('faepaChatboxBadge');
   const overlay = qs('faepaChatboxOverlay');
@@ -29,6 +59,7 @@
   const inputEl = qs('faepaChatInput');
   const fileEl = qs('faepaChatFile');
   const defaultEmptyMsg = msgsEl ? (msgsEl.dataset.empty || faepaChatbox.strings.emptyMsg) : 'Nenhuma mensagem ainda.';
+  const contactKeyOf = (contact) => contact.key || `${contact.user_id}-${contact.context || ''}`;
 
   const request = (action, data, isMultipart = false) => {
     const body = isMultipart ? data : new URLSearchParams(data);
@@ -93,11 +124,13 @@
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'faepa-chat-contact';
-      if (state.currentContact && state.currentContact.user_id === c.user_id) {
+      const contactKey = contactKeyOf(c);
+      if (state.currentContact && state.currentContact.key === contactKey) {
         btn.classList.add('is-active');
       }
       btn.dataset.userId = c.user_id;
-      btn.textContent = c.name || c.email;
+      btn.dataset.contactKey = contactKey;
+      btn.textContent = (isDesk && c.label) ? c.label : (c.name || c.email);
       if (c.unread && c.unread > 0) {
         const badge = document.createElement('span');
         badge.className = 'faepa-chat-contact__badge';
@@ -105,12 +138,13 @@
         btn.appendChild(badge);
       }
       btn.addEventListener('click', () => {
-        if (state.currentContact && state.currentContact.user_id === c.user_id) {
+        if (state.currentContact && state.currentContact.key === contactKey) {
           closeConversation();
           renderContacts();
         } else {
-          state.currentContact = c;
-          loadMessages(c, { resetScroll: true });
+          const nextContact = { ...c, key: contactKey };
+          state.currentContact = nextContact;
+          loadMessages(nextContact, { resetScroll: true });
         }
       });
       contactsEl.appendChild(btn);
@@ -167,10 +201,14 @@
       action: 'faepa_chat_contacts',
       _ajax_nonce: faepaChatbox.nonce,
       search,
-      is_desk: isDesk ? 1 : 0
+      is_desk: isDesk ? 1 : 0,
+      context: resolvedContext
     }).then(res => {
       if (!res || !res.success) { return; }
-      state.contacts = res.data.contacts || [];
+      state.contacts = (res.data.contacts || []).map(c => ({
+        ...c,
+        key: contactKeyOf(c)
+      }));
       renderContacts();
     });
   };
@@ -180,24 +218,37 @@
     if (options.resetScroll) {
       state.autoScroll = true;
     }
-    headerEl.textContent = contact.name || contact.email || 'Contato';
+    headerEl.textContent = (isDesk && contact.label) ? contact.label : (contact.name || contact.email || 'Contato');
     msgsEl.dataset.empty = defaultEmptyMsg;
     const data = {
       action: 'faepa_chat_messages',
       _ajax_nonce: faepaChatbox.nonce,
       thread_id: contact.thread_id || 0,
       contact_id: contact.user_id,
-      is_desk: isDesk ? 1 : 0
+      is_desk: isDesk ? 1 : 0,
+      context: resolvedContext
     };
+    if (isDesk && contact.context) {
+      data.contact_context = contact.context;
+    }
     request('faepa_chat_messages', data).then(res => {
       if (!res || !res.success) { return; }
       state.currentThread = res.data.thread_id;
       state.messages = res.data.messages || [];
+      const contactFromServer = res.data.contact || contact;
+      const normalizedContact = { ...contactFromServer, key: contactKeyOf(contactFromServer) };
+      state.currentContact = normalizedContact;
+      headerEl.textContent = (isDesk && normalizedContact.label) ? normalizedContact.label : (normalizedContact.name || normalizedContact.email || 'Contato');
       // Atualiza thread_id e limpa badge
       state.contacts = state.contacts.map(c => {
-        if (c.user_id === contact.user_id) {
-          c.thread_id = res.data.thread_id;
-          c.unread = 0;
+        const cKey = contactKeyOf(c);
+        if (cKey === normalizedContact.key) {
+          return {
+            ...c,
+            thread_id: res.data.thread_id,
+            unread: 0,
+            context: normalizedContact.context
+          };
         }
         return c;
       });
@@ -235,8 +286,12 @@
     form.append('thread_id', state.currentThread || 0);
     form.append('contact_id', state.currentContact.user_id);
     form.append('message', text);
+    form.append('context', resolvedContext);
     if (isDesk) {
       form.append('is_desk', 1);
+      if (state.currentContact.context) {
+        form.append('contact_context', state.currentContact.context);
+      }
     }
     if (file) {
       form.append('attachment', file);
@@ -248,6 +303,7 @@
       fileEl.value = '';
       state.currentThread = res.data.thread_id;
       state.messages.push(res.data.message);
+      state.autoScroll = true;
       renderMessages();
       loadContacts();
     });
@@ -257,7 +313,8 @@
     request('faepa_chat_unread_count', {
       action: 'faepa_chat_unread_count',
       _ajax_nonce: faepaChatbox.nonce,
-      is_desk: isDesk ? 1 : 0
+      is_desk: isDesk ? 1 : 0,
+      context: resolvedContext
     }).then(res => {
       if (!res || !res.success) { return; }
       renderBadge(res.data.unread || 0);

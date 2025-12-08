@@ -73,6 +73,150 @@ class Faepa_Chatbox {
     }
 
     /**
+     * Verifica se o chat deve ser exibido na página atual (precisa de shortcode).
+     */
+    private static function is_chatbox_page() {
+        if ( ! is_user_logged_in() ) {
+            return false;
+        }
+
+        global $post;
+        if ( empty( $post ) || ! isset( $post->post_content ) ) {
+            return false;
+        }
+
+        $shortcodes = apply_filters(
+            'faepa_chatbox_shortcodes',
+            array(
+                'apf_inbox',
+                'apf_portal',
+                'apf_portal_coordenador',
+                'apf_portal_faepa',
+                'portal_faepa',
+            )
+        );
+
+        foreach ( (array) $shortcodes as $shortcode ) {
+            if ( has_shortcode( $post->post_content, $shortcode ) ) {
+                if ( 'apf_portal_coordenador' === $shortcode && function_exists( 'apf_coordinator_has_portal_access' ) ) {
+                    $user_id = get_current_user_id();
+                    $role    = self::get_user_role( $user_id );
+                    // Financeiro/Admin continuam vendo; coordenador só depois de aprovado.
+                    if ( ! in_array( $role, array( 'financeiro', 'administrator' ), true ) && ! apf_coordinator_has_portal_access( $user_id ) ) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Normaliza o contexto/portal de uso do chat.
+     */
+    private static function normalize_context( $context ) {
+        $context = strtolower( trim( (string) $context ) );
+        $allowed = array( 'financeiro', 'faepa', 'coordenador', 'colaborador' );
+        return in_array( $context, $allowed, true ) ? $context : '';
+    }
+
+    /**
+     * Contexto atual do chat com base na página/shortcode ou no payload.
+     */
+    private static function get_current_page_context() {
+        $context = '';
+
+        if ( isset( $_POST['context'] ) ) {
+            $context = sanitize_text_field( wp_unslash( $_POST['context'] ) );
+        }
+
+        if ( '' === $context ) {
+            if ( self::is_finance_desk_page() ) {
+                $context = 'financeiro';
+            } else {
+                global $post;
+                if ( $post && isset( $post->post_content ) ) {
+                    if ( has_shortcode( $post->post_content, 'apf_portal_coordenador' ) ) {
+                        $context = 'coordenador';
+                    } elseif ( has_shortcode( $post->post_content, 'apf_portal' ) ) {
+                        $context = 'colaborador';
+                    } elseif ( has_shortcode( $post->post_content, 'apf_portal_faepa' ) || has_shortcode( $post->post_content, 'portal_faepa' ) ) {
+                        $context = 'faepa';
+                    }
+                }
+            }
+        }
+
+        $context = self::normalize_context( $context );
+        if ( 'coordenador' === $context && function_exists( 'apf_coordinator_has_portal_access' ) ) {
+            $user_id = get_current_user_id();
+            $role    = self::get_user_role( $user_id );
+            if ( ! in_array( $role, array( 'financeiro', 'administrator' ), true ) && ! apf_coordinator_has_portal_access( $user_id ) ) {
+                $context = '';
+            }
+        }
+        if ( '' !== $context ) {
+            return $context;
+        }
+
+        $fallback = self::normalize_context( self::get_user_role() );
+        if ( 'coordenador' === $fallback && function_exists( 'apf_coordinator_has_portal_access' ) ) {
+            $user_id = get_current_user_id();
+            $role    = self::get_user_role( $user_id );
+            if ( ! in_array( $role, array( 'financeiro', 'administrator' ), true ) && ! apf_coordinator_has_portal_access( $user_id ) ) {
+                return '';
+            }
+        }
+
+        return $fallback;
+    }
+
+    /**
+     * Texto de exibição para o contexto.
+     */
+    private static function get_context_label( $context ) {
+        switch ( $context ) {
+            case 'financeiro':
+                return 'Financeiro';
+            case 'faepa':
+                return 'FAEPA';
+            case 'coordenador':
+                return 'coordenador';
+            case 'colaborador':
+                return 'colaborador';
+            default:
+                return '';
+        }
+    }
+
+    /**
+     * Contexto padrão de um usuário com base na role principal.
+     */
+    private static function get_default_context_for_user( $user_id ) {
+        $role = self::get_user_role( $user_id );
+        $map  = array(
+            'financeiro' => 'financeiro',
+            'faepa'      => 'faepa',
+            'coordenador'=> 'coordenador',
+            'colaborador'=> 'colaborador',
+        );
+        return isset( $map[ $role ] ) ? $map[ $role ] : '';
+    }
+
+    /**
+     * Nome formatado com o contexto para exibição no financeiro.
+     */
+    private static function format_name_with_context( $name, $context ) {
+        $label = self::get_context_label( $context );
+        if ( '' === $label ) {
+            return $name;
+        }
+        return sprintf( '%s (%s)', $name, $label );
+    }
+
+    /**
      * Permissão mínima para atuar como "financeiro" no chat (dashboard).
      */
     private static function current_user_can_finance_desk() {
@@ -104,13 +248,17 @@ class Faepa_Chatbox {
                 'real_user_id'     => $real_user_id,
                 'chat_user_id'     => $finance_id,
                 'is_finance_desk'  => true,
+                'context'          => 'financeiro',
             );
         }
+
+        $context = self::get_current_page_context();
 
         return array(
             'real_user_id'     => $real_user_id,
             'chat_user_id'     => $real_user_id,
             'is_finance_desk'  => false,
+            'context'          => $context,
         );
     }
 
@@ -132,9 +280,13 @@ class Faepa_Chatbox {
             updated_at datetime NOT NULL,
             user1_id bigint(20) unsigned NOT NULL,
             user2_id bigint(20) unsigned NOT NULL,
+            user1_ctx varchar(30) NOT NULL DEFAULT '',
+            user2_ctx varchar(30) NOT NULL DEFAULT '',
             PRIMARY KEY  (id),
             KEY user1_id (user1_id),
             KEY user2_id (user2_id),
+            KEY user1_ctx (user1_ctx),
+            KEY user2_ctx (user2_ctx),
             KEY updated_at (updated_at)
         ) $charset;";
 
@@ -169,7 +321,11 @@ class Faepa_Chatbox {
         $threads_exists  = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', self::$table_threads ) );
         $messages_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', self::$table_messages ) );
 
-        if ( $threads_exists !== self::$table_threads || $messages_exists !== self::$table_messages ) {
+        $has_ctx_columns = $threads_exists === self::$table_threads
+            ? $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM " . self::$table_threads . " LIKE %s", 'user1_ctx' ) )
+            : false;
+
+        if ( $threads_exists !== self::$table_threads || $messages_exists !== self::$table_messages || ! $has_ctx_columns ) {
             self::activate();
         }
     }
@@ -178,7 +334,7 @@ class Faepa_Chatbox {
      * Enfileira scripts/estilos do chat para usuários logados.
      */
     public static function enqueue_assets() {
-        if ( ! is_user_logged_in() ) {
+        if ( ! self::is_chatbox_page() ) {
             return;
         }
 
@@ -188,14 +344,14 @@ class Faepa_Chatbox {
             self::STYLE_HANDLE,
             $base_url . 'faepa-chatbox.css',
             array(),
-            '1.0.0'
+            '1.0.3'
         );
 
         wp_enqueue_script(
             self::SCRIPT_HANDLE,
             $base_url . 'faepa-chatbox.js',
             array(),
-            '1.0.0',
+            '1.0.3',
             true
         );
 
@@ -207,6 +363,7 @@ class Faepa_Chatbox {
                 'nonce'    => wp_create_nonce( self::NONCE_ACTION ),
                 'userId'   => get_current_user_id(),
                 'userRole' => self::get_user_role(),
+                'context'  => self::get_current_page_context(),
                 'iconUrl'  => self::plugin_url() . 'imgs/chatbox-preta.svg',
                 'isFinanceDesk' => self::is_finance_desk_page(),
                 'strings'  => array(
@@ -224,7 +381,7 @@ class Faepa_Chatbox {
      * Injeta HTML base (botão flutuante + modal) no footer.
      */
     public static function render_chat_shell() {
-        if ( ! is_user_logged_in() ) {
+        if ( ! self::is_chatbox_page() ) {
             return;
         } ?>
         <div id="faepaChatboxRoot" class="faepa-chat-root" aria-live="polite">
@@ -279,7 +436,7 @@ class Faepa_Chatbox {
         $search   = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
         $contacts = $context['is_finance_desk']
             ? self::get_contacts_for_finance_desk( $context['chat_user_id'], $search )
-            : self::get_contacts_for_finance_target( $context['chat_user_id'], $search );
+            : self::get_contacts_for_finance_target( $context['chat_user_id'], $context['context'], $search );
 
         wp_send_json_success( array( 'contacts' => $contacts ) );
     }
@@ -299,6 +456,7 @@ class Faepa_Chatbox {
         self::ensure_tables();
 
         $user_id    = $context['chat_user_id'];
+        $user_ctx   = $context['is_finance_desk'] ? 'financeiro' : $context['context'];
         $thread_id  = isset( $_POST['thread_id'] ) ? absint( $_POST['thread_id'] ) : 0;
         $contact_id = isset( $_POST['contact_id'] ) ? absint( $_POST['contact_id'] ) : 0;
 
@@ -307,10 +465,16 @@ class Faepa_Chatbox {
         }
 
         if ( $thread_id <= 0 && $contact_id > 0 ) {
-            $thread_id = self::maybe_get_or_create_thread( $user_id, $contact_id );
+            $contact_ctx = self::get_default_context_for_user( $contact_id );
+            if ( $context['is_finance_desk'] && isset( $_POST['contact_context'] ) ) {
+                $contact_ctx = self::normalize_context( sanitize_text_field( wp_unslash( $_POST['contact_context'] ) ) ) ?: $contact_ctx;
+            }
+            $thread_id = self::maybe_get_or_create_thread( $user_id, $contact_id, $user_ctx, $contact_ctx );
         }
 
-        if ( $thread_id <= 0 || ! self::user_in_thread( $user_id, $thread_id ) ) {
+        $context_check = $context['is_finance_desk'] ? '' : $user_ctx;
+
+        if ( $thread_id <= 0 || ! self::user_in_thread( $user_id, $thread_id, $context_check ) ) {
             wp_send_json_error( array( 'message' => 'Thread não encontrada.' ), 404 );
         }
 
@@ -355,8 +519,8 @@ class Faepa_Chatbox {
             )
         );
 
-        $contact_id = self::get_thread_other_user( $thread_id, $user_id );
-        $contact    = self::get_user_payload( $contact_id );
+        $other      = self::get_thread_other_participant( $thread_id, $user_id );
+        $contact    = self::get_user_payload( $other['user_id'], $other['context'] );
 
         wp_send_json_success(
             array(
@@ -382,6 +546,7 @@ class Faepa_Chatbox {
         self::ensure_tables();
 
         $user_id    = $context['chat_user_id'];
+        $user_ctx   = $context['is_finance_desk'] ? 'financeiro' : $context['context'];
         $thread_id  = isset( $_POST['thread_id'] ) ? absint( $_POST['thread_id'] ) : 0;
         $contact_id = isset( $_POST['contact_id'] ) ? absint( $_POST['contact_id'] ) : 0;
         $message    = isset( $_POST['message'] ) ? wp_kses_post( wp_unslash( $_POST['message'] ) ) : '';
@@ -391,10 +556,16 @@ class Faepa_Chatbox {
         }
 
         if ( $thread_id <= 0 && $contact_id > 0 ) {
-            $thread_id = self::maybe_get_or_create_thread( $user_id, $contact_id );
+            $contact_ctx = self::get_default_context_for_user( $contact_id );
+            if ( $context['is_finance_desk'] && isset( $_POST['contact_context'] ) ) {
+                $contact_ctx = self::normalize_context( sanitize_text_field( wp_unslash( $_POST['contact_context'] ) ) ) ?: $contact_ctx;
+            }
+            $thread_id = self::maybe_get_or_create_thread( $user_id, $contact_id, $user_ctx, $contact_ctx );
         }
 
-        if ( $thread_id <= 0 || ! self::user_in_thread( $user_id, $thread_id ) ) {
+        $context_check = $context['is_finance_desk'] ? '' : $user_ctx;
+
+        if ( $thread_id <= 0 || ! self::user_in_thread( $user_id, $thread_id, $context_check ) ) {
             wp_send_json_error( array( 'message' => 'Thread não encontrada.' ), 404 );
         }
 
@@ -473,9 +644,12 @@ class Faepa_Chatbox {
         self::ensure_tables();
 
         $user_id   = $context['chat_user_id'];
+        $user_ctx  = $context['is_finance_desk'] ? 'financeiro' : $context['context'];
         $thread_id = isset( $_POST['thread_id'] ) ? absint( $_POST['thread_id'] ) : 0;
 
-        if ( ! $user_id || $thread_id <= 0 || ! self::user_in_thread( $user_id, $thread_id ) ) {
+        $context_check = $context['is_finance_desk'] ? '' : $user_ctx;
+
+        if ( ! $user_id || $thread_id <= 0 || ! self::user_in_thread( $user_id, $thread_id, $context_check ) ) {
             wp_send_json_error( array( 'message' => 'Thread inválida.' ), 400 );
         }
 
@@ -506,19 +680,37 @@ class Faepa_Chatbox {
         self::ensure_tables();
 
         $user_id = $context['chat_user_id'];
+        $user_ctx = $context['is_finance_desk'] ? '' : $context['context'];
 
-        $count = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT COUNT(m.id)
-                 FROM " . self::$table_messages . " m
-                 INNER JOIN " . self::$table_threads . " t ON m.thread_id = t.id
-                 WHERE m.is_read = 0 AND m.sender_id <> %d
-                   AND (t.user1_id = %d OR t.user2_id = %d)",
-                $user_id,
-                $user_id,
-                $user_id
-            )
-        );
+        if ( $context['is_finance_desk'] ) {
+            $count = (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(m.id)
+                     FROM " . self::$table_messages . " m
+                     INNER JOIN " . self::$table_threads . " t ON m.thread_id = t.id
+                     WHERE m.is_read = 0 AND m.sender_id <> %d
+                       AND (t.user1_id = %d OR t.user2_id = %d)",
+                    $user_id,
+                    $user_id,
+                    $user_id
+                )
+            );
+        } else {
+            $count = (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(m.id)
+                     FROM " . self::$table_messages . " m
+                     INNER JOIN " . self::$table_threads . " t ON m.thread_id = t.id
+                     WHERE m.is_read = 0 AND m.sender_id <> %d
+                       AND ( (t.user1_id = %d AND t.user1_ctx = %s) OR (t.user2_id = %d AND t.user2_ctx = %s) )",
+                    $user_id,
+                    $user_id,
+                    $user_ctx,
+                    $user_id,
+                    $user_ctx
+                )
+            );
+        }
 
         wp_send_json_success( array( 'unread' => $count ) );
     }
@@ -526,7 +718,7 @@ class Faepa_Chatbox {
     /**
      * Contato único para usuários comuns: sempre o "financeiro".
      */
-    private static function get_contacts_for_finance_target( $user_id, $search = '' ) {
+    private static function get_contacts_for_finance_target( $user_id, $user_context = '', $search = '' ) {
         global $wpdb;
 
         $finance_user = self::get_finance_user();
@@ -534,12 +726,17 @@ class Faepa_Chatbox {
             return array();
         }
 
-        $payload = self::get_user_payload_from_obj( $finance_user );
+        $payload = self::get_user_payload_from_obj( $finance_user, 'financeiro' );
         if ( $search && ! self::matches_search( $payload, $search ) ) {
             return array();
         }
 
-        $thread_id = self::maybe_get_or_create_thread( $user_id, (int) $finance_user->ID );
+        $thread_id = self::maybe_get_or_create_thread(
+            $user_id,
+            (int) $finance_user->ID,
+            self::normalize_context( $user_context ),
+            'financeiro'
+        );
 
         $unread = 0;
         if ( $thread_id > 0 ) {
@@ -572,7 +769,7 @@ class Faepa_Chatbox {
 
         $threads = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT id, user1_id, user2_id, updated_at
+                "SELECT id, user1_id, user2_id, user1_ctx, user2_ctx, updated_at
                  FROM " . self::$table_threads . "
                  WHERE user1_id = %d OR user2_id = %d
                  ORDER BY updated_at DESC",
@@ -586,10 +783,13 @@ class Faepa_Chatbox {
         $contacts   = array();
 
         foreach ( $threads as $thread ) {
-            $other_id = ( (int) $thread['user1_id'] === $finance_id )
-                ? (int) $thread['user2_id']
-                : (int) $thread['user1_id'];
-            $thread_ids[ (int) $thread['id'] ] = $other_id;
+            $is_user1 = ( (int) $thread['user1_id'] === $finance_id );
+            $other_id = $is_user1 ? (int) $thread['user2_id'] : (int) $thread['user1_id'];
+            $other_ctx = $is_user1 ? $thread['user2_ctx'] : $thread['user1_ctx'];
+            $thread_ids[ (int) $thread['id'] ] = array(
+                'user_id' => $other_id,
+                'context' => self::normalize_context( $other_ctx ) ?: self::get_default_context_for_user( $other_id ),
+            );
         }
 
         $unread_map = array();
@@ -609,8 +809,8 @@ class Faepa_Chatbox {
             }
         }
 
-        foreach ( $thread_ids as $tid => $other_id ) {
-            $payload = self::get_user_payload( $other_id );
+        foreach ( $thread_ids as $tid => $data ) {
+            $payload = self::get_user_payload( $data['user_id'], $data['context'] );
             if ( ! $payload ) {
                 continue;
             }
@@ -621,6 +821,7 @@ class Faepa_Chatbox {
             $payload['unread']      = isset( $unread_map[ $tid ] ) ? $unread_map[ $tid ] : 0;
             $payload['can_start']   = true;
             $payload['can_message'] = true;
+            $payload['label']       = self::format_name_with_context( $payload['name'], $payload['context'] );
             $contacts[]             = $payload;
         }
 
@@ -660,7 +861,7 @@ class Faepa_Chatbox {
                 // Financeiro único + coordenadores
                 $users = array();
                 $finance_user = self::get_finance_user();
-                if ( $finance_user && ( '' === $search || self::matches_search( self::get_user_payload_from_obj( $finance_user ), $search ) ) ) {
+                if ( $finance_user && ( '' === $search || self::matches_search( self::get_user_payload_from_obj( $finance_user, 'financeiro' ), $search ) ) ) {
                     $users[] = $finance_user;
                 }
                 $args['role__in'] = array( 'coordenador' );
@@ -674,7 +875,7 @@ class Faepa_Chatbox {
                 // Financeiro único + colaboradores sob responsabilidade (meta faepa_coordenador_id)
                 $users = array();
                 $finance_user = self::get_finance_user();
-                if ( $finance_user && ( '' === $search || self::matches_search( self::get_user_payload_from_obj( $finance_user ), $search ) ) ) {
+                if ( $finance_user && ( '' === $search || self::matches_search( self::get_user_payload_from_obj( $finance_user, 'financeiro' ), $search ) ) ) {
                     $users[] = $finance_user;
                 }
                 $args_colab = array(
@@ -699,7 +900,7 @@ class Faepa_Chatbox {
                 if ( ! $finance_user ) {
                     return array();
                 }
-                if ( $search && ! self::matches_search( self::get_user_payload_from_obj( $finance_user ), $search ) ) {
+                if ( $search && ! self::matches_search( self::get_user_payload_from_obj( $finance_user, 'financeiro' ), $search ) ) {
                     return array();
                 }
                 return array( $finance_user );
@@ -709,7 +910,7 @@ class Faepa_Chatbox {
                 if ( ! $finance_user || (int) $finance_user->ID === (int) $user_id ) {
                     return array();
                 }
-                if ( $search && ! self::matches_search( self::get_user_payload_from_obj( $finance_user ), $search ) ) {
+                if ( $search && ! self::matches_search( self::get_user_payload_from_obj( $finance_user, 'financeiro' ), $search ) ) {
                     return array();
                 }
                 return array( $finance_user );
@@ -719,16 +920,41 @@ class Faepa_Chatbox {
     /**
      * Cria thread se permitido; retorna ID ou 0.
      */
-    private static function maybe_get_or_create_thread( $user_id, $contact_id ) {
+    private static function maybe_get_or_create_thread( $user_id, $contact_id, $user_context = '', $contact_context = '' ) {
         global $wpdb;
         if ( ! $user_id || ! $contact_id ) {
             return 0;
         }
 
+        $user_context    = self::normalize_context( $user_context ) ?: self::get_default_context_for_user( $user_id );
+        $contact_context = self::normalize_context( $contact_context ) ?: self::get_default_context_for_user( $contact_id );
+
         $existing = $wpdb->get_var(
             $wpdb->prepare(
                 "SELECT id FROM " . self::$table_threads . "
-                 WHERE (user1_id = %d AND user2_id = %d) OR (user1_id = %d AND user2_id = %d)
+                 WHERE (user1_id = %d AND user2_id = %d AND user1_ctx = %s AND user2_ctx = %s)
+                    OR (user1_id = %d AND user2_id = %d AND user1_ctx = %s AND user2_ctx = %s)
+                 LIMIT 1",
+                $user_id,
+                $contact_id,
+                $user_context,
+                $contact_context,
+                $contact_id,
+                $user_id,
+                $contact_context,
+                $user_context
+            )
+        );
+        if ( $existing ) {
+            return (int) $existing;
+        }
+
+        // Fallback para threads antigas sem contexto definido.
+        $legacy = $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT id FROM " . self::$table_threads . "
+                 WHERE (user1_id = %d AND user2_id = %d AND (user1_ctx = '' OR user1_ctx IS NULL) AND (user2_ctx = '' OR user2_ctx IS NULL))
+                    OR (user1_id = %d AND user2_id = %d AND (user1_ctx = '' OR user1_ctx IS NULL) AND (user2_ctx = '' OR user2_ctx IS NULL))
                  LIMIT 1",
                 $user_id,
                 $contact_id,
@@ -736,8 +962,18 @@ class Faepa_Chatbox {
                 $user_id
             )
         );
-        if ( $existing ) {
-            return (int) $existing;
+        if ( $legacy ) {
+            $wpdb->update(
+                self::$table_threads,
+                array(
+                    'user1_ctx' => $user_context,
+                    'user2_ctx' => $contact_context,
+                ),
+                array( 'id' => (int) $legacy ),
+                array( '%s', '%s' ),
+                array( '%d' )
+            );
+            return (int) $legacy;
         }
 
         if ( ! self::can_initiate_with( $user_id, $contact_id ) ) {
@@ -752,8 +988,10 @@ class Faepa_Chatbox {
                 'updated_at' => $now,
                 'user1_id'   => $user_id,
                 'user2_id'   => $contact_id,
+                'user1_ctx'  => $user_context,
+                'user2_ctx'  => $contact_context,
             ),
-            array( '%s', '%s', '%d', '%d' )
+            array( '%s', '%s', '%d', '%d', '%s', '%s' )
         );
 
         return (int) $wpdb->insert_id;
@@ -762,55 +1000,82 @@ class Faepa_Chatbox {
     /**
      * Confere se o usuário pertence à thread.
      */
-    private static function user_in_thread( $user_id, $thread_id ) {
+    private static function user_in_thread( $user_id, $thread_id, $context = '' ) {
         global $wpdb;
-        $exists = $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT id FROM " . self::$table_threads . "
-                 WHERE id = %d AND (user1_id = %d OR user2_id = %d)",
-                $thread_id,
-                $user_id,
-                $user_id
-            )
-        );
+        $normalized_context = self::normalize_context( $context );
+
+        if ( '' === $normalized_context ) {
+            $exists = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT id FROM " . self::$table_threads . "
+                     WHERE id = %d AND (user1_id = %d OR user2_id = %d)",
+                    $thread_id,
+                    $user_id,
+                    $user_id
+                )
+            );
+        } else {
+            $exists = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT id FROM " . self::$table_threads . "
+                     WHERE id = %d AND ( (user1_id = %d AND user1_ctx = %s) OR (user2_id = %d AND user2_ctx = %s) )",
+                    $thread_id,
+                    $user_id,
+                    $normalized_context,
+                    $user_id,
+                    $normalized_context
+                )
+            );
+        }
         return (bool) $exists;
     }
 
     /**
-     * Retorna o outro participante da thread.
+     * Retorna o outro participante da thread + contexto dele.
      */
-    private static function get_thread_other_user( $thread_id, $user_id ) {
+    private static function get_thread_other_participant( $thread_id, $user_id ) {
         global $wpdb;
         $row = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT user1_id, user2_id FROM " . self::$table_threads . " WHERE id = %d LIMIT 1",
+                "SELECT user1_id, user2_id, user1_ctx, user2_ctx FROM " . self::$table_threads . " WHERE id = %d LIMIT 1",
                 $thread_id
             ),
             ARRAY_A
         );
         if ( ! $row ) {
-            return 0;
+            return array(
+                'user_id' => 0,
+                'context' => '',
+            );
         }
-        return ( (int) $row['user1_id'] === $user_id ) ? (int) $row['user2_id'] : (int) $row['user1_id'];
+
+        $is_user1 = ( (int) $row['user1_id'] === (int) $user_id );
+        return array(
+            'user_id' => $is_user1 ? (int) $row['user2_id'] : (int) $row['user1_id'],
+            'context' => $is_user1 ? $row['user2_ctx'] : $row['user1_ctx'],
+        );
     }
 
     /**
      * Monta payload básico de usuário.
      */
-    private static function get_user_payload( $user_id ) {
+    private static function get_user_payload( $user_id, $context = '' ) {
         $user = get_user_by( 'id', $user_id );
         if ( ! $user ) {
             return null;
         }
-        return self::get_user_payload_from_obj( $user );
+        return self::get_user_payload_from_obj( $user, $context );
     }
 
-    private static function get_user_payload_from_obj( $user ) {
+    private static function get_user_payload_from_obj( $user, $context = '' ) {
+        $normalized_context = self::normalize_context( $context ) ?: self::get_default_context_for_user( $user->ID );
         return array(
             'user_id' => (int) $user->ID,
             'name'    => $user->display_name ?: $user->user_nicename,
             'email'   => $user->user_email,
             'role'    => self::get_user_role( $user->ID ),
+            'context' => $normalized_context,
+            'label'   => self::format_name_with_context( $user->display_name ?: $user->user_nicename, $normalized_context ),
         );
     }
 
@@ -932,6 +1197,9 @@ class Faepa_Chatbox {
      */
     private static function matches_search( $payload, $search ) {
         $haystack = strtolower( $payload['name'] . ' ' . $payload['email'] );
+        if ( isset( $payload['label'] ) ) {
+            $haystack .= ' ' . strtolower( $payload['label'] );
+        }
         return ( false !== strpos( $haystack, strtolower( $search ) ) );
     }
 }

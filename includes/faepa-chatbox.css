@@ -1,3 +1,4 @@
+body:not(.logged-in) #faepaChatboxRoot { display: none !important; }
 .faepa-chat-root { position: relative; z-index: 10000; }
 .faepa-chat-floating {
   position: fixed;

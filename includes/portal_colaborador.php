@@ -20,6 +20,14 @@ add_shortcode('apf_portal', function($atts){
         ));
     }
 
+    if ( class_exists( 'Faepa_Chatbox' ) && function_exists( 'wp_add_inline_script' ) ) {
+        wp_add_inline_script(
+            Faepa_Chatbox::SCRIPT_HANDLE,
+            'window.faepaChatboxPortalReady = true; window.faepaChatboxPortalContext = "colaborador";',
+            'before'
+        );
+    }
+
     $user       = wp_get_current_user();
     $user_id    = get_current_user_id();
     $user_email = $user && ! empty($user->user_email) ? sanitize_email($user->user_email) : '';

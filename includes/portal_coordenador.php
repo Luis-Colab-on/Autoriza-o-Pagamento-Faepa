@@ -3,6 +3,63 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+if ( ! function_exists( 'apf_coordinator_has_portal_access' ) ) {
+    /**
+     * Verifica se o coordenador já foi aprovado e possui curso vinculado.
+     *
+     * @param int $user_id
+     * @return bool
+     */
+    function apf_coordinator_has_portal_access( $user_id ) {
+        $user_id = (int) $user_id;
+        if ( $user_id <= 0 ) {
+            return false;
+        }
+
+        if ( function_exists( 'apf_get_directors_list' ) ) {
+            $directors = apf_get_directors_list();
+        } else {
+            $directors = get_option( 'apf_directors', array() );
+            if ( ! is_array( $directors ) ) {
+                $directors = array();
+            }
+        }
+        $directors = apf_normalize_directors_list( $directors );
+
+        $user        = get_user_by( 'id', $user_id );
+        $user_email  = $user && $user->user_email ? sanitize_email( $user->user_email ) : '';
+        $user_email  = $user_email ? strtolower( $user_email ) : '';
+
+        foreach ( $directors as $entry ) {
+            if ( ! is_array( $entry ) ) {
+                continue;
+            }
+            $status = isset( $entry['status'] ) ? strtolower( trim( (string) $entry['status'] ) ) : '';
+            if ( 'approved' !== $status ) {
+                continue;
+            }
+            $course = isset( $entry['course'] ) ? trim( (string) $entry['course'] ) : '';
+            if ( '' === $course ) {
+                continue;
+            }
+
+            $entry_user_id = isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0;
+            $entry_email   = isset( $entry['email'] ) ? sanitize_email( $entry['email'] ) : '';
+            $entry_email   = $entry_email ? strtolower( $entry_email ) : '';
+
+            if ( $entry_user_id > 0 && $entry_user_id === $user_id ) {
+                return true;
+            }
+
+            if ( $entry_email && $user_email && $entry_email === $user_email ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
 /**
  * Shortcode: [apf_portal_coordenador]
  * Área simplificada para coordenadores sugerirem/atualizarem seu vínculo com um curso.
@@ -282,6 +339,22 @@ add_shortcode( 'apf_portal_coordenador', function () {
 
         return false;
     };
+
+    if ( class_exists( 'Faepa_Chatbox' ) && function_exists( 'wp_add_inline_script' ) ) {
+        if ( ! $has_portal_access ) {
+            wp_add_inline_script(
+                Faepa_Chatbox::SCRIPT_HANDLE,
+                'window.faepaChatboxForceHide = true;',
+                'before'
+            );
+        }
+        $ready = $has_portal_access ? 'true' : 'false';
+        wp_add_inline_script(
+            Faepa_Chatbox::SCRIPT_HANDLE,
+            'window.faepaChatboxPortalReady = ' . $ready . '; window.faepaChatboxPortalContext = "coordenador";',
+            'before'
+        );
+    }
 
     if ( isset( $_POST['apf_coord_batch_submit'] ) ) {
         if ( ! isset( $_POST['apf_coord_batch_nonce'] ) || ! wp_verify_nonce( $_POST['apf_coord_batch_nonce'], 'apf_coord_batch' ) ) {
