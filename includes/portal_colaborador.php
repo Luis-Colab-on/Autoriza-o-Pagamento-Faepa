@@ -285,7 +285,7 @@ add_shortcode('apf_portal', function($atts){
         </div>
       </div>
 
-      <div class="apf-panel" style="margin-top:16px">
+      <div class="apf-panel apf-panel--calendar" style="margin-top:16px">
         <h3 style="margin:0 0 8px">Meu último envio</h3>
         <div class="apf-table-wrap">
           <table class="apf-table">
@@ -322,15 +322,15 @@ add_shortcode('apf_portal', function($atts){
         </div>
       </div>
 
-      <div class="apf-panel" style="margin-top:16px">
-        <h3 style="margin:0 0 8px">Agenda financeira</h3>
+      <div class="apf-panel apf-panel--calendar" style="margin-top:16px">
+        <div class="apf-portal-calendar__label">Agenda financeira</div>
         <div class="apf-portal-calendar" id="apfPortalCalendar" data-events="<?php echo $portal_calendar_attr; ?>">
           <div class="apf-portal-calendar__body"></div>
         </div>
         <?php if ( empty( $calendar_events ) ) : ?>
           <p class="apf-portal-calendar__empty">Nenhum aviso programado até o momento.</p>
         <?php else : ?>
-          <p class="apf-portal-calendar__hint">Clique em um dia destacado para ver os avisos completos.</p>
+          <p class="apf-portal-calendar__hint" style="text-align:center">Clique em um dia destacado para ver os avisos completos.</p>
         <?php endif; ?>
         <div class="apf-portal-modal" id="apfPortalEventModal" aria-hidden="true">
           <div class="apf-portal-modal__overlay" data-portal-modal-close></div>
@@ -508,127 +508,208 @@ add_shortcode('apf_portal', function($atts){
     </div>
 
     <style>
-      .apf-notice{margin:10px 0;padding:10px 12px;border-radius:10px}
-      .apf-notice-success{background:#f0f9ff;border:1px solid #b6e0fe;color:#055160}
+      .apf-portal{
+        --apf-primary:#125791;
+        --apf-primary-strong:#0f456e;
+        --apf-accent:#a9cf44;
+        --apf-accent-soft:rgba(169,207,68,.18);
+        --apf-border:#d6e1ed;
+        --apf-soft:#f6f9fc;
+        --apf-muted:#5f6b7a;
+        --apf-ink:#0f172a;
+        --apf-focus:0 0 0 3px rgba(18,87,145,.18),0 0 0 6px var(--apf-accent-soft);
+        color:var(--apf-ink);
+        background:linear-gradient(145deg,rgba(18,87,145,.05) 0%,#fff 42%,rgba(169,207,68,.08) 100%);
+      }
+      .apf-notice{margin:10px 0;padding:12px 14px;border-radius:12px;font-weight:600}
+      .apf-notice-success{background:rgba(169,207,68,.18);border:1px solid rgba(169,207,68,.5);color:#3d520d}
 
       .apf-hero{
         display:flex;
         flex-wrap:wrap;
-        gap:18px;
-        justify-content:space-between;
+        gap:14px;
+        justify-content:center;
         align-items:center;
-        background:#fff;
-        border:1px solid #e6e9ef;
-        border-radius:12px;
+        text-align:center;
+        background:linear-gradient(135deg,rgba(18,87,145,.12),rgba(169,207,68,.16));
+        border:1px solid rgba(18,87,145,.12);
+        border-radius:16px;
         padding:18px 20px;
-        box-shadow:0 8px 24px rgba(0,0,0,.04);
+        box-shadow:0 12px 28px rgba(15,23,42,.12);
       }
-      .apf-hero > div:first-child{flex:1 1 260px;min-width:0}
-      .apf-hero .apf-actions{flex:0 0 auto;justify-content:flex-end}
+      .apf-hero > div:first-child{flex:0 0 auto;min-width:0;width:100%}
+      .apf-hero h2{margin:0;font-size:22px;color:var(--apf-ink)}
+      .apf-hero p{margin:6px 0 0;color:var(--apf-muted)}
+      .apf-hero .apf-actions{flex:0 0 auto;justify-content:center;width:100%}
       .apf-actions{display:flex;gap:10px;flex-wrap:wrap}
-      .apf-btn{background:#eef2f7;color:#344054;text-decoration:none;border:none;border-radius:10px;padding:10px 14px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-weight:600;min-height:44px}
-      .apf-btn.apf-primary{background:#1f6feb;color:#fff}
-      .apf-panel{background:#fff;border:1px solid #e6e9ef;border-radius:12px;padding:14px 16px}
-      .apf-table-wrap{overflow:auto;border:1px solid #e6e9ef;border-radius:12px}
+      .apf-btn{background:#eef2f7;color:#344054;text-decoration:none;border:1px solid rgba(18,87,145,.12);border-radius:10px;padding:10px 14px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-weight:700;min-height:40px;transition:transform .15s ease,box-shadow .2s ease,border-color .2s ease,background .2s ease}
+      .apf-btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(15,23,42,.12);border-color:rgba(18,87,145,.35)}
+      .apf-btn:focus{outline:none;box-shadow:var(--apf-focus)}
+      .apf-btn.apf-primary{background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));color:#fff;border-color:rgba(18,87,145,.35)}
+      .apf-hero .apf-actions .apf-btn{min-width:0;padding:10px 13px;flex:1 1 200px;max-width:220px}
+      .apf-panel{background:#fff;border:1px solid var(--apf-border);border-radius:14px;padding:16px 18px;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+      .apf-panel h3{margin:0 0 12px;font-size:18px;color:var(--apf-ink)}
+      .apf-panel--calendar{display:flex;flex-direction:column;align-items:center}
+      #apf-edit{position:relative;overflow:hidden;padding:22px 22px 18px;max-width:1040px;margin-left:auto;margin-right:auto}
+      #apf-edit::before,
+      #apf-edit::after{content:"";position:absolute;border-radius:999px;filter:blur(12px);opacity:.18;pointer-events:none}
+      #apf-edit::before{width:200px;height:200px;background:radial-gradient(circle,rgba(18,87,145,.35),transparent 65%);top:-60px;right:-40px}
+      #apf-edit::after{width:180px;height:180px;background:radial-gradient(circle,rgba(169,207,68,.3),transparent 70%);bottom:-80px;left:-60px}
+      #apf-edit h3{display:flex;align-items:center;gap:10px;letter-spacing:.01em}
+      #apf-edit form{position:relative;z-index:1;display:flex;flex-direction:column;gap:12px}
+      #apf-edit .apf-tabs{background:linear-gradient(135deg,rgba(18,87,145,.05),rgba(169,207,68,.08));border:1px solid rgba(18,87,145,.18);border-radius:14px;padding:10px;box-shadow:inset 0 1px 0 #fff,0 12px 26px rgba(15,23,42,.08)}
+      #apf-edit .apf-tabs button{min-height:46px;flex:1 1 0;border-color:rgba(18,87,145,.2);background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.06)}
+      #apf-edit .apf-tabs button.is-active{background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));color:#fff;border-color:rgba(18,87,145,.6);box-shadow:0 12px 22px rgba(18,87,145,.2)}
+      #apf-edit .apf-pane{display:none;border:1px solid rgba(18,87,145,.14);background:#fff;border-radius:14px;padding:18px 16px;box-shadow:0 12px 28px rgba(15,23,42,.08)}
+      #apf-edit .apf-pane.is-active{display:block;animation:apfFadeUp .2s ease}
+      #apf-edit .apf-grid{grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+      #apf-edit .apf-grid label{border-color:rgba(18,87,145,.18);background:linear-gradient(135deg,#fff,rgba(18,87,145,.02));box-shadow:inset 0 1px 0 #fff,0 10px 18px rgba(15,23,42,.06)}
+      #apf-edit .apf-grid input,
+      #apf-edit .apf-grid textarea,
+      #apf-edit .apf-grid select{background:#fdfefe;border-color:rgba(18,87,145,.28)}
+      #apf-edit .apf-row{border:1px solid rgba(18,87,145,.2);background:linear-gradient(135deg,#fff,rgba(169,207,68,.1));box-shadow:0 10px 18px rgba(15,23,42,.06)}
+      #apf-edit .apf-row legend{padding:0 8px;font-weight:800;letter-spacing:.02em;color:var(--apf-primary)}
+      #apf-edit .apf-actions{justify-content:flex-end;background:linear-gradient(90deg,rgba(18,87,145,.05),rgba(169,207,68,.05));padding:10px;border:1px solid var(--apf-border);border-radius:12px;box-shadow:inset 0 1px 0 #fff,0 8px 16px rgba(15,23,42,.06)}
+      #apf-edit .apf-actions .apf-prev{background:#eef1f6;color:var(--apf-ink);box-shadow:none}
+      #apf-edit .apf-actions .apf-submit{min-width:160px}
+      @keyframes apfFadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+      .apf-table-wrap{overflow:auto;border:1px solid var(--apf-border);border-radius:14px;background:linear-gradient(135deg,#fff,rgba(18,87,145,.02))}
       .apf-table{width:100%;min-width:640px;border-collapse:collapse}
-      .apf-table thead th{background:#f7f8fb;text-align:left;padding:10px 12px;border-bottom:1px solid #e6e9ef;font-weight:600;color:#475467}
-      .apf-table tbody td{padding:10px 12px;border-bottom:1px solid #f0f2f5}
-      .apf-table__title{font-weight:700;color:#0f172a}
-      .apf-table__subtitle{font-size:12px;color:#667085;margin-top:2px}
-      .apf-tabs{display:flex;gap:8px;padding:8px 0 10px}
-      .apf-tabs button{border:1px solid #e6e9ef;background:#f7f8fb;border-radius:10px;padding:8px 10px;cursor:pointer;flex:1 1 auto;min-width:140px}
-      .apf-tabs button.is-active{background:#e8f1ff;border-color:#bcd4ff;color:#1849a9;font-weight:600}
+      .apf-table thead th{background:rgba(18,87,145,.08);text-align:center;padding:12px 14px;border-bottom:1px solid var(--apf-border);font-weight:800;color:var(--apf-ink);letter-spacing:.02em;white-space:nowrap}
+      .apf-table tbody tr:nth-child(odd){background:rgba(169,207,68,.06)}
+      .apf-table tbody tr:hover{background:rgba(18,87,145,.06)}
+      .apf-table tbody td{padding:12px 14px;border-bottom:1px solid #eef2f7;color:var(--apf-ink);vertical-align:middle;text-align:center}
+      .apf-table tbody td:nth-child(3){max-width:360px;text-align:center}
+      .apf-table thead th:nth-child(4),
+      .apf-table tbody td:nth-child(4){padding-right:22px}
+      .apf-table thead th:nth-child(5),
+      .apf-table tbody td:nth-child(5){border-left:2px solid var(--apf-border);padding-left:14px}
+      .apf-table__title{font-weight:700;color:var(--apf-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%;text-align:center}
+      .apf-table__subtitle{font-size:12px;color:var(--apf-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%;text-align:center}
+
+      .apf-tabs{display:flex;gap:10px;padding:10px 0 12px}
+      .apf-tabs button{border:1px solid var(--apf-border);background:var(--apf-soft);border-radius:12px;padding:10px 12px;cursor:pointer;flex:1 1 auto;min-width:140px;font-weight:600;color:var(--apf-muted);transition:all .2s ease}
+      .apf-tabs button:hover{border-color:rgba(18,87,145,.35);color:var(--apf-ink);box-shadow:0 8px 18px rgba(15,23,42,.08)}
+      .apf-tabs button.is-active{background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));border-color:rgba(18,87,145,.6);color:#fff;box-shadow:0 10px 20px rgba(15,23,42,.16)}
       .apf-pane{display:none}
       .apf-pane.is-active{display:block}
       .apf-grid{
         display:grid;
         grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
-        gap:clamp(10px,2vw,18px);
+        gap:clamp(14px,2.4vw,24px);
       }
-      .apf-grid label{display:flex;flex-direction:column;font-size:13px;color:#344054;gap:6px}
+      .apf-grid label{display:flex;flex-direction:column;font-size:13px;color:var(--apf-muted);gap:8px;background:#fff;border:1px solid var(--apf-border);border-radius:12px;padding:12px 14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}
       .apf-grid input,
       .apf-grid textarea,
       .apf-grid select{
         border:1px solid #d0d5dd;
         border-radius:10px;
-        padding:10px 12px;
+        padding:12px 14px;
         font-size:14px;
-        background:#fff;
-        color:#344054;
+        background:#fdfdff;
+        color:var(--apf-ink);
+        transition:border-color .18s ease,box-shadow .18s ease,background .18s ease;
       }
       .apf-grid select{
         appearance:none;
         -webkit-appearance:none;
-        background-image:url('data:image/svg+xml;utf8,<svg fill="none" stroke="%23475067" stroke-width="1.5" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+        background-image:url('data:image/svg+xml;utf8,<svg fill=\"none\" stroke=\"%23344054\" stroke-width=\"1.6\" viewBox=\"0 0 20 20\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M6 8l4 4 4-4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>');
         background-position:calc(100% - 12px) 50%;
         background-repeat:no-repeat;
         padding-right:36px;
       }
-      .apf-row{display:flex;gap:16px;border:none;margin:8px 0 0;padding:0;flex-wrap:wrap}
-      .apf-radio{display:flex;align-items:center;gap:6px}
+      .apf-grid textarea{min-height:110px;resize:vertical}
+      .apf-grid input:focus,
+      .apf-grid textarea:focus,
+      .apf-grid select:focus{border-color:var(--apf-primary);box-shadow:var(--apf-focus);outline:none;background:#fff}
+      .apf-row{display:flex;gap:18px;border:1px dashed var(--apf-border);margin:12px 0 0;padding:14px;border-radius:12px;flex-wrap:wrap;background:var(--apf-soft)}
+      .apf-radio{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--apf-ink)}
       .apf-panel .apf-actions{justify-content:space-between;margin-top:16px}
       .apf-panel .apf-actions button{
-        background:#1f6feb;
+        background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));
         color:#fff;
         border:none;
-        border-radius:10px;
-        padding:10px 14px;
+        border-radius:12px;
+        padding:12px 14px;
         cursor:pointer;
         min-height:44px;
         flex:1 1 160px;
+        font-weight:700;
+        box-shadow:0 10px 26px rgba(18,87,145,.25);
+        transition:background .2s ease,transform .15s ease,box-shadow .2s ease;
       }
-      .apf-panel .apf-actions .apf-prev{background:#a0a7b4}
+      .apf-panel .apf-actions button:hover{transform:translateY(-1px);box-shadow:0 14px 30px rgba(12,59,102,.28)}
+      .apf-panel .apf-actions button:focus{outline:none;box-shadow:var(--apf-focus)}
+      .apf-panel .apf-actions .apf-prev{background:#a0a7b4;box-shadow:none}
       .apf-field-note{display:block;font-size:12px;color:#b42318;margin-top:6px}
-      .apf-portal-calendar{border:1px solid #e6e9ef;border-radius:12px;background:#f7f8fb;padding:16px;margin-top:8px}
-      .apf-portal-calendar__body{display:flex;flex-direction:column;gap:12px}
-      .apf-portal-calendar__inner{display:flex;flex-direction:column;gap:12px}
+
+      .apf-portal-calendar{border:1px solid var(--apf-border);border-radius:14px;background:#fff;padding:18px;margin:12px auto 0;box-shadow:0 8px 20px rgba(15,23,42,.08);overflow:visible;width:100%;max-width:960px;box-sizing:border-box}
+      .apf-portal-calendar__body{display:flex;flex-direction:column;gap:12px;overflow:visible}
+      .apf-portal-calendar__inner{display:flex;flex-direction:column;gap:12px;width:100%}
+      .apf-portal-calendar__label{text-align:center;font-weight:800;letter-spacing:.02em;color:var(--apf-ink);margin:0 0 8px;font-size:15px}
       .apf-portal-calendar__header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-      .apf-portal-calendar__header h4{margin:0;font-size:16px;font-weight:600;color:#1d2939}
+      .apf-portal-calendar__header h4{margin:0;font-size:16px;font-weight:700;color:var(--apf-ink)}
       .apf-portal-calendar__nav{display:flex;align-items:center;gap:8px}
-      .apf-portal-calendar__btn{width:32px;height:32px;border-radius:50%;border:1px solid #d0d5dd;background:#fff;color:#1d2939;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
+      .apf-portal-calendar__btn{width:34px;height:34px;border-radius:10px;border:1px solid var(--apf-border);background:#fff;color:var(--apf-ink);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease,transform .15s ease}
       .apf-portal-calendar__btn:hover,
-      .apf-portal-calendar__btn:focus{border-color:#1f6feb;color:#1f6feb;outline:none}
+      .apf-portal-calendar__btn:focus{border-color:var(--apf-primary);color:var(--apf-primary);outline:none;transform:translateY(-1px);box-shadow:var(--apf-focus)}
       .apf-portal-calendar__weekdays,
-      .apf-portal-calendar__days{display:grid;grid-template-columns:repeat(7,minmax(32px,1fr));gap:6px}
-      .apf-portal-calendar__weekday{text-align:center;font-size:12px;font-weight:600;color:#5f6b7a;text-transform:uppercase}
-      .apf-portal-calendar__day{position:relative;height:44px;border-radius:10px;border:1px solid #d0d5dd;background:#fff;color:#1d2939;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center}
+      .apf-portal-calendar__days{display:grid;grid-template-columns:repeat(7,minmax(34px,1fr));gap:6px}
+      .apf-portal-calendar__weekday{text-align:center;font-size:12px;font-weight:700;color:var(--apf-muted);text-transform:uppercase;letter-spacing:.05em}
+      .apf-portal-calendar__day{position:relative;height:44px;border-radius:12px;border:1px solid var(--apf-border);background:#fff;color:var(--apf-ink);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:all .15s ease}
+      .apf-portal-calendar__day:hover{border-color:var(--apf-primary);box-shadow:0 8px 16px rgba(15,23,42,.1);cursor:pointer}
       .apf-portal-calendar__day--muted{opacity:.35}
-      .apf-portal-calendar__day--has-event{border-color:#1f6feb;background:rgba(31,111,235,.12)}
-      .apf-portal-calendar__empty{margin:10px 0 0;font-size:13px;color:#667085}
-      .apf-portal-calendar__hint{margin:10px 0 0;font-size:12px;color:#5f6b7a}
+      .apf-portal-calendar__day--has-event{border-color:var(--apf-primary);background:linear-gradient(135deg,rgba(18,87,145,.1),rgba(169,207,68,.12))}
+      .apf-portal-calendar__empty{margin:10px 0 0;font-size:13px;color:var(--apf-muted)}
+      .apf-portal-calendar__hint{margin:10px 0 0;font-size:12px;color:var(--apf-muted)}
+
       .apf-portal-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;transition:opacity .18s ease}
       .apf-portal-modal[aria-hidden="false"]{opacity:1;pointer-events:auto}
       .apf-portal-modal__overlay{position:absolute;inset:0;background:rgba(15,23,42,.45)}
-      .apf-portal-modal__dialog{position:relative;background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,.35);padding:18px 20px;max-width:460px;width:90%;max-height:80vh;overflow:auto}
+      .apf-portal-modal__dialog{position:relative;background:#fff;border-radius:18px;box-shadow:0 24px 48px rgba(0,0,0,.32);padding:20px 22px;max-width:500px;width:92%;max-height:82vh;overflow:auto;border:1px solid rgba(18,87,145,.15)}
       .apf-portal-modal__head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
-      .apf-portal-modal__eyebrow{margin:0;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#1f6feb}
-      .apf-portal-modal__head h4{margin:2px 0 4px;font-size:18px}
-      .apf-portal-modal__date{margin:0;font-size:13px;color:#475467}
-      .apf-portal-modal__close{border:none;background:transparent;font-size:24px;line-height:1;color:#475467;cursor:pointer;padding:4px}
+      .apf-portal-modal__eyebrow{margin:0;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--apf-primary)}
+      .apf-portal-modal__head h4{margin:2px 0 4px;font-size:18px;color:var(--apf-ink)}
+      .apf-portal-modal__date{margin:0;font-size:13px;color:var(--apf-muted)}
+      .apf-portal-modal__close{border:none;background:transparent;font-size:24px;line-height:1;color:var(--apf-muted);cursor:pointer;padding:4px}
       .apf-portal-modal__content{display:flex;flex-direction:column;gap:10px}
-      .apf-portal-modal__event{border:1px solid #e4e7ec;border-radius:12px;padding:12px 14px;background:#f8fafc}
-      .apf-portal-modal__event--finance{border-color:#0b326e;background:rgba(11,50,110,.08)}
-      .apf-portal-modal__event--faepa{border-color:#1f6feb;background:rgba(31,111,235,.1)}
-      .apf-portal-modal__event--coordinator{border-color:#d97706;background:rgba(217,119,6,.1)}
-      .apf-portal-modal__event h5{margin:0 0 4px;font-size:15px;color:#111827}
-      .apf-portal-modal__event p{margin:0;font-size:13px;color:#4b5563;white-space:pre-wrap}
-      .apf-portal-modal__event-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:4px 8px;border-radius:999px;margin-bottom:6px}
-      .apf-portal-modal__event-tag--finance{background:rgba(11,50,110,.12);color:#0b326e}
-      .apf-portal-modal__event-tag--faepa{background:rgba(31,111,235,.14);color:#0b4fa8}
+      .apf-portal-modal__event{border:1px solid var(--apf-border);border-radius:12px;padding:12px 14px;background:var(--apf-soft)}
+      .apf-portal-modal__event--finance{border-color:var(--apf-primary);background:rgba(18,87,145,.08)}
+      .apf-portal-modal__event--faepa{border-color:var(--apf-accent);background:rgba(169,207,68,.12)}
+      .apf-portal-modal__event--coordinator{border-color:#d97706;background:rgba(217,119,6,.12)}
+      .apf-portal-modal__event h5{margin:0 0 4px;font-size:15px;color:var(--apf-ink)}
+      .apf-portal-modal__event p{margin:0;font-size:13px;color:var(--apf-muted);white-space:pre-wrap}
+      .apf-portal-modal__event-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:4px 8px;border-radius:999px;margin-bottom:6px}
+      .apf-portal-modal__event-tag--finance{background:rgba(18,87,145,.14);color:var(--apf-primary)}
+      .apf-portal-modal__event-tag--faepa{background:rgba(169,207,68,.18);color:#4d5f13}
       .apf-portal-modal__event-tag--coordinator{background:rgba(217,119,6,.16);color:#b45309}
-      .apf-portal-modal__empty{margin:0;font-size:13px;color:#4b5563}
+      .apf-portal-modal__empty{margin:0;font-size:13px;color:var(--apf-muted)}
+
       @media(max-width:900px){
-        .apf-hero{flex-direction:column;align-items:flex-start}
-        .apf-hero .apf-actions{width:100%;justify-content:flex-start}
+        .apf-hero{flex-direction:column;align-items:center;text-align:center}
+        .apf-hero .apf-actions{width:100%;justify-content:center}
+      }
+      @media(max-width:1140px){
+        .apf-portal-calendar{max-width:100%;padding:14px;box-sizing:border-box}
+        .apf-portal-calendar__weekdays,
+        .apf-portal-calendar__days{grid-template-columns:repeat(7,minmax(32px,1fr));gap:5px}
+        .apf-portal-calendar__header h4{font-size:15px}
+        .apf-portal-calendar__btn{width:32px;height:32px;border-radius:9px}
       }
       @media(max-width:720px){
         .apf-tabs{overflow:auto;padding-bottom:12px}
         .apf-tabs button{flex:0 0 auto}
         .apf-table{min-width:100%}
         .apf-table thead{display:none}
-        .apf-table tbody tr{display:flex;flex-direction:column;gap:6px;padding:12px;border-bottom:1px solid #e6e9ef}
-        .apf-table tbody td{border:0;padding:0}
-        .apf-table tbody td::before{content:attr(data-label);display:block;font-size:12px;color:#667085;font-weight:600;margin-bottom:2px}
+        .apf-table tbody tr{display:flex;flex-direction:column;gap:6px;padding:12px;border-bottom:1px solid var(--apf-border)}
+        .apf-table tbody td{border:0;padding:0;text-align:center;font-size:13px}
+        .apf-table tbody td:nth-child(4){padding:0}
+        .apf-table tbody td::before{content:attr(data-label);display:block;font-size:13px;color:var(--apf-muted);font-weight:800;margin-bottom:2px;text-align:center}
+        .apf-table tbody td:nth-child(5){border-left:0;padding-left:0}
+        .apf-table__title,
+        .apf-table__subtitle{text-align:center}
+        .apf-table__title{font-size:14px}
+        .apf-table__subtitle{font-size:12px}
         .apf-table tbody td:nth-child(1)::before{content:'Data'}
         .apf-table tbody td:nth-child(2)::before{content:'Tipo'}
         .apf-table tbody td:nth-child(3)::before{content:'Nome/Empresa'}
@@ -637,19 +718,43 @@ add_shortcode('apf_portal', function($atts){
       }
       @media(max-width:640px){
         .apf-panel .apf-actions{flex-direction:column;align-items:stretch}
-        .apf-panel .apf-actions button{width:100%}
+        .apf-panel .apf-actions button{width:100%;min-height:40px;padding:10px 12px;font-size:14px;border-radius:10px}
         .apf-grid{grid-template-columns:1fr}
+        .apf-portal-calendar{padding:5px;width:90%;max-width:none;overflow:visible;margin-left:auto;margin-right:auto}
+        .apf-portal-calendar__weekdays,
+        .apf-portal-calendar__days{grid-template-columns:repeat(7,minmax(28px,1fr));gap:2px}
+        .apf-portal-calendar__weekday{font-size:10px}
+        .apf-portal-calendar__day{height:34px;font-size:11px}
+        .apf-panel--calendar{padding:0 0 12px !important;margin-top:0}
+        .apf-portal-calendar__header h4{font-size:14px}
+        .apf-portal-calendar__btn{width:28px;height:28px;border-radius:8px}
       }
       @media(max-width:520px){
+        .apf-portal-calendar{padding:5px;width:90%;max-width:none;overflow:visible;margin-left:auto;margin-right:auto}
         .apf-portal-calendar__weekdays,
-        .apf-portal-calendar__days{grid-template-columns:repeat(7,minmax(28px,1fr))}
+        .apf-portal-calendar__days{grid-template-columns:repeat(7,minmax(26px,1fr));gap:2px}
+        .apf-portal-calendar__weekday{font-size:9.5px}
+        .apf-portal-calendar__day{height:32px;font-size:10px}
+        .apf-portal-calendar__header h4{font-size:14px}
+        .apf-portal-calendar__btn{width:28px;height:28px;border-radius:8px}
+      }
+      @media(max-width:480px){
+        #apf-edit{padding:14px 12px}
+        #apf-edit h3{font-size:16px}
+        #apf-edit .apf-tabs{flex-direction:column;gap:8px;box-shadow:inset 0 1px 0 #fff,0 8px 18px rgba(15,23,42,.07)}
+        #apf-edit .apf-tabs button{width:100%;min-height:42px;font-size:14px}
+        #apf-edit .apf-pane{padding:14px 12px}
+        #apf-edit .apf-grid{grid-template-columns:1fr;gap:10px}
+        #apf-edit .apf-grid label{padding:10px 12px}
+        #apf-edit .apf-actions{display: flex; height: 6rem; align-items: stretch; gap: 8px; padding: 8px; border-radius: 10px; flex-direction: row;}
+        #apf-edit .apf-actions button{width:100%;min-height:38px;padding:9px 11px;font-size:14px}
       }
     </style>
 
     <script>
     (function(){
       const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-      const WEEKDAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+      const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
       const formatDateBr = (iso) => {
         const parts = (iso || '').split('-').map(p => parseInt(p, 10));
         if (parts.length === 3 && !Number.isNaN(parts[0])) {
@@ -807,7 +912,7 @@ add_shortcode('apf_portal', function($atts){
 
           const daysGrid = document.createElement('div');
           daysGrid.className = 'apf-portal-calendar__days';
-          const firstWeekday = (monthDate.getDay() + 6) % 7;
+          const firstWeekday = monthDate.getDay(); // domingo = 0
           const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
           const totalCells = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
 

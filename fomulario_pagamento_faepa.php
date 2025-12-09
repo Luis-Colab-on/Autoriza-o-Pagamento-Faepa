@@ -1117,58 +1117,86 @@ add_shortcode('apf_form', function () {
             }
         }
 
-        // ====== SEMPRE CRIA NOVO POST ======
-        $user_id   = get_current_user_id();
-        $titulo    = 'Solicitação - ' . ( $pessoa_tipo==='pj'
-                        ? ( $nome_colaborador ?: $nome_empresa ?: 'PJ' )
-                        : ( $nome_prof    ?: 'PF' )
-                     ) . ' - ' . current_time('Y-m-d H:i');
-
-        $post_id = wp_insert_post([
-            'post_type'     => 'apf_submission',
-            'post_title'    => $titulo,
-            'post_status'   => 'publish',
-            'post_author'   => $user_id,
-            // força a data "agora" pra subir no topo
-            'post_date'     => current_time('mysql'),
-            'post_date_gmt' => get_gmt_from_date( current_time('mysql') ),
-        ]);
-
-        if ( $post_id && ! is_wp_error($post_id) ) {
-            // Grava metas
-            $meta = [
-                // passo 1
-                'nome_diretor'   => $nome_diretor,
-                'num_controle'   => $num_controle,
-                'tel_prestador'  => $tel_prestador,
-                'email_prest'    => $email_prest,
-                'num_doc_fiscal' => $num_doc_fiscal,
-                'valor'          => $valor_norm,
-                'pessoa_tipo'    => $pessoa_tipo,
-                'nome_empresa'   => $nome_empresa,
-                'nome_colaborador'=> $nome_colaborador,
-                'cnpj'           => $cnpj,
-                'nome_prof'      => $nome_prof,
-                'cpf'            => $cpf,
-                // passo 2
-                'prest_contas'   => $prest_contas,
-                'data_prest'     => $data_prest,
-                'classificacao'  => $classificacao,
-                'descricao'      => $descricao,
-                'nome_curto'     => $nome_curto,
-                'carga_horaria'  => $carga_horaria,
-                // passo 3
-                'banco'          => $banco,
-                'agencia'        => $agencia,
-                'conta'          => $conta,
-            ];
-            foreach ($meta as $k => $v) {
-                update_post_meta($post_id, 'apf_'.$k, $v);
+        // Validação obrigatória dos passos 2 e 3
+        $missing_labels = array();
+        $required_service = array(
+            'prest_contas'  => 'Prestação de contas',
+            'data_prest'    => 'Data de prestação de serviço',
+            'classificacao' => 'Classificação',
+            'descricao'     => 'Descrição do serviço ou material',
+            'nome_curto'    => 'Nome curto do curso',
+            'carga_horaria' => 'Carga horária do curso',
+        );
+        $required_payout = array(
+            'banco'   => 'Banco',
+            'agencia' => 'Agência',
+            'conta'   => 'Conta Corrente',
+        );
+        foreach ( $required_service as $key => $label ) {
+            if ( '' === ${$key} ) {
+                $missing_labels[] = $label;
             }
+        }
+        foreach ( $required_payout as $key => $label ) {
+            if ( '' === ${$key} ) {
+                $missing_labels[] = $label;
+            }
+        }
 
-            $out .= '<div style="padding:12px;border:1px solid #cde;border-radius:8px;background:#f7fbff;margin-bottom:16px">Formulário enviado com sucesso.</div>';
-        } else {
-            $out .= '<div style="padding:12px;border:1px solid #f3c;border-radius:8px;background:#fff5f8;margin-bottom:16px;color:#b00020">Não foi possível enviar agora.</div>';
+        if ( empty( $missing_labels ) ) {
+            // ====== SEMPRE CRIA NOVO POST ======
+            $user_id   = get_current_user_id();
+            $titulo    = 'Solicitação - ' . ( $pessoa_tipo==='pj'
+                            ? ( $nome_colaborador ?: $nome_empresa ?: 'PJ' )
+                            : ( $nome_prof    ?: 'PF' )
+                         ) . ' - ' . current_time('Y-m-d H:i');
+
+            $post_id = wp_insert_post([
+                'post_type'     => 'apf_submission',
+                'post_title'    => $titulo,
+                'post_status'   => 'publish',
+                'post_author'   => $user_id,
+                // força a data "agora" pra subir no topo
+                'post_date'     => current_time('mysql'),
+                'post_date_gmt' => get_gmt_from_date( current_time('mysql') ),
+            ]);
+
+            if ( $post_id && ! is_wp_error($post_id) ) {
+                // Grava metas
+                $meta = [
+                    // passo 1
+                    'nome_diretor'   => $nome_diretor,
+                    'num_controle'   => $num_controle,
+                    'tel_prestador'  => $tel_prestador,
+                    'email_prest'    => $email_prest,
+                    'num_doc_fiscal' => $num_doc_fiscal,
+                    'valor'          => $valor_norm,
+                    'pessoa_tipo'    => $pessoa_tipo,
+                    'nome_empresa'   => $nome_empresa,
+                    'nome_colaborador'=> $nome_colaborador,
+                    'cnpj'           => $cnpj,
+                    'nome_prof'      => $nome_prof,
+                    'cpf'            => $cpf,
+                    // passo 2
+                    'prest_contas'   => $prest_contas,
+                    'data_prest'     => $data_prest,
+                    'classificacao'  => $classificacao,
+                    'descricao'      => $descricao,
+                    'nome_curto'     => $nome_curto,
+                    'carga_horaria'  => $carga_horaria,
+                    // passo 3
+                    'banco'          => $banco,
+                    'agencia'        => $agencia,
+                    'conta'          => $conta,
+                ];
+                foreach ($meta as $k => $v) {
+                    update_post_meta($post_id, 'apf_'.$k, $v);
+                }
+
+                $out .= '<div style="padding:12px;border:1px solid #cde;border-radius:8px;background:#f7fbff;margin-bottom:16px">Formulário enviado com sucesso.</div>';
+            } else {
+                $out .= '<div style="padding:12px;border:1px solid #f3c;border-radius:8px;background:#fff5f8;margin-bottom:16px;color:#b00020">Não foi possível enviar agora.</div>';
+            }
         }
     }
 
@@ -1278,23 +1306,23 @@ add_shortcode('apf_form', function () {
         <section class="apf-pane" data-step="2">
           <div class="apf-grid">
             <label>Prestação de contas
-              <input type="text" name="prest_contas">
+              <input type="text" name="prest_contas" required>
             </label>
 
             <label>Data de prestação de serviço
-              <input type="date" name="data_prest">
+              <input type="date" name="data_prest" required>
             </label>
 
             <label>Classificação
-              <input type="text" name="classificacao">
+              <input type="text" name="classificacao" required>
             </label>
 
             <label>Descrição do serviço ou material
-              <textarea name="descricao" rows="3"></textarea>
+              <textarea name="descricao" rows="3" required></textarea>
             </label>
 
             <label>Nome curto do curso
-              <input type="text" name="nome_curto">
+              <input type="text" name="nome_curto" required>
             </label>
 
             <label>Carga horária do curso
@@ -1312,13 +1340,13 @@ add_shortcode('apf_form', function () {
         <section class="apf-pane" data-step="3">
           <div class="apf-grid">
             <label>Banco
-              <input type="text" name="banco">
+              <input type="text" name="banco" required>
             </label>
             <label>Agência
-              <input type="text" name="agencia" inputmode="numeric" maxlength="10" placeholder="0000-0">
+              <input type="text" name="agencia" inputmode="numeric" maxlength="10" placeholder="0000-0" required>
             </label>
             <label>Conta Corrente
-              <input type="text" name="conta" inputmode="numeric" maxlength="20" placeholder="000000-0">
+              <input type="text" name="conta" inputmode="numeric" maxlength="20" placeholder="000000-0" required>
             </label>
           </div>
 
@@ -1332,8 +1360,11 @@ add_shortcode('apf_form', function () {
 
     <style>
       .apf-card{
-        --apf-primary:#1554e1;
-        --apf-primary-strong:#0f3fa6;
+        --apf-primary:#125791;
+        --apf-primary-strong:#0f456e;
+        --apf-primary-soft:rgba(18,87,145,.12);
+        --apf-accent:#a9cf44;
+        --apf-accent-soft:rgba(169,207,68,.18);
         --apf-border:#d6deeb;
         --apf-muted:#667085;
         --apf-ink:#1d2939;
@@ -1341,7 +1372,7 @@ add_shortcode('apf_form', function () {
         width:min(980px, 100%);
         margin:12px auto 24px;
         padding:clamp(16px, 2vw + 12px, 28px);
-        background:linear-gradient(135deg,#f8fbff 0%,#ffffff 45%,#f7f8fc 100%);
+        background:linear-gradient(135deg,rgba(18,87,145,.08) 0%,#ffffff 45%,rgba(169,207,68,.12) 100%);
         border-radius:16px;
         border:1px solid var(--apf-border);
         box-shadow:0 18px 48px rgba(15,23,42,.16);
@@ -1399,15 +1430,17 @@ add_shortcode('apf_form', function () {
         flex-shrink:0;
       }
       .apf-step.is-active{
-        background:#e8f0ff;
-        border-color:#b8ccff;
+        background:linear-gradient(120deg, var(--apf-primary-soft), var(--apf-accent-soft));
+        border-color:rgba(18,87,145,.35);
         color:var(--apf-ink);
+        box-shadow:0 6px 18px rgba(18,87,145,.08);
         transform:translateY(-1px);
       }
       .apf-step.is-active::before{
         background:var(--apf-primary);
         border-color:var(--apf-primary);
         color:#fff;
+        box-shadow:0 0 0 4px var(--apf-accent-soft),0 1px 2px rgba(16,24,40,.16);
       }
       @media(max-width:767px){
         .apf-steps{overflow:visible;padding:0;margin:6px 0 12px;gap:0;justify-content:center}
@@ -1473,7 +1506,7 @@ add_shortcode('apf_form', function () {
       .apf-grid textarea:focus,
       .apf-grid select:focus{
         border-color:var(--apf-primary);
-        box-shadow:0 0 0 3px rgba(21,84,225,.16);
+        box-shadow:0 0 0 3px rgba(18,87,145,.17),0 0 0 6px var(--apf-accent-soft);
         outline:none;
         background:#fff;
       }
@@ -1533,11 +1566,11 @@ add_shortcode('apf_form', function () {
         font-weight:700;
         font-size:15px;
         letter-spacing:0.01em;
-        box-shadow:0 10px 26px rgba(21,84,225,.25);
+        box-shadow:0 10px 26px rgba(18,87,145,.25);
         transition:background .2s ease, transform .15s ease, box-shadow .2s ease;
       }
-      .apf-actions button:hover{background:var(--apf-primary-strong);box-shadow:0 14px 30px rgba(15,63,166,.28);transform:translateY(-1px)}
-      .apf-actions button:focus{outline:2px solid rgba(21,84,225,.35);outline-offset:2px}
+      .apf-actions button:hover{background:var(--apf-primary-strong);box-shadow:0 14px 30px rgba(12,59,102,.28);transform:translateY(-1px)}
+      .apf-actions button:focus{outline:2px solid rgba(18,87,145,.35);outline-offset:2px;box-shadow:0 0 0 6px var(--apf-accent-soft)}
       .apf-actions .apf-prev{background:#a0a7b4;box-shadow:none}
       .apf-actions .apf-prev:hover{background:#82899a}
       .apf-actions .apf-prev:focus{outline-color:rgba(130,137,154,.4)}
@@ -1568,6 +1601,13 @@ add_shortcode('apf_form', function () {
         }
         if(e.target.classList.contains('apf-prev')){
           showStep(Math.max(current-1, 0));
+        }
+      });
+
+      form.addEventListener('submit', function(e){
+        if(!validatePane(panes[current])){
+          e.preventDefault();
+          showStep(current);
         }
       });
 
