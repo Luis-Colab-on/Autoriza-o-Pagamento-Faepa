@@ -691,6 +691,12 @@ add_shortcode('apf_inbox', function () {
         });
     }
 
+    // Oculta coordenadores recusados da listagem “Coordenadores por curso”.
+    $visible_directors = array_values( array_filter( $directors, function( $entry ) {
+        $status = isset( $entry['status'] ) ? $entry['status'] : 'approved';
+        return 'rejected' !== $status;
+    } ) );
+
     $director_filter_choices = array();
     $approved_director_map   = array();
     $approved_director_by_name = array();
@@ -1892,9 +1898,9 @@ add_shortcode('apf_inbox', function () {
           </div>
         </form>
 
-        <?php if ( ! empty($directors) ) : ?>
+        <?php if ( ! empty($visible_directors) ) : ?>
           <div class="apf-directors__list">
-            <?php foreach ( $directors as $entry ) :
+            <?php foreach ( $visible_directors as $entry ) :
                 $entry_status = isset( $entry['status'] ) ? $entry['status'] : 'approved';
                 $status_label = 'Aprovado';
                 $status_class = 'approved';
