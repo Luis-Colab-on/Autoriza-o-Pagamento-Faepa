@@ -1369,9 +1369,11 @@ add_shortcode('apf_form', function () {
         --apf-muted:#667085;
         --apf-ink:#1d2939;
         --apf-soft:#f5f7fb;
-        width:min(980px, 100%);
+        width:100%;
+        max-width:980px;
         margin:12px auto 24px;
         padding:clamp(16px, 2vw + 12px, 28px);
+        box-sizing:border-box;
         background:linear-gradient(135deg,rgba(18,87,145,.08) 0%,#ffffff 45%,rgba(169,207,68,.12) 100%);
         border-radius:16px;
         border:1px solid var(--apf-border);
@@ -1522,7 +1524,7 @@ add_shortcode('apf_form', function () {
       }
       .apf-row{
         display:grid;
-        grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
         gap:12px;
         border:1px dashed #d8e1ed;
         margin:14px 0 6px;
@@ -1530,6 +1532,9 @@ add_shortcode('apf_form', function () {
         border-radius:12px;
         background:#f8fafc;
         align-items:center;
+        width:100%;
+        min-width:0;
+        box-sizing:border-box;
       }
       .apf-row legend{
         grid-column:1/-1;
@@ -1549,7 +1554,10 @@ add_shortcode('apf_form', function () {
         border-radius:10px;
         background:#fff;
         width:100%;
+        box-sizing:border-box;
+        flex-wrap:wrap;
       }
+      .apf-radio input{flex-shrink:0;}
       .apf-actions{
         display:flex;
         flex-direction:column;
@@ -1575,6 +1583,10 @@ add_shortcode('apf_form', function () {
       .apf-actions .apf-prev:hover{background:#82899a}
       .apf-actions .apf-prev:focus{outline-color:rgba(130,137,154,.4)}
       .apf-field-note{display:block;font-size:12px;color:#b42318;margin-top:6px}
+      @media(max-width:640px){
+        .apf-card{padding:18px 14px;margin:12px auto;max-width:100%}
+        .apf-row{grid-template-columns:1fr;gap:10px;padding:12px}
+      }
       @media(min-width:640px){
         .apf-actions{flex-direction:row;justify-content:space-between;align-items:center}
         .apf-actions button{width:auto;min-width:160px}
