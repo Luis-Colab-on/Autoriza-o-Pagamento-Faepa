@@ -286,7 +286,7 @@ add_shortcode('apf_portal', function($atts){
       </div>
 
       <div class="apf-panel apf-panel--calendar" style="margin-top:16px">
-        <h3 style="margin:0 0 8px">Meu último envio</h3>
+        <h3 style="margin: 10px 0 10px">Meu último envio</h3>
         <div class="apf-table-wrap">
           <table class="apf-table">
             <thead><tr><th>Data</th><th>Tipo</th><th>Nome/Empresa</th><th>Valor (R$)</th><th>Curso</th></tr></thead>
@@ -569,9 +569,8 @@ add_shortcode('apf_portal', function($atts){
       #apf-edit .apf-grid select{background:#fdfefe;border-color:rgba(18,87,145,.28)}
       #apf-edit .apf-row{border:1px solid rgba(18,87,145,.2);background:linear-gradient(135deg,#fff,rgba(169,207,68,.1));box-shadow:0 10px 18px rgba(15,23,42,.06)}
       #apf-edit .apf-row legend{padding:0 8px;font-weight:800;letter-spacing:.02em;color:var(--apf-primary)}
-      #apf-edit .apf-actions{justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap;background:linear-gradient(90deg,rgba(18,87,145,.05),rgba(169,207,68,.05));padding:10px;border:1px solid var(--apf-border);border-radius:12px;box-shadow:inset 0 1px 0 #fff,0 8px 16px rgba(15,23,42,.06)}
-      #apf-edit .apf-actions button{flex:0 0 auto;min-height:42px;line-height:1.2;padding:10px 14px;font-size:14px;max-width:295px;width:auto}
-      #apf-edit .apf-actions .apf-prev{background:#eef1f6;color:var(--apf-ink);box-shadow:none;border:1px solid rgba(18,87,145,.35)}
+      #apf-edit .apf-actions{justify-content:flex-end;background:linear-gradient(90deg,rgba(18,87,145,.05),rgba(169,207,68,.05));padding:10px;border:1px solid var(--apf-border);border-radius:12px;box-shadow:inset 0 1px 0 #fff,0 8px 16px rgba(15,23,42,.06)}
+      #apf-edit .apf-actions .apf-prev{background:#eef1f6;color:var(--apf-ink);box-shadow:none}
       #apf-edit .apf-actions .apf-submit{min-width:160px}
       @keyframes apfFadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
       .apf-table-wrap{overflow:auto;border:1px solid var(--apf-border);border-radius:14px;background:linear-gradient(135deg,#fff,rgba(18,87,145,.02))}
@@ -647,7 +646,7 @@ add_shortcode('apf_portal', function($atts){
       .apf-portal-calendar{border:1px solid var(--apf-border);border-radius:14px;background:#fff;padding:18px;margin:12px auto 0;box-shadow:0 8px 20px rgba(15,23,42,.08);overflow:visible;width:100%;max-width:960px;box-sizing:border-box}
       .apf-portal-calendar__body{display:flex;flex-direction:column;gap:12px;overflow:visible}
       .apf-portal-calendar__inner{display:flex;flex-direction:column;gap:12px;width:100%}
-      .apf-portal-calendar__label{text-align:center;font-weight:800;letter-spacing:.02em;color:var(--apf-ink);margin:0 0 8px;font-size:15px}
+      .apf-portal-calendar__label{text-align:center;font-weight:800;letter-spacing:.02em;color:var(--apf-ink);margin: 10px 0 10px;font-size:15px}
       .apf-portal-calendar__header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
       .apf-portal-calendar__header h4{margin:0;font-size:16px;font-weight:700;color:var(--apf-ink)}
       .apf-portal-calendar__nav{display:flex;align-items:center;gap:8px}
@@ -747,8 +746,8 @@ add_shortcode('apf_portal', function($atts){
         #apf-edit .apf-pane{padding:14px 12px}
         #apf-edit .apf-grid{grid-template-columns:1fr;gap:10px}
         #apf-edit .apf-grid label{padding:10px 12px}
-        #apf-edit .apf-actions{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:8px;border-radius:10px;height:auto;justify-content:center}
-        #apf-edit .apf-actions button{width:100%;max-width:295px;min-height:42px;padding:10px 14px;font-size:14px;align-self:center;flex:0 0 auto}
+        #apf-edit .apf-actions{display: flex; height: 6rem; align-items: stretch; gap: 8px; padding: 8px; border-radius: 10px; flex-direction: row;}
+        #apf-edit .apf-actions button{width:100%;min-height:38px;padding:9px 11px;font-size:14px}
       }
     </style>
 

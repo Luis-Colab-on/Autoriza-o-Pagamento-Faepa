@@ -693,15 +693,20 @@ add_shortcode('apf_inbox', function () {
 
     // Oculta coordenadores recusados da listagem “Coordenadores por curso”.
     $visible_directors = array_values( array_filter( $directors, function( $entry ) {
-        $status = isset( $entry['status'] ) ? $entry['status'] : 'approved';
-        return 'rejected' !== $status;
+        $status        = isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'approved';
+        $was_rejected  = ( 'rejected' === $status );
+        if ( ! $was_rejected && ! empty( $entry['rejected_at'] ) ) {
+            $was_rejected = true;
+        }
+        return ! $was_rejected;
     } ) );
+    $directors_for_ui = $visible_directors;
 
     $director_filter_choices = array();
     $approved_director_map   = array();
     $approved_director_by_name = array();
-    if ( ! empty( $directors ) ) {
-        foreach ( $directors as $entry ) {
+    if ( ! empty( $directors_for_ui ) ) {
+        foreach ( $directors_for_ui as $entry ) {
             if ( isset( $entry['status'] ) && 'approved' !== $entry['status'] ) {
                 continue;
             }
@@ -1369,8 +1374,8 @@ add_shortcode('apf_inbox', function () {
         $scheduler_provider_groups['providers'][] = $record;
     }
 
-    if ( ! empty( $directors ) ) {
-        foreach ( $directors as $entry ) {
+    if ( ! empty( $directors_for_ui ) ) {
+        foreach ( $directors_for_ui as $entry ) {
             if ( isset( $entry['status'] ) && 'approved' !== $entry['status'] ) {
                 continue;
             }
@@ -1862,6 +1867,12 @@ add_shortcode('apf_inbox', function () {
             <h2 id="apfDirectorsTitle">Coordenadores por curso</h2>
             <p>Cadastre os coordenadores fixos que ficarão disponíveis no formulário público.</p>
           </div>
+          <div class="apf-directors__head-actions">
+            <button type="button" class="apf-btn apf-director-list-btn" id="apfDirectorListBtn" aria-label="Ver coordenadores">
+              <img src="<?php echo esc_url( $coord_archive_icon_url ); ?>" alt="" class="apf-director-list-btn__icon">
+            </button>
+            <button type="button" class="apf-btn apf-btn--primary" id="apfDirectorAddBtn">Adicionar coordenador</button>
+          </div>
         </div>
 
         <?php if ( $director_notice ) : ?>
@@ -1870,91 +1881,124 @@ add_shortcode('apf_inbox', function () {
           </div>
         <?php endif; ?>
 
-        <form method="post" class="apf-directors__form">
-          <?php wp_nonce_field('apf_directors_manage','apf_directors_nonce'); ?>
-          <input type="hidden" name="apf_directors_action" value="add">
-          <div class="apf-directors__grid">
-            <label>Curso
-              <?php if ( $course_select_available ) : ?>
-                <select name="apf_dir_course" required>
-                  <option value="" selected><?php echo esc_html('Selecione um curso'); ?></option>
-                  <?php foreach ( $course_choices as $course_label ) : ?>
-                    <option value="<?php echo esc_attr( $course_label ); ?>" title="<?php echo esc_attr( $course_label ); ?>"><?php echo esc_html( $course_label ); ?></option>
-                  <?php endforeach; ?>
-                </select>
-              <?php else : ?>
-                <input type="text" name="apf_dir_course" required placeholder="Ex.: Curso de Atualização em XYZ">
-              <?php endif; ?>
-            </label>
-            <label>Coordenador
-              <input type="text" name="apf_dir_name" required placeholder="Nome completo do coordenador">
-            </label>
-            <label>E-mail
-              <input type="email" name="apf_dir_email" required placeholder="coordenador@exemplo.com">
-            </label>
-          </div>
-          <div class="apf-directors__actions">
-            <button type="submit" class="apf-btn apf-btn--primary">Adicionar coordenador</button>
-          </div>
-        </form>
-
-        <?php if ( ! empty($visible_directors) ) : ?>
-          <div class="apf-directors__list">
-            <?php foreach ( $visible_directors as $entry ) :
-                $entry_status = isset( $entry['status'] ) ? $entry['status'] : 'approved';
-                $status_label = 'Aprovado';
-                $status_class = 'approved';
-                if ( 'pending' === $entry_status ) {
-                    $status_label = 'Aguardando aprovação';
-                    $status_class = 'pending';
-                } elseif ( 'rejected' === $entry_status ) {
-                    $status_label = 'Recusado';
-                    $status_class = 'rejected';
-                }
-            ?>
-              <form method="post" class="apf-directors__item">
-                <?php wp_nonce_field('apf_directors_manage','apf_directors_nonce'); ?>
-                <input type="hidden" name="apf_dir_id" value="<?php echo esc_attr($entry['id'] ?? ''); ?>">
+        <div class="apf-assign-modal apf-director-modal" id="apfDirectorModal" aria-hidden="true">
+          <div class="apf-assign-modal__overlay" data-director-modal-close></div>
+          <div class="apf-assign-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="apfDirectorModalTitle">
+            <div class="apf-assign-modal__head">
+              <h3 id="apfDirectorModalTitle">Adicionar coordenador</h3>
+              <button type="button" class="apf-assign-modal__close" data-director-modal-close aria-label="Fechar">&times;</button>
+            </div>
+            <form method="post" class="apf-directors__form">
+              <?php wp_nonce_field('apf_directors_manage','apf_directors_nonce'); ?>
+              <input type="hidden" name="apf_directors_action" value="add">
+              <div class="apf-assign-modal__body">
                 <div class="apf-directors__grid">
                   <label>Curso
-                    <?php if ( $course_select_available ) :
-                        $current_course = isset( $entry['course'] ) ? (string) $entry['course'] : '';
-                    ?>
+                    <?php if ( $course_select_available ) : ?>
                       <select name="apf_dir_course" required>
-                        <option value="" <?php selected( $current_course, '' ); ?>><?php echo esc_html('Selecione um curso'); ?></option>
+                        <option value="" selected><?php echo esc_html('Selecione um curso'); ?></option>
                         <?php foreach ( $course_choices as $course_label ) : ?>
-                          <option value="<?php echo esc_attr( $course_label ); ?>" title="<?php echo esc_attr( $course_label ); ?>" <?php selected( $current_course, $course_label ); ?>><?php echo esc_html( $course_label ); ?></option>
+                          <option value="<?php echo esc_attr( $course_label ); ?>" title="<?php echo esc_attr( $course_label ); ?>"><?php echo esc_html( $course_label ); ?></option>
                         <?php endforeach; ?>
                       </select>
                     <?php else : ?>
-                      <input type="text" name="apf_dir_course" value="<?php echo esc_attr($entry['course'] ?? ''); ?>" required>
+                      <input type="text" name="apf_dir_course" required placeholder="Ex.: Curso de Atualização em XYZ">
                     <?php endif; ?>
                   </label>
                   <label>Coordenador
-                    <input type="text" name="apf_dir_name" value="<?php echo esc_attr($entry['director'] ?? ''); ?>" required>
+                    <input type="text" name="apf_dir_name" required placeholder="Nome completo do coordenador">
                   </label>
                   <label>E-mail
-                    <input type="email" name="apf_dir_email" value="<?php echo esc_attr( $entry['email'] ?? '' ); ?>" required>
+                    <input type="email" name="apf_dir_email" required placeholder="coordenador@exemplo.com">
                   </label>
                 </div>
-                <div class="apf-directors__item-actions">
-                  <span class="apf-directors__status apf-directors__status--<?php echo esc_attr( $status_class ); ?>">
-                    <?php echo esc_html( $status_label ); ?>
-                  </span>
-                  <?php if ( 'approved' === $entry_status ) : ?>
-                    <button type="submit" name="apf_directors_action" value="update" class="apf-btn apf-btn--primary">Salvar</button>
-                    <button type="submit" name="apf_directors_action" value="delete" class="apf-btn apf-btn--danger" onclick="return confirm('Remover este coordenador?');">Excluir</button>
-                  <?php else : ?>
-                    <button type="submit" name="apf_directors_action" value="approve" class="apf-btn apf-btn--success">Aprovar</button>
-                    <button type="submit" name="apf_directors_action" value="reject" class="apf-btn apf-btn--warning" onclick="return confirm('Recusar este coordenador?');">Recusar</button>
-                  <?php endif; ?>
+              </div>
+              <div class="apf-assign-modal__footer">
+                <button type="button" class="apf-btn apf-btn--ghost" data-director-modal-close>Cancelar</button>
+                <button type="submit" class="apf-btn apf-btn--primary">Salvar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <?php if ( ! empty( $visible_directors ) ) : ?>
+          <div class="apf-assign-modal apf-director-list-modal" id="apfDirectorListModal" aria-hidden="true">
+            <div class="apf-assign-modal__overlay" data-director-list-close></div>
+            <div class="apf-assign-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="apfDirectorListTitle">
+              <div class="apf-assign-modal__head">
+                <div>
+                  <h3 id="apfDirectorListTitle">Coordenadores cadastrados</h3>
+                  <p class="apf-director-list__hint">Clique em editar para ajustar dados ou excluir para remover.</p>
                 </div>
-              </form>
-            <?php endforeach; ?>
+                <button type="button" class="apf-assign-modal__close" data-director-list-close aria-label="Fechar">&times;</button>
+              </div>
+              <div class="apf-assign-modal__body">
+                <label class="apf-director-list__search">
+                  <span>Campo de busca</span>
+                  <input type="search" id="apfDirectorListSearch" placeholder="Digite nome, e-mail ou curso do coordenador">
+                </label>
+                <div class="apf-director-list__body" id="apfDirectorListBody">
+                <?php foreach ( $visible_directors as $entry ) :
+                    $entry_status = isset( $entry['status'] ) ? $entry['status'] : 'approved';
+                    $status_label = 'Aprovado';
+                    $status_class = 'approved';
+                    if ( 'pending' === $entry_status ) {
+                        $status_label = 'Aguardando aprovação';
+                        $status_class = 'pending';
+                    } elseif ( 'rejected' === $entry_status ) {
+                        $status_label = 'Recusado';
+                        $status_class = 'rejected';
+                    }
+                    $current_course = isset( $entry['course'] ) ? (string) $entry['course'] : '';
+                ?>
+                  <form method="post" class="apf-director-card" data-director-form>
+                    <?php wp_nonce_field('apf_directors_manage','apf_directors_nonce'); ?>
+                    <input type="hidden" name="apf_directors_action" value="update">
+                    <input type="hidden" name="apf_dir_id" value="<?php echo esc_attr($entry['id'] ?? ''); ?>">
+                    <div class="apf-director-card__fields">
+                      <div class="apf-director-card__field apf-director-card__field--full">
+                        <span>Curso</span>
+                        <?php if ( $course_select_available ) : ?>
+                          <select name="apf_dir_course" required disabled data-initial="<?php echo esc_attr( $current_course ); ?>">
+                            <option value="" <?php selected( $current_course, '' ); ?>><?php echo esc_html('Selecione um curso'); ?></option>
+                            <?php foreach ( $course_choices as $course_label ) : ?>
+                              <option value="<?php echo esc_attr( $course_label ); ?>" title="<?php echo esc_attr( $course_label ); ?>" <?php selected( $current_course, $course_label ); ?>><?php echo esc_html( $course_label ); ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                        <?php else : ?>
+                          <input type="text" name="apf_dir_course" value="<?php echo esc_attr($entry['course'] ?? ''); ?>" required disabled data-initial="<?php echo esc_attr( $entry['course'] ?? '' ); ?>">
+                        <?php endif; ?>
+                      </div>
+                      <div class="apf-director-card__field">
+                        <span>Coordenador</span>
+                        <input type="text" name="apf_dir_name" value="<?php echo esc_attr($entry['director'] ?? ''); ?>" required disabled data-initial="<?php echo esc_attr( $entry['director'] ?? '' ); ?>">
+                      </div>
+                      <div class="apf-director-card__field">
+                        <span>E-mail</span>
+                        <input type="email" name="apf_dir_email" value="<?php echo esc_attr( $entry['email'] ?? '' ); ?>" required disabled data-initial="<?php echo esc_attr( $entry['email'] ?? '' ); ?>">
+                      </div>
+                    </div>
+                    <div class="apf-director-card__footer">
+                      <span class="apf-directors__status apf-directors__status--<?php echo esc_attr( $status_class ); ?>">
+                        <?php echo esc_html( $status_label ); ?>
+                      </span>
+                      <div class="apf-director-card__actions">
+                        <button type="button" class="apf-btn apf-btn--primary" data-director-edit>Editar</button>
+                        <button type="submit" name="apf_directors_action" value="delete" class="apf-btn apf-btn--danger" data-director-delete onclick="return confirm('Remover este coordenador?');">Excluir</button>
+                        <button type="submit" class="apf-btn apf-btn--primary" data-director-save hidden>Salvar</button>
+                        <button type="button" class="apf-btn apf-btn--ghost" data-director-cancel hidden>Cancelar</button>
+                      </div>
+                    </div>
+                  </form>
+                <?php endforeach; ?>
+                </div>
+              </div>
+            </div>
           </div>
         <?php endif; ?>
+      </section>
 
-        <section class="apf-scheduler" aria-labelledby="apfSchedulerHeading">
+      <section class="apf-scheduler" aria-labelledby="apfSchedulerHeading">
           <div class="apf-scheduler__head">
             <div>
               <h2 id="apfSchedulerHeading">Agenda financeira</h2>
@@ -2065,8 +2109,6 @@ add_shortcode('apf_inbox', function () {
           <input type="hidden" name="apf_scheduler_action" value="delete">
           <input type="hidden" name="apf_scheduler_event" value="">
         </form>
-
-      </section>
 
       <?php if ( $assign_notice ) : ?>
         <div class="apf-notice apf-notice--<?php echo esc_attr( $assign_notice_type ); ?>">
@@ -2666,6 +2708,7 @@ add_shortcode('apf_inbox', function () {
         width:100%;
         max-width:420px;
         background:var(--apf-bg);
+        border:1px solid var(--apf-border);
         border-radius:16px;
         padding:0;
         box-shadow:0 20px 40px rgba(15,23,42,.35);
@@ -2722,6 +2765,9 @@ add_shortcode('apf_inbox', function () {
       .apf-assign-modal--note .apf-assign-modal__dialog{
         max-width:520px;
       }
+      .apf-director-modal .apf-assign-modal__dialog{
+        max-width:560px;
+      }
       .apf-assign-note__field{
         display:flex;
         flex-direction:column;
@@ -2752,6 +2798,146 @@ add_shortcode('apf_inbox', function () {
         box-shadow:var(--apf-focus);
         outline:none;
       }
+      .apf-director-modal .apf-directors__grid{
+        grid-template-columns:1fr;
+        row-gap:12px;
+        width:100%;
+      }
+      .apf-director-modal .apf-directors__grid label{
+        margin:0;
+        width:100%;
+      }
+      .apf-director-modal .apf-directors__grid input,
+      .apf-director-modal .apf-directors__grid select{
+        width:100%;
+        display:block;
+        box-sizing:border-box;
+      }
+      .apf-director-list-btn{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        width:42px;
+        height:42px;
+        padding:0;
+        background:transparent;
+        border:1px solid var(--apf-border);
+        border-radius:50%;
+        box-shadow:none;
+        transition:background-color .15s ease, border-color .15s ease;
+      }
+      .apf-director-list-btn__icon{
+        width:18px;
+        height:18px;
+        object-fit:contain;
+      }
+      .apf-director-list-btn:hover,
+      .apf-director-list-btn:focus{
+        background:rgba(0,0,0,0.02);
+        border-color:var(--apf-primary);
+        outline:none;
+      }
+      .apf-director-list-modal .apf-assign-modal__dialog{
+        max-width:720px;
+      }
+      .apf-director-list__body{
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+        max-height:70vh;
+        overflow:auto;
+      }
+      .apf-director-list__search{
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+        font-size:13px;
+        color:var(--apf-muted);
+        margin-bottom:12px;
+      }
+      .apf-director-list__search input{
+        border:1px solid var(--apf-border);
+        border-radius:10px;
+        padding:10px 12px;
+        font-size:14px;
+        background:var(--apf-bg);
+        color:var(--apf-text);
+        width:100%;
+        box-sizing:border-box;
+      }
+      .apf-director-card{
+        border:1px solid var(--apf-border);
+        border-radius:12px;
+        padding:12px;
+        display:flex;
+        flex-direction:column;
+        align-items:stretch;
+        gap:12px;
+        background:var(--apf-bg);
+        width:100%;
+        box-sizing:border-box;
+      }
+      .apf-director-card__fields{
+        display:grid;
+        grid-template-columns:repeat(2, minmax(0, 1fr));
+        gap:12px;
+        flex:1 1 auto;
+        min-width:0;
+        width:100%;
+      }
+      @media(max-width:680px){
+        .apf-director-card__fields{
+          grid-template-columns:1fr;
+          min-width:0;
+        }
+      }
+      .apf-director-card__field{
+        display:flex;
+        flex-direction:column;
+        gap:4px;
+      }
+      .apf-director-card__field--full{
+        grid-column:1 / -1;
+      }
+      .apf-director-card__field span{
+        font-size:12px;
+        color:var(--apf-muted);
+        font-weight:600;
+      }
+      .apf-director-card__field input,
+      .apf-director-card__field select{
+        border:1px solid var(--apf-border);
+        border-radius:10px;
+        padding:10px 12px;
+        font-size:14px;
+        background:var(--apf-bg);
+        color:var(--apf-text);
+        width:100%;
+        max-width:100%;
+        min-width:0;
+        box-sizing:border-box;
+      }
+      .apf-director-card__footer{
+        display:flex;
+        align-items:center;
+        justify-content:flex-end;
+        gap:12px;
+        flex-wrap:wrap;
+        min-width:0;
+        width:100%;
+      }
+      .apf-director-card__actions{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        justify-content:flex-end;
+        margin-left:auto;
+      }
+      .apf-director-list__hint{
+        margin:4px 0 0;
+        color:var(--apf-muted);
+        font-size:13px;
+      }
       .apf-assign-note__hint{
         margin:0;
         font-size:12px;
@@ -2774,6 +2960,18 @@ add_shortcode('apf_inbox', function () {
         border:1px solid var(--apf-border);
         border-radius:var(--apf-radius);
         background:var(--apf-soft);
+      }
+      .apf-directors__head{
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:12px;
+        flex-wrap:wrap;
+      }
+      .apf-directors__head-actions{
+        display:flex;
+        align-items:center;
+        gap:8px;
       }
       .apf-directors__head h2{
         margin:0;
@@ -4301,6 +4499,17 @@ add_shortcode('apf_inbox', function () {
       const assignNoteBodyInput = $('#apfAssignNoteBodyInput');
       const assignNoteConfirm = $('#apfAssignNoteConfirm');
       const assignNoteCancel = assignNoteModal ? assignNoteModal.querySelector('[data-note-cancel]') : null;
+      const directorAddBtn = $('#apfDirectorAddBtn');
+      const directorModal = $('#apfDirectorModal');
+      const directorCloseTriggers = directorModal ? $$('[data-director-modal-close]', directorModal) : [];
+      let directorModalLastFocus = null;
+      const directorListBtn = $('#apfDirectorListBtn');
+      const directorListModal = $('#apfDirectorListModal');
+      const directorListCloseTriggers = directorListModal ? $$('[data-director-list-close]', directorListModal) : [];
+      const directorForms = directorListModal ? $$('[data-director-form]', directorListModal) : [];
+      const directorListSearch = $('#apfDirectorListSearch');
+      const directorListBody = $('#apfDirectorListBody');
+      let directorListLastFocus = null;
       const assignNoteCloseTriggers = assignNoteModal ? $$('[data-note-close]', assignNoteModal) : [];
       let assignModalLastFocus = null;
       let assignNoteLastFocus = null;
@@ -4436,6 +4645,45 @@ add_shortcode('apf_inbox', function () {
         updateAssignActions();
       }
 
+      function openDirectorModal(){
+        if(!directorModal){ return; }
+        directorModalLastFocus = document.activeElement;
+        directorModal.setAttribute('aria-hidden','false');
+        document.body.style.overflow = 'hidden';
+        const focusable = directorModal.querySelector('select[name="apf_dir_course"]')
+          || directorModal.querySelector('input[name="apf_dir_course"]')
+          || directorModal.querySelector('input[name="apf_dir_name"]')
+          || directorModal;
+        focusable.focus();
+      }
+
+      function closeDirectorModal(focusBack = true){
+        if(!directorModal){ return; }
+        directorModal.setAttribute('aria-hidden','true');
+        document.body.style.overflow = '';
+        if(focusBack && directorModalLastFocus){
+          directorModalLastFocus.focus();
+        }
+      }
+
+      function openDirectorListModal(){
+        if(!directorListModal){ return; }
+        directorListLastFocus = document.activeElement;
+        directorListModal.setAttribute('aria-hidden','false');
+        document.body.style.overflow = 'hidden';
+        const focusable = directorListModal.querySelector('[data-director-edit]') || directorListModal;
+        focusable.focus();
+      }
+
+      function closeDirectorListModal(focusBack = true){
+        if(!directorListModal){ return; }
+        directorListModal.setAttribute('aria-hidden','true');
+        document.body.style.overflow = '';
+        if(focusBack && directorListLastFocus){
+          directorListLastFocus.focus();
+        }
+      }
+
       function openAssignModal(){
         if(!assignModal){ return; }
         if(assignModalSelect && directorSelect){
@@ -4488,6 +4736,54 @@ add_shortcode('apf_inbox', function () {
         if(assignFieldNoteBody){ assignFieldNoteBody.value = ''; }
       }
 
+      if(directorAddBtn){
+        directorAddBtn.addEventListener('click', openDirectorModal);
+      }
+      if(directorCloseTriggers.length){
+        directorCloseTriggers.forEach(trigger=>{
+          trigger.addEventListener('click', ()=>closeDirectorModal());
+        });
+      }
+      if(directorModal){
+        directorModal.addEventListener('keydown', ev=>{
+          if(ev.key === 'Escape'){
+            ev.preventDefault();
+            closeDirectorModal();
+          }
+        });
+        const directorForm = directorModal.querySelector('form');
+        if(directorForm){
+          directorForm.addEventListener('submit', ()=>closeDirectorModal(false));
+        }
+      }
+      if(directorListBtn){
+        directorListBtn.addEventListener('click', openDirectorListModal);
+      }
+      if(directorListCloseTriggers.length){
+        directorListCloseTriggers.forEach(trigger=>{
+          trigger.addEventListener('click', ()=>closeDirectorListModal());
+        });
+      }
+      if(directorListModal){
+        directorListModal.addEventListener('keydown', ev=>{
+          if(ev.key === 'Escape'){
+            ev.preventDefault();
+            closeDirectorListModal();
+          }
+        });
+        if(directorListSearch && directorListBody){
+          directorListSearch.addEventListener('input', ()=>{
+            const term = norm(directorListSearch.value);
+            $$('.apf-director-card', directorListBody).forEach(card=>{
+              const inputs = $$('input, select', card);
+              const haystack = inputs.map(inp=>norm(inp.value || '')).join(' ');
+              const match = !term || haystack.includes(term);
+              card.style.display = match ? '' : 'none';
+            });
+          });
+        }
+      }
+
       if(assignStartBtn){
         assignStartBtn.addEventListener('click', ()=>{
           if(!assignModal){
@@ -4529,6 +4825,16 @@ add_shortcode('apf_inbox', function () {
       }
       document.addEventListener('keydown', e=>{
         if(e.key === 'Escape'){
+          if(directorListModal && directorListModal.getAttribute('aria-hidden') === 'false'){
+            e.preventDefault();
+            closeDirectorListModal();
+            return;
+          }
+          if(directorModal && directorModal.getAttribute('aria-hidden') === 'false'){
+            e.preventDefault();
+            closeDirectorModal();
+            return;
+          }
           if(assignModal && assignModal.getAttribute('aria-hidden') === 'false'){
             e.preventDefault();
             closeAssignModal();
@@ -4551,6 +4857,45 @@ add_shortcode('apf_inbox', function () {
             assignFieldNoteBody.value = assignNoteBodyInput.value.trim();
           }
           assignForm.submit();
+        });
+      }
+
+      if(directorForms && directorForms.length){
+        directorForms.forEach(form=>{
+          const inputs = $$('input, select', form).filter(el=>!el.hidden && el.type !== 'hidden');
+          const editBtn = form.querySelector('[data-director-edit]');
+          const deleteBtn = form.querySelector('[data-director-delete]');
+          const saveBtn = form.querySelector('[data-director-save]');
+          const cancelBtn = form.querySelector('[data-director-cancel]');
+          inputs.forEach(inp=>{
+            inp.dataset.initialValue = inp.value;
+            inp.disabled = true;
+          });
+          function setEditing(state){
+            inputs.forEach(inp=>{
+              inp.disabled = !state;
+              if(!state){
+                inp.value = inp.dataset.initialValue || inp.value;
+              }
+            });
+            if(editBtn){ editBtn.hidden = state; }
+            if(deleteBtn){ deleteBtn.hidden = state; }
+            if(saveBtn){ saveBtn.hidden = !state; }
+            if(cancelBtn){ cancelBtn.hidden = !state; }
+            if(state && inputs[0]){ inputs[0].focus(); }
+          }
+          if(editBtn){
+            editBtn.addEventListener('click', ()=>setEditing(true));
+          }
+          if(cancelBtn){
+            cancelBtn.addEventListener('click', ()=>setEditing(false));
+          }
+          form.addEventListener('submit', ()=>{
+            inputs.forEach(inp=>{
+              inp.disabled = false;
+              inp.dataset.initialValue = inp.value;
+            });
+          });
         });
       }
       if(assignNoteCancel){
