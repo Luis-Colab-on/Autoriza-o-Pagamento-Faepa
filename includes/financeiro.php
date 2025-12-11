@@ -1871,7 +1871,7 @@ add_shortcode('apf_inbox', function () {
             <button type="button" class="apf-btn apf-director-list-btn" id="apfDirectorListBtn" aria-label="Ver coordenadores">
               <img src="<?php echo esc_url( $coord_archive_icon_url ); ?>" alt="" class="apf-director-list-btn__icon">
             </button>
-            <button type="button" class="apf-btn apf-btn--primary" id="apfDirectorAddBtn">Adicionar coordenador</button>
+            <button type="button" class="apf-btn apf-btn--outline-white" id="apfDirectorAddBtn">Adicionar coordenador</button>
           </div>
         </div>
 
@@ -1914,8 +1914,8 @@ add_shortcode('apf_inbox', function () {
                 </div>
               </div>
               <div class="apf-assign-modal__footer">
-                <button type="button" class="apf-btn apf-btn--ghost" data-director-modal-close>Cancelar</button>
-                <button type="submit" class="apf-btn apf-btn--primary">Salvar</button>
+                <button type="submit" class="apf-btn apf-btn--outline-white">Salvar</button>
+                <button type="button" class="apf-btn apf-btn--white-dark" data-director-modal-close>Cancelar</button>
               </div>
             </form>
           </div>
@@ -1979,14 +1979,16 @@ add_shortcode('apf_inbox', function () {
                       </div>
                     </div>
                     <div class="apf-director-card__footer">
-                      <span class="apf-directors__status apf-directors__status--<?php echo esc_attr( $status_class ); ?>">
-                        <?php echo esc_html( $status_label ); ?>
-                      </span>
+                      <?php if ( 'approved' !== $status_class ) : ?>
+                        <span class="apf-directors__status apf-directors__status--<?php echo esc_attr( $status_class ); ?>">
+                          <?php echo esc_html( $status_label ); ?>
+                        </span>
+                      <?php endif; ?>
                       <div class="apf-director-card__actions">
                         <button type="button" class="apf-btn apf-btn--primary" data-director-edit>Editar</button>
                         <button type="submit" name="apf_directors_action" value="delete" class="apf-btn apf-btn--danger" data-director-delete onclick="return confirm('Remover este coordenador?');">Excluir</button>
-                        <button type="submit" class="apf-btn apf-btn--primary" data-director-save hidden>Salvar</button>
-                        <button type="button" class="apf-btn apf-btn--ghost" data-director-cancel hidden>Cancelar</button>
+                        <button type="submit" class="apf-btn apf-btn--outline-white" data-director-save hidden>Salvar</button>
+                        <button type="button" class="apf-btn apf-btn--white-dark" data-director-cancel hidden>Cancelar</button>
                       </div>
                     </div>
                   </form>
@@ -2071,7 +2073,7 @@ add_shortcode('apf_inbox', function () {
                   <input type="hidden" name="apf_scheduler_date" value="">
                   <div class="apf-scheduler-edit__section">
                     <span class="apf-scheduler-edit__date-label">Data selecionada</span>
-                    <strong id="apfSchedulerEditDate">—</strong>
+                    <strong style="color:black;" id="apfSchedulerEditDate">—</strong>
                   </div>
                   <label class="apf-scheduler-edit__field">
                     <span>Título do aviso</span>
@@ -2082,7 +2084,7 @@ add_shortcode('apf_inbox', function () {
                   </div>
                   <div class="apf-scheduler-edit__section">
                     <div class="apf-scheduler-edit__audience">
-                      <span>Adicionar destinatários</span>
+                      <span style="color:black;">Adicionar destinatários</span>
                       <div class="apf-scheduler-edit__tabs" role="tablist">
                         <button type="button" class="apf-scheduler-edit__tab is-active" data-edit-group="providers">Colaboradores</button>
                         <button type="button" class="apf-scheduler-edit__tab" data-edit-group="coordinators">Coordenadores</button>
@@ -2508,17 +2510,15 @@ add_shortcode('apf_inbox', function () {
       .apf-filter select:focus{ border-color:var(--apf-primary); box-shadow:var(--apf-focus); outline:none; }
       .apf-filter__row{ display:flex; gap:10px; align-items:stretch; }
       .apf-filter__row select{ flex:1; }
-      .apf-filter__assign-btn{
-        padding:0rem;
-        line-height:1.3;
-        word-break:break-word;
-        font-size:12px;
-      }
+      .apf-filter__assign-btn,
       #apfAssignStart{
-        padding:0rem;
+        padding:0 12px;
         line-height:1.3;
-        word-break:break-word;
         font-size:12px;
+        white-space:nowrap;
+        word-break:normal;
+        flex:0 0 auto;
+        min-width:220px;
       }
       .apf-pager-row{
         display:flex;
@@ -2603,6 +2603,30 @@ add_shortcode('apf_inbox', function () {
         background:#991313;
         border-color:#7d0f0f;
         color:#ffffff;
+        box-shadow:var(--apf-focus);
+      }
+      .apf-btn--outline-white{
+        background:transparent;
+        color:#ffffff;
+        border:1px solid #ffffff;
+      }
+      .apf-btn--outline-white:hover,
+      .apf-btn--outline-white:focus{
+        background:rgba(255,255,255,0.08);
+        color:#ffffff;
+        border-color:#ffffff;
+        box-shadow:var(--apf-focus);
+      }
+      .apf-btn--white-dark{
+        background:#ffffff;
+        color:#111827;
+        border:1px solid #ffffff;
+      }
+      .apf-btn--white-dark:hover,
+      .apf-btn--white-dark:focus{
+        background:#f3f4f6;
+        color:#0f172a;
+        border-color:#e5e7eb;
         box-shadow:var(--apf-focus);
       }
       .apf-btn--success{
@@ -2694,6 +2718,9 @@ add_shortcode('apf_inbox', function () {
         visibility:hidden;
         opacity:0;
         transition:opacity .25s ease;
+        padding:16px;
+        box-sizing:border-box;
+        overflow-y:auto;
       }
       .apf-assign-modal[aria-hidden="false"]{
         visibility:visible;
@@ -2715,6 +2742,8 @@ add_shortcode('apf_inbox', function () {
         display:flex;
         flex-direction:column;
         overflow:hidden;
+        max-height:calc(100vh - 32px);
+        box-sizing:border-box;
       }
       .apf-assign-modal__head{
         padding:16px 20px;
@@ -2741,6 +2770,9 @@ add_shortcode('apf_inbox', function () {
         display:flex;
         flex-direction:column;
         gap:12px;
+        flex:1 1 auto;
+        min-height:0;
+        overflow:auto;
       }
       .apf-assign-modal__body label{
         display:flex;
@@ -2767,6 +2799,12 @@ add_shortcode('apf_inbox', function () {
       }
       .apf-director-modal .apf-assign-modal__dialog{
         max-width:560px;
+        max-height:calc(100vh - 32px);
+      }
+      .apf-director-modal .apf-assign-modal__body{
+        flex:1 1 auto;
+        min-height:0;
+        overflow:auto;
       }
       .apf-assign-note__field{
         display:flex;
@@ -2802,6 +2840,13 @@ add_shortcode('apf_inbox', function () {
         grid-template-columns:1fr;
         row-gap:12px;
         width:100%;
+      }
+      .apf-director-modal .apf-assign-modal__head{
+        justify-content:center;
+        text-align:center;
+      }
+      .apf-director-modal .apf-assign-modal__head h3{
+        text-align:center;
       }
       .apf-director-modal .apf-directors__grid label{
         margin:0;
@@ -2839,13 +2884,22 @@ add_shortcode('apf_inbox', function () {
       }
       .apf-director-list-modal .apf-assign-modal__dialog{
         max-width:720px;
+        max-height:calc(100vh - 32px);
+        display:flex;
+        flex-direction:column;
+      }
+      .apf-director-list-modal .apf-assign-modal__body{
+        flex:1 1 auto;
+        min-height:0;
       }
       .apf-director-list__body{
         display:flex;
         flex-direction:column;
         gap:12px;
-        max-height:70vh;
+        flex:1 1 auto;
+        min-height:0;
         overflow:auto;
+        max-height:440px;
       }
       .apf-director-list__search{
         display:flex;
@@ -2933,6 +2987,97 @@ add_shortcode('apf_inbox', function () {
         justify-content:flex-end;
         margin-left:auto;
       }
+      .apf-director-card__actions [data-director-edit],
+      .apf-director-card__actions [data-director-delete],
+      .apf-director-card__actions [data-director-save],
+      .apf-director-card__actions [data-director-cancel]{
+        min-width:0;
+      }
+      .apf-director-card__actions [data-director-edit]{
+        background:transparent;
+        color:#ffffff;
+        border:1px solid #ffffff;
+      }
+      .apf-director-card__actions [data-director-edit]:hover,
+      .apf-director-card__actions [data-director-edit]:focus{
+        background:rgba(255,255,255,0.08);
+        color:#ffffff;
+        border-color:#ffffff;
+        box-shadow:var(--apf-focus);
+      }
+      .apf-director-card__actions [data-director-delete]{
+        background:#ffffff;
+        color:#111827;
+        border:1px solid #ffffff;
+      }
+      .apf-director-card__actions [data-director-delete]:hover,
+      .apf-director-card__actions [data-director-delete]:focus{
+        background:#f3f4f6;
+        color:#0f172a;
+        border-color:#e5e7eb;
+        box-shadow:var(--apf-focus);
+      }
+      @media(max-width:780px){
+        .apf-assign-modal{
+          align-items:center;
+          padding:16px;
+        }
+        .apf-assign-modal__dialog{
+          max-width:100%;
+          border-radius:16px;
+          box-shadow:0 18px 32px rgba(15,23,42,.28);
+        }
+        .apf-assign-modal__head,
+        .apf-assign-modal__footer{
+          padding:14px 16px;
+        }
+        .apf-assign-modal__body{
+          padding:16px;
+        }
+        .apf-director-modal .apf-assign-modal__footer{
+          justify-content:center;
+        }
+        .apf-director-modal .apf-assign-modal__dialog,
+        .apf-director-list-modal .apf-assign-modal__dialog{
+          max-height:calc(100vh - 20px);
+        }
+        .apf-director-list-modal .apf-assign-modal__body{
+          padding:16px;
+        }
+        .apf-director-list__body{
+          max-height:55vh;
+        }
+        .apf-directors__head{
+          flex-direction:column;
+          align-items:center;
+          text-align:center;
+        }
+        .apf-directors__head-actions{
+          width:100%;
+          justify-content:center;
+        }
+        .apf-director-list-btn{
+          flex:0 0 44px;
+        }
+        .apf-directors__head-actions .apf-btn--primary{
+          flex:1 1 auto;
+        }
+        .apf-director-card__actions{
+          width:100%;
+          justify-content:stretch;
+          gap:10px;
+          flex-wrap: nowrap;
+        }
+        .apf-director-card__actions .apf-btn{
+          width: 50%;
+          min-width:0;
+        }
+      }
+      @media(min-width:1300px){
+        .apf-director-list__body{
+          max-height:none;
+        }
+      }
       .apf-director-list__hint{
         margin:4px 0 0;
         color:var(--apf-muted);
@@ -2963,8 +3108,10 @@ add_shortcode('apf_inbox', function () {
       }
       .apf-directors__head{
         display:flex;
-        align-items:flex-start;
-        justify-content:space-between;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        text-align:center;
         gap:12px;
         flex-wrap:wrap;
       }
@@ -2972,6 +3119,20 @@ add_shortcode('apf_inbox', function () {
         display:flex;
         align-items:center;
         gap:8px;
+        justify-content:center;
+        width:100%;
+      }
+      @media(min-width:781px){
+        .apf-directors__head{
+          flex-direction:row;
+          align-items:flex-start;
+          justify-content:space-between;
+          text-align:left;
+        }
+        .apf-directors__head-actions{
+          width:auto;
+          justify-content:flex-end;
+        }
       }
       .apf-directors__head h2{
         margin:0;
@@ -3110,6 +3271,10 @@ add_shortcode('apf_inbox', function () {
       }
       .apf-scheduler__day{
         position:relative;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:0;
         height:48px;
         border-radius:10px;
         border:1px solid var(--apf-border);
@@ -3297,7 +3462,7 @@ add_shortcode('apf_inbox', function () {
       }
       .apf-scheduler-modal__dialog{
         position:relative;
-        width:100%;
+        width:90%;
         max-width:760px;
         max-height:90vh;
         background:#fff;
@@ -3308,7 +3473,7 @@ add_shortcode('apf_inbox', function () {
         overflow:hidden;
       }
       .apf-scheduler-modal__head{
-        padding:16px 20px;
+        padding:14px 18px;
         border-bottom:1px solid #e4e7ec;
         display:flex;
         align-items:center;
@@ -3338,7 +3503,7 @@ add_shortcode('apf_inbox', function () {
         color:#475467;
       }
       .apf-scheduler-modal__content{
-        padding:16px 20px 24px;
+        padding:14px 18px 20px;
         overflow-y:auto;
         flex:1;
       }
@@ -3352,11 +3517,13 @@ add_shortcode('apf_inbox', function () {
         display:flex;
         flex-direction:column;
         gap:12px;
+        max-height:420px;
+        overflow:auto;
       }
       .apf-scheduler-modal__event{
         border:1px solid #e4e7ec;
         border-radius:14px;
-        padding:14px;
+        padding:12px;
         background:#f9fafb;
         display:flex;
         flex-direction:column;
@@ -3364,14 +3531,14 @@ add_shortcode('apf_inbox', function () {
       }
       .apf-scheduler-modal__event h4{
         margin:0;
-        font-size:15px;
+        font-size:14px;
         color:#0f172a;
       }
       .apf-scheduler-modal__event-meta{
         display:flex;
         flex-wrap:wrap;
         gap:8px;
-        font-size:13px;
+        font-size:12.5px;
         color:#475467;
       }
       .apf-scheduler-modal__event-actions{
@@ -3485,6 +3652,7 @@ add_shortcode('apf_inbox', function () {
         justify-content:space-between;
         gap:8px;
         background:#fff;
+        text-align:left;
       }
       .apf-scheduler-edit__provider:hover{
         border-color:#d0d5dd;
@@ -3511,6 +3679,354 @@ add_shortcode('apf_inbox', function () {
       @media(max-width:1080px){
         .apf-scheduler__grid{
           grid-template-columns:1fr;
+        }
+      }
+      @media(max-width:960px){
+        .apf-scheduler{
+          padding:16px;
+          gap:16px;
+        }
+        .apf-scheduler__grid{
+          gap:16px;
+        }
+        .apf-scheduler__calendar,
+        .apf-scheduler__form{
+          padding:14px;
+        }
+        .apf-scheduler__selected{
+          flex-direction:column;
+          align-items:flex-start;
+          gap:6px;
+        }
+        .apf-scheduler__audience{
+          flex-direction:column;
+          align-items:flex-start;
+          gap:8px;
+        }
+        .apf-scheduler__tabs{
+          width:100%;
+        }
+        .apf-scheduler__providers{
+          grid-template-columns:1fr;
+          max-height:240px;
+        }
+        .apf-scheduler__actions{
+          justify-content:stretch;
+        }
+        .apf-scheduler__actions .apf-btn{
+          width:100%;
+        }
+      }
+      @media(max-width:768px){
+        .apf-scheduler{
+          font-size:15px;
+        }
+        .apf-scheduler__head h2{
+          font-size:17px;
+        }
+        .apf-scheduler__head p{
+          font-size:13px;
+        }
+        .apf-scheduler__calendar-header h3{
+          font-size:15px;
+        }
+      }
+      @media(max-width:720px){
+        .apf-scheduler{
+          padding:14px;
+          font-size:14px;
+        }
+        .apf-scheduler__calendar,
+        .apf-scheduler__form{
+          padding:12px;
+        }
+        .apf-scheduler__calendar-header{
+          flex-direction:column;
+          align-items:flex-start;
+        }
+        .apf-scheduler__weekdays,
+        .apf-scheduler__days{
+          gap:4px;
+        }
+        .apf-scheduler__day{
+          height:42px;
+          font-size:13px;
+        }
+        .apf-scheduler__actions{
+          flex-direction:column;
+          align-items:stretch;
+        }
+        .apf-scheduler__providers{
+          max-height:200px;
+        }
+        .apf-scheduler-modal{
+          align-items:center;
+          padding:12px;
+        }
+        .apf-scheduler-modal__dialog{
+          max-width:90%;
+          max-height:90vh;
+          border-radius:14px;
+        }
+        .apf-scheduler-modal__head,
+        .apf-scheduler-modal__content{
+          padding:14px 16px;
+        }
+        .apf-scheduler-modal__head-actions{
+          flex-wrap:wrap;
+          justify-content:flex-end;
+        }
+        .apf-scheduler-modal__items{
+          max-height:320px;
+        }
+        .apf-scheduler-modal__event{
+          padding:12px;
+        }
+      }
+      @media(max-width:700px){
+        .apf-scheduler-modal__event h4{
+          font-size:13px;
+        }
+        .apf-scheduler-modal__event-meta{
+          font-size:12px;
+          flex-direction:column;
+          align-items:flex-start;
+        }
+        .apf-scheduler-modal__event{
+          padding:11px;
+        }
+        .apf-scheduler-modal__event-actions{
+          gap:8px;
+        }
+        .apf-scheduler-modal__event-actions .apf-btn{
+          height:38px;
+          padding:0 12px;
+          font-size:13px;
+        }
+      }
+      @media(max-width:640px){
+        .apf-scheduler{
+          padding:12px;
+          font-size:13px;
+        }
+        .apf-scheduler__head h2{
+          font-size:16px;
+        }
+        .apf-scheduler__head p{
+          font-size:12px;
+        }
+        .apf-scheduler__calendar,
+        .apf-scheduler__form{
+          padding:10px;
+        }
+        .apf-scheduler__calendar-header h3{
+          font-size:14px;
+        }
+        .apf-scheduler__weekdays,
+        .apf-scheduler__days{
+          gap:3px;
+        }
+        .apf-scheduler__weekday{
+          font-size:11px;
+        }
+        .apf-scheduler__day{
+          height:38px;
+          font-size:12px;
+        }
+        .apf-scheduler__providers{
+          max-height:180px;
+        }
+        .apf-scheduler-modal__head h3{
+          font-size:16px;
+        }
+        .apf-scheduler-modal__items{
+          max-height:260px;
+        }
+        .apf-scheduler-modal__event{
+          padding:11px;
+          gap:6px;
+        }
+        .apf-scheduler-modal__event h4{
+          font-size:12.5px;
+        }
+        .apf-scheduler-modal__event-meta{
+          font-size:11.5px;
+        }
+      }
+      @media(max-width:540px){
+        .apf-scheduler{
+          font-size:12.5px;
+        }
+        .apf-scheduler__head h2{
+          font-size:15px;
+        }
+        .apf-scheduler__calendar,
+        .apf-scheduler__form{
+          padding:10px;
+        }
+        .apf-scheduler__weekdays,
+        .apf-scheduler__days{
+          grid-template-columns:repeat(7,minmax(30px,1fr));
+        }
+        .apf-scheduler__day{
+          height:36px;
+          font-size:11.5px;
+        }
+        .apf-scheduler__weekday{
+          font-size:10.5px;
+        }
+        .apf-scheduler__providers{
+          max-height:160px;
+        }
+        .apf-scheduler-modal__items{
+          max-height:220px;
+        }
+        .apf-scheduler-modal__head h3{
+          font-size:15px;
+        }
+      }
+      @media(max-width:480px){
+        .apf-scheduler{
+          padding:10px;
+          font-size:12px;
+        }
+        .apf-scheduler__head h2{
+          font-size:14px;
+        }
+        .apf-scheduler__head p{
+          font-size:11px;
+        }
+        .apf-scheduler__calendar,
+        .apf-scheduler__form{
+          padding:9px;
+        }
+        .apf-scheduler__day{
+          height:34px;
+          font-size:11px;
+        }
+        .apf-scheduler__weekday{
+          font-size:10px;
+        }
+        .apf-scheduler-modal__items{
+          max-height:200px;
+        }
+        .apf-scheduler-modal__head,
+        .apf-scheduler-modal__content{
+          padding:12px 14px;
+        }
+        .apf-scheduler-modal__event{
+          padding:10px;
+        }
+      }
+      @media(max-width:400px){
+        .apf-scheduler-edit__provider{
+          flex-direction:column;
+          align-items:flex-start;
+          gap:4px;
+        }
+        .apf-scheduler-edit__provider span{
+          width:100%;
+          text-align:left;
+        }
+        .apf-scheduler-edit__provider small{
+          white-space:normal;
+        }
+        .apf-scheduler-modal__new{
+          padding:0 8px;
+          height:34px;
+          font-size:12px;
+          width:100%;
+        }
+        .apf-scheduler-modal__head{
+          position:relative;
+          flex-direction:row;
+          align-items:center;
+          gap:8px;
+        }
+        .apf-scheduler-modal__head-actions{
+          margin-left:0;
+          width:100%;
+          justify-content:flex-start;
+          gap:8px;
+          padding-right:42px;
+          flex-wrap:wrap;
+        }
+        .apf-scheduler-modal__close{
+          position:absolute;
+          right:10px;
+          top:50%;
+          transform:translateY(-50%);
+        }
+        .apf-scheduler-modal__new{
+          order:2;
+        }
+      }
+      @media(max-width:375px){
+        .apf-scheduler{
+          padding:8px;
+          font-size:11.5px;
+        }
+        .apf-scheduler__calendar,
+        .apf-scheduler__form{
+          padding:8px;
+        }
+        .apf-scheduler__calendar-header{
+          flex-direction:column;
+          align-items:flex-start;
+          gap:6px;
+        }
+        .apf-scheduler__calendar-header h3{
+          font-size:13px;
+        }
+        .apf-scheduler__nav-btn{
+          width:28px;
+          height:28px;
+        }
+        .apf-scheduler__weekdays,
+        .apf-scheduler__days{
+          grid-template-columns:repeat(7,minmax(24px,1fr));
+          gap:2px;
+        }
+        .apf-scheduler__weekday{
+          font-size:10px;
+        }
+        .apf-scheduler__day{
+          height:32px;
+          font-size:11px;
+        }
+        .apf-scheduler__audience{
+          font-size:11.5px;
+        }
+        .apf-scheduler__tab{
+          padding:5px 10px;
+          font-size:12px;
+          white-space:nowrap;
+        }
+      }
+      @media(max-width:330px){
+        .apf-scheduler{
+          padding:6px;
+        }
+        .apf-scheduler__calendar,
+        .apf-scheduler__form{
+          padding:8px;
+          margin:0 auto;
+        }
+        .apf-scheduler__calendar{
+          max-width:280px;
+        }
+        .apf-scheduler__calendar-header{
+          align-items:flex-start;
+        }
+        .apf-scheduler__weekdays,
+        .apf-scheduler__days{
+          grid-template-columns:repeat(7,minmax(22px,1fr));
+          justify-items:stretch;
+        }
+        .apf-scheduler__day{
+          width:100%;
+          height:30px;
+          font-size:10.5px;
         }
       }
       @media (prefers-color-scheme: dark){
@@ -4451,6 +4967,13 @@ add_shortcode('apf_inbox', function () {
         .apf-scheduler__form{ padding:12px; }
         .apf-scheduler__weekdays,
         .apf-scheduler__days{ grid-template-columns:repeat(7,minmax(30px,1fr)); }
+        .apf-scheduler__day{
+          height:38px;
+          font-size:12px;
+        }
+        .apf-scheduler__weekday{
+          font-size:11px;
+        }
       }
     </style>
 
@@ -5265,7 +5788,11 @@ add_shortcode('apf_inbox', function () {
             checkbox.tabIndex = -1;
 
             const span = document.createElement('span');
-            span.textContent = provider.label || provider.name || provider.email || '';
+            const displayName = provider.name
+              || ((provider.label || '').split('<')[0].trim())
+              || provider.email
+              || '';
+            span.textContent = displayName;
 
             label.appendChild(checkbox);
             label.appendChild(span);
@@ -5498,10 +6025,6 @@ add_shortcode('apf_inbox', function () {
             const audience = document.createElement('span');
             audience.textContent = 'Público: ' + (groupLabels[activeGroup] || activeGroup);
             meta.appendChild(audience);
-            const summary = recipientsSummary(evt, activeGroup);
-            const recipientsBadge = document.createElement('span');
-            recipientsBadge.textContent = summary ? ('Destinatários: ' + summary) : 'Destinatários indisponíveis.';
-            meta.appendChild(recipientsBadge);
 
             const actions = document.createElement('div');
             actions.className = 'apf-scheduler-modal__event-actions';
@@ -5671,7 +6194,10 @@ add_shortcode('apf_inbox', function () {
           editState.selected.forEach((provider, token)=>{
             const chip = document.createElement('span');
             chip.className = 'apf-scheduler-edit__chip';
-            const label = provider.label || provider.name || provider.email || token;
+            const label = provider.name
+              || ((provider.label || '').split('<')[0].trim())
+              || provider.email
+              || token;
             chip.textContent = label;
             const btn = document.createElement('button');
             btn.type = 'button';
@@ -5751,15 +6277,23 @@ add_shortcode('apf_inbox', function () {
             if(editState.selected.has(token)){
               row.classList.add('is-selected');
             }
-            const label = document.createElement('span');
-            label.textContent = provider.label || provider.name || provider.email || '';
-            const hint = document.createElement('small');
-            hint.textContent = provider.email || '';
-            hint.style.color = '#475467';
-            row.appendChild(label);
-            if(provider.email){
-              row.appendChild(hint);
-            }
+          const label = document.createElement('span');
+          const displayName = provider.name
+            || ((provider.label || '').split('<')[0].trim())
+            || provider.email
+            || '';
+          label.textContent = displayName;
+          label.style.textAlign = 'left';
+          label.style.flex = '1 1 auto';
+          label.style.minWidth = '0';
+          const hint = document.createElement('small');
+          hint.textContent = provider.email || '';
+          hint.style.color = '#475467';
+          hint.style.whiteSpace = 'nowrap';
+          row.appendChild(label);
+          if(provider.email){
+            row.appendChild(hint);
+          }
             row.addEventListener('click', ()=>{
               toggleEditRecipient(token);
             });
