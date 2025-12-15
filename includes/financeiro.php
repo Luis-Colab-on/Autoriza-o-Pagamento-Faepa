@@ -2226,27 +2226,31 @@ add_shortcode('apf_inbox', function () {
         </form>
       </div>
 
-      <div class="apf-pager-row">
+      <div class="apf-table-meta">
         <?php if ( ! empty( $director_filter_choices ) ) : ?>
-          <div class="apf-pager-row__left">
-            <button type="button" class="apf-btn apf-btn--ghost apf-filter__assign-btn" id="apfAssignStart">
-              Enviar solicitação ao coordenador
-            </button>
-          </div>
+          <button type="button" class="apf-btn apf-btn--ghost apf-assign-inline-desktop" id="apfAssignStart">
+            Enviar solicitação ao coordenador
+          </button>
         <?php endif; ?>
-        <div class="apf-pager-row__right">
-          <div class="apf-pager" id="apfPager" aria-label="Paginação da lista">
-            <button type="button" class="apf-btn apf-btn--ghost apf-pager__btn" id="apfPagerPrev" aria-label="Página anterior">&larr;</button>
-            <span class="apf-pager__label" id="apfPagerLabel">1/1</span>
-            <button type="button" class="apf-btn apf-btn--ghost apf-pager__btn" id="apfPagerNext" aria-label="Próxima página">&rarr;</button>
-          </div>
-          <div class="apf-count"><span id="apfCount" class="apf-badge"></span></div>
-        </div>
+        <div class="apf-count"><span id="apfCount" class="apf-badge"></span></div>
       </div>
 
       <div class="apf-table-scroller">
         <table id="apfTable" class="apf-table" aria-describedby="apfCount">
           <thead>
+            <tr class="apf-row-pager">
+              <th scope="col" colspan="6">
+                <div class="apf-pager-row">
+                  <div class="apf-pager-row__right">
+                    <div class="apf-pager" id="apfPager" aria-label="Paginação da lista">
+                      <button type="button" class="apf-btn apf-btn--ghost apf-pager__btn" id="apfPagerPrev" aria-label="Página anterior">&larr;</button>
+                      <span class="apf-pager__label" id="apfPagerLabel">1/1</span>
+                      <button type="button" class="apf-btn apf-btn--ghost apf-pager__btn" id="apfPagerNext" aria-label="Próxima página">&rarr;</button>
+                    </div>
+                  </div>
+                </div>
+              </th>
+            </tr>
             <tr>
               <th scope="col">Tipo</th>
               <th scope="col">Nome/Empresa</th>
@@ -2559,8 +2563,6 @@ add_shortcode('apf_inbox', function () {
         justify-content:flex-start;
         width:100%;
         flex:0 1 360px;
-        min-width:200px;
-        max-width:360px;
       }
       .apf-pager-row{
         display:flex;
@@ -4217,7 +4219,15 @@ add_shortcode('apf_inbox', function () {
       .apf-badge{ display:inline-block; padding:4px 10px; border-radius:999px; background:var(--apf-soft); border:1px solid var(--apf-border); }
 
       /* ===== Tabela (enxuta) */
-      .apf-table-scroller{ overflow:auto; border:1px solid var(--apf-border); border-radius:var(--apf-radius); background:var(--apf-bg); box-shadow:var(--apf-shadow); }
+      .apf-table-scroller{
+        overflow:auto;
+        border:1px solid var(--apf-border);
+        border-radius:var(--apf-radius);
+        background:var(--apf-bg);
+        box-shadow:var(--apf-shadow);
+        flex:1 1 auto;
+        min-width:0;
+      }
       .apf-table{ width:100%; border-collapse:collapse; border-spacing:0; min-width:760px; }
       th, td{ word-break: normal; hyphens: manual; line-height:1.35; }
       .apf-table thead th{
@@ -4233,6 +4243,17 @@ add_shortcode('apf_inbox', function () {
         text-align:center;
         font-size:18px;
       }
+      .apf-row-pager th,
+      .apf-row-pager td{
+        background:var(--apf-soft);
+        font-size:16px;
+        text-align:left;
+        position:static;
+        top:auto;
+        border:1px solid var(--apf-border);
+        padding:10px 12px;
+      }
+      .apf-row-pager .apf-pager-row{ margin:0; }
       .apf-table tbody tr:nth-child(odd){ background:var(--apf-row); }
       .apf-table tbody tr:hover{ background:var(--apf-row-hover); }
       .apf-table__title{
@@ -4281,6 +4302,21 @@ add_shortcode('apf_inbox', function () {
       .apf-link{ color:var(--apf-primary); text-decoration:none; font-weight:500; }
       .apf-link:hover{ text-decoration:underline; }
       .apf-btn--inline{ background:transparent; border:none; padding:0; height:auto; }
+      .apf-assign-inline-desktop{ display:inline-flex; align-items:center; }
+      .apf-table-meta{
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:8px;
+        margin:4px 0 8px;
+      }
+      .apf-table-meta{
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:8px;
+        margin:4px 0 8px;
+      }
 
       /* Highlight */
       .apf-hide{ display:none !important; }
@@ -5047,15 +5083,15 @@ add_shortcode('apf_inbox', function () {
       /* Mobile accordion */
       @media (max-width: 920px){
         .apf-toolbar{ flex-direction:column; align-items:stretch; gap:8px; }
-        .apf-search{ width:100%; flex-direction:column; align-items:stretch; gap:8px; }
-        .apf-search-field{ width:100%; flex:1 1 auto; min-width:0; }
-        .apf-search-actions{ flex-direction:column; align-items:stretch; justify-content:flex-start; gap:8px; width:100%; }
+        .apf-search{ width:100%; flex-direction:column; align-items:stretch; gap:8px; flex:0 0 auto; }
+        .apf-search-field{ width:100%; flex:0 0 auto; min-width:0; }
+        .apf-search-actions{ flex-direction:column; align-items:stretch; justify-content:flex-start; gap:8px; width:100%; display:flex; flex:0 0 auto; }
         .apf-search-actions .apf-btn,
-        #apfBtnSearch,
-        #apfBtnClear{ width:100%; flex:1 1 auto; }
-        .apf-filter{ width:100%; flex:1 1 auto; min-width:0; max-width:none; }
-        .apf-filter select{ width:100%; max-width:none; min-width:0; }
+        #apfBtnSearch{ height:44px; }
+        .apf-filter{ width:100%; flex:0 0 auto; min-width:0; max-width:none; }
+        .apf-filter select{ width:100%; max-width:none; min-width:0; height:44px; }
         .apf-filter__row{ gap:8px; flex-direction:column; align-items:stretch; }
+        .apf-filter__row select{ flex:0 0 auto; height:45px; min-width:0; }
         .apf-coord-return__head{ flex-direction:column; align-items:flex-start; }
         .apf-coord-return__actions{ flex-direction:column; align-items:flex-start; }
         .apf-coord-return__stats{ flex-direction:column; }
@@ -5152,24 +5188,51 @@ add_shortcode('apf_inbox', function () {
         .apf-actions__envios{ margin-left:auto; }
         .apf-nowrap{ max-width:none; white-space:normal; overflow:visible; text-overflow:clip; }
         .apf-email{ white-space:normal; overflow-wrap:anywhere; word-break:break-word; max-width:100%; }
-        .apf-row-mobile__panel[hidden]{ display:none !important; }
+      .apf-row-mobile__panel[hidden]{ display:none !important; }
       }
       @media(max-width:640px){
         .apf-toolbar{ gap:10px; }
         .apf-search{ gap:8px; }
         .apf-search-actions{ width:100%; justify-content:stretch; }
         .apf-search-actions .apf-btn,
-        #apfBtnSearch{ flex:1 1 150px; width:100%; }
+        #apfBtnSearch{ flex:0 0 auto; width:100%; height:44px; }
         .apf-filter__row{ flex-direction:column; align-items:stretch; }
         .apf-filter__assign-btn{ width:100%; max-width:none; }
         .apf-pager-row{ flex-direction:column; align-items:stretch; gap:10px; }
-        .apf-pager-row__left,
-        .apf-pager-row__right{ width:100%; flex:1 1 auto; }
-        .apf-pager-row__right{ justify-content:space-between; }
-        .apf-pager{ width:100%; justify-content:flex-end; padding:0; }
+        .apf-pager-row__left{ display:none; }
+        .apf-pager-row__right{ width:100%; flex:1 1 auto; justify-content:flex-start; gap:8px; flex-wrap:nowrap; align-items:center; }
+        .apf-count{ order:1; flex:0 0 auto; white-space:nowrap; }
+        .apf-pager{ order:3; flex:1 1 auto; min-width:0; justify-content:flex-start; padding:0; }
+        .apf-table-meta{ justify-content:space-between; gap:8px; flex-wrap:nowrap; }
         .apf-scheduler__audience{ flex-direction:column; align-items:flex-start; gap:8px; }
         .apf-scheduler__tabs{ width:100%; justify-content:space-between; }
         .apf-scheduler__tab{ flex:1 1 auto; text-align:center; }
+        .apf-btn{ height:44px; }
+        .apf-filter select{ height:44px; }
+        .apf-search input{ height:44px; }
+      }
+      @media(max-width:540px){
+        .apf-assign-inline-desktop{
+          font-size:12px;
+          padding-left:12px;
+          padding-right:12px;
+          height:38px;
+          line-height:1.2;
+          white-space:normal;
+          min-width:0;
+          max-width:none;
+        }
+      }
+      @media(max-width:375px){
+        .apf-assign-inline-desktop{
+          font-size:11px;
+          padding-left:10px;
+          padding-right:10px;
+          height:36px;
+          width:60%;
+          min-width:0;
+          max-width:none;
+        }
       }
       @media(max-width:540px){
         .apf-scheduler__calendar,
@@ -6710,6 +6773,7 @@ add_shortcode('apf_inbox', function () {
         applyFilter(true);
         input.focus();
       }
+
 
       // Modal
       const modal = $('#apfModal');
