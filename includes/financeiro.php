@@ -2265,13 +2265,14 @@ add_shortcode('apf_inbox', function () {
                 $director_key = $bundle['director_key'];
                 $director_label = $bundle['director_label'];
                 $count_badge  = (int) $bundle['count'];
+                $envios_label = $count_badge > 1 ? $count_badge . ' envios' : '';
                 $search_blob  = $bundle['search'];
                 $nome_display    = ( ! empty( $payload['Nome do colaborador'] ) && $payload['Nome do colaborador'] !== '—' )
                     ? $payload['Nome do colaborador']
                     : $payload['Nome/Empresa'];
                 $empresa_display = isset( $payload['Empresa (PJ)'] ) ? trim( (string) $payload['Empresa (PJ)'] ) : '';
           ?>
-            <tr data-search="<?php echo esc_attr( $search_blob ); ?>" data-json="<?php echo $data_json; ?>" data-history="<?php echo $history_json; ?>" data-director-key="<?php echo esc_attr( $director_key ); ?>" data-director-label="<?php echo esc_attr( $director_label ); ?>" data-total="<?php echo esc_attr( $count_badge ); ?>" data-group-key="<?php echo esc_attr( $bundle['group_key'] ); ?>" data-latest-id="<?php echo esc_attr( $bundle['latest']['id'] ?? 0 ); ?>">
+            <tr class="apf-row-main" data-search="<?php echo esc_attr( $search_blob ); ?>" data-json="<?php echo $data_json; ?>" data-history="<?php echo $history_json; ?>" data-director-key="<?php echo esc_attr( $director_key ); ?>" data-director-label="<?php echo esc_attr( $director_label ); ?>" data-total="<?php echo esc_attr( $count_badge ); ?>" data-group-key="<?php echo esc_attr( $bundle['group_key'] ); ?>" data-latest-id="<?php echo esc_attr( $bundle['latest']['id'] ?? 0 ); ?>">
               <td class="apf-uppercase"><?php echo esc_html( $payload['Tipo'] ); ?></td>
               <td class="apf-break">
                 <div class="apf-table__title"><?php echo esc_html( $nome_display ); ?></div>
@@ -2279,7 +2280,7 @@ add_shortcode('apf_inbox', function () {
                   <div class="apf-table__subtitle"><?php echo esc_html( $empresa_display ); ?></div>
                 <?php endif; ?>
               </td>
-              <td class="apf-break apf-nowrap"><?php echo esc_html( $payload['E-mail'] ); ?></td>
+              <td class="apf-break apf-nowrap apf-email"><?php echo esc_html( $payload['E-mail'] ); ?></td>
               <td class="apf-col--num apf-nowrap" title="<?php echo esc_attr( $payload['Valor (R$)'] ); ?>"><?php echo esc_html( $payload['Valor (R$)'] ); ?></td>
               <td class="apf-break"><?php echo esc_html( $payload['Curso'] ); ?></td>
               <td class="apf-actions">
@@ -2289,8 +2290,36 @@ add_shortcode('apf_inbox', function () {
                 </label>
                 <button type="button" class="apf-link apf-btn--inline apf-btn-details">Detalhes</button>
                 <?php if ( $count_badge > 1 ) : ?>
-                  <span class="apf-actions__envios"><?php echo esc_html( $count_badge . ' envios' ); ?></span>
+                  <span class="apf-actions__envios"><?php echo esc_html( $envios_label ); ?></span>
                 <?php endif; ?>
+              </td>
+            </tr>
+            <tr class="apf-row-mobile" data-search="<?php echo esc_attr( $search_blob ); ?>" data-json="<?php echo $data_json; ?>" data-history="<?php echo $history_json; ?>" data-director-key="<?php echo esc_attr( $director_key ); ?>" data-director-label="<?php echo esc_attr( $director_label ); ?>" data-total="<?php echo esc_attr( $count_badge ); ?>" data-group-key="<?php echo esc_attr( $bundle['group_key'] ); ?>" data-latest-id="<?php echo esc_attr( $bundle['latest']['id'] ?? 0 ); ?>">
+              <td colspan="6">
+                <button type="button" class="apf-row-mobile__toggle" aria-expanded="false">
+                  <span class="apf-row-mobile__summary">
+                    <strong><?php echo esc_html( $payload['Tipo'] ); ?></strong>
+                    <span class="apf-row-mobile__separator">|</span>
+                    <span class="apf-row-mobile__name"><?php echo esc_html( $nome_display ); ?></span>
+                  </span>
+                  <span class="apf-row-mobile__chevron" aria-hidden="true"></span>
+                </button>
+                <div class="apf-row-mobile__panel" hidden>
+                  <div class="apf-row-mobile__line"><span>Tipo</span><strong><?php echo esc_html( $payload['Tipo'] ); ?></strong></div>
+                  <div class="apf-row-mobile__line"><span>Nome/Empresa</span><strong><?php echo esc_html( $nome_display ); ?></strong></div>
+                  <?php if ( 'PJ' === strtoupper( (string) $payload['Tipo'] ) && $empresa_display && $empresa_display !== $nome_display ) : ?>
+                    <div class="apf-row-mobile__line"><span>Empresa</span><strong><?php echo esc_html( $empresa_display ); ?></strong></div>
+                  <?php endif; ?>
+                  <div class="apf-row-mobile__line"><span>E-mail</span><span class="apf-row-mobile__value apf-row-mobile__value--email"><?php echo esc_html( $payload['E-mail'] ); ?></span></div>
+                  <div class="apf-row-mobile__line"><span>Valor</span><strong><?php echo esc_html( $payload['Valor (R$)'] ); ?></strong></div>
+                  <div class="apf-row-mobile__line"><span>Curso</span><strong><?php echo esc_html( $payload['Curso'] ); ?></strong></div>
+                  <div class="apf-row-mobile__line apf-row-mobile__line--split">
+                    <button type="button" class="apf-link apf-btn--inline apf-btn-details">Detalhes</button>
+                    <?php if ( $envios_label ) : ?>
+                      <span class="apf-actions__envios"><?php echo esc_html( $envios_label ); ?></span>
+                    <?php endif; ?>
+                  </div>
+                </div>
               </td>
             </tr>
           <?php endforeach; else: ?>
@@ -4221,6 +4250,7 @@ add_shortcode('apf_inbox', function () {
         margin-top:4px;
         text-align:center;
       }
+      .apf-row-mobile{ display:none; }
 
       .apf-col--num{ text-align:center; font-variant-numeric:tabular-nums; }
       .apf-nowrap{ white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:220px; }
@@ -4310,6 +4340,55 @@ add_shortcode('apf_inbox', function () {
       .apf-details dd:last-of-type{
         border-bottom:none;
         padding-bottom:0;
+      }
+
+      @media(max-width:720px){
+        .apf-modal{ align-items:flex-start; }
+        .apf-modal__dialog{
+          width:calc(100% - 16px);
+          max-width:none;
+          margin:12px auto;
+        }
+        .apf-modal__header,
+        .apf-modal__footer{
+          padding:12px;
+          flex-wrap:wrap;
+          gap:10px;
+        }
+        .apf-modal__header-right{
+          width:100%;
+          justify-content:space-between;
+        }
+        .apf-modal__pager{
+          width:100%;
+          justify-content:space-between;
+        }
+        .apf-modal__nav{ width:28px; height:28px; }
+        .apf-modal__counter{ min-width:0; text-align:left; font-size:12px; }
+        .apf-modal__body{
+          padding:12px;
+          max-height:60vh;
+        }
+        .apf-modal__footer{ justify-content:flex-end; }
+        .apf-details{
+          grid-template-columns:1fr;
+          gap:8px 0;
+        }
+        .apf-details dt{
+          border-bottom:0;
+          padding-bottom:0;
+          margin:0;
+        }
+        .apf-details dd{
+          border-bottom:1px solid var(--apf-border);
+          padding:0 0 8px;
+          margin:0 0 6px;
+        }
+        .apf-details dd:last-of-type{
+          border-bottom:0;
+          padding-bottom:0;
+          margin-bottom:0;
+        }
       }
 
       /* ===== Retorno dos coordenadores */
@@ -4965,7 +5044,7 @@ add_shortcode('apf_inbox', function () {
 
 
 
-      /* Mobile cards (agora com 7 colunas) */
+      /* Mobile accordion */
       @media (max-width: 920px){
         .apf-toolbar{ flex-direction:column; align-items:stretch; gap:8px; }
         .apf-search{ width:100%; flex-direction:column; align-items:stretch; gap:8px; }
@@ -4982,20 +5061,98 @@ add_shortcode('apf_inbox', function () {
         .apf-coord-return__stats{ flex-direction:column; }
         .apf-coord-return__archive-icon-btn{ margin-right:0; }
         .apf-coord-return__grid{ grid-template-columns:1fr; }
-        .apf-table{ min-width:100%; }
+        .apf-table{ min-width:100%; border-collapse:separate; }
         .apf-table thead{ display:none; }
-        .apf-table tbody tr{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:6px 12px; padding:12px; border-bottom:1px solid var(--apf-border); }
-        .apf-table tbody td{ display:block; padding:0; border:0; }
-        .apf-table tbody td::before{ content: attr(data-label); display:block; font-size:12px; color:var(--apf-muted); margin-bottom:2px; font-weight:500; }
-
-        #apfTable tbody tr td:nth-child(1)::before{ content:"Tipo"; }
-        #apfTable tbody tr td:nth-child(2)::before{ content:"Nome/Empresa"; }
-        #apfTable tbody tr td:nth-child(3)::before{ content:"E-mail"; }
-        #apfTable tbody tr td:nth-child(4)::before{ content:"Valor (R$)"; }
-        #apfTable tbody tr td:nth-child(5)::before{ content:"Curso"; }
-        #apfTable tbody tr td:nth-child(6)::before{ content:"Ações"; }
-
-        .apf-nowrap{ max-width:none; white-space:normal; }
+        .apf-row-main{ display:none; }
+        .apf-row-mobile{ display:table-row; }
+        .apf-table tbody tr.apf-row-mobile{ background:transparent; }
+        .apf-row-mobile td{ padding:0; border:0; }
+        .apf-row-mobile__toggle{
+          width:100%;
+          box-sizing:border-box;
+          border:1px solid var(--apf-border);
+          border-radius:12px;
+          background:var(--apf-soft);
+          padding:14px 14px;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:10px;
+          font-size:16px;
+          color:var(--apf-text);
+          cursor:pointer;
+          text-align:left;
+          max-width:100%;
+        }
+        .apf-row-mobile__summary{
+          display:flex;
+          align-items:center;
+          gap:8px;
+          font-weight:700;
+          flex:1 1 auto;
+          min-width:0;
+          max-width:100%;
+        }
+        .apf-row-mobile__separator{ color:var(--apf-muted); }
+        .apf-row-mobile__name{
+          display:block;
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:normal;
+          word-break:break-word;
+          max-width:100%;
+        }
+        .apf-row-mobile__chevron{
+          width:10px;
+          height:10px;
+          border-right:2px solid var(--apf-muted);
+          border-bottom:2px solid var(--apf-muted);
+          transform:rotate(45deg);
+          transition:transform .2s ease;
+          flex:0 0 auto;
+        }
+        .apf-row-mobile.is-open .apf-row-mobile__chevron{
+          transform:rotate(225deg);
+        }
+        .apf-row-mobile.is-open .apf-row-mobile__toggle{
+          border-bottom-left-radius:0;
+          border-bottom-right-radius:0;
+          border-bottom-color:transparent;
+        }
+        .apf-row-mobile__panel{
+          box-sizing:border-box;
+          border:1px solid var(--apf-border);
+          border-top:1px solid var(--apf-border);
+          border-radius:0 0 12px 12px;
+          background:var(--apf-bg);
+          padding:10px 14px 12px;
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+        }
+        .apf-row-mobile__line{
+          display:flex;
+          justify-content:space-between;
+          gap:12px;
+          align-items:flex-start;
+          font-size:14px;
+          color:var(--apf-text);
+          border-top:1px solid var(--apf-border);
+          padding-top:8px;
+        }
+        .apf-row-mobile__line:first-child{ border-top:0; padding-top:0; }
+        .apf-row-mobile__line span:first-child{ color:var(--apf-muted); font-weight:600; }
+        .apf-row-mobile__value{ text-align:right; }
+        .apf-row-mobile__value--email{ word-break:break-word; text-align:right; }
+        .apf-row-mobile__line--split{
+          align-items:center;
+          flex-wrap:wrap;
+        }
+        .apf-row-mobile__line--split .apf-btn-details{ padding:0; }
+        .apf-actions__envios{ margin-left:auto; }
+        .apf-nowrap{ max-width:none; white-space:normal; overflow:visible; text-overflow:clip; }
+        .apf-email{ white-space:normal; overflow-wrap:anywhere; word-break:break-word; max-width:100%; }
+        .apf-row-mobile__panel[hidden]{ display:none !important; }
       }
       @media(max-width:640px){
         .apf-toolbar{ gap:10px; }
@@ -5015,7 +5172,6 @@ add_shortcode('apf_inbox', function () {
         .apf-scheduler__tab{ flex:1 1 auto; text-align:center; }
       }
       @media(max-width:540px){
-        .apf-table tbody tr{ grid-template-columns:1fr; }
         .apf-scheduler__calendar,
         .apf-scheduler__form{ padding:12px; }
         .apf-scheduler__weekdays,
@@ -5047,7 +5203,7 @@ add_shortcode('apf_inbox', function () {
       const btnSearch = $('#apfBtnSearch');
       const btnClear  = $('#apfBtnClear');
       const directorSelect = $('#apfDirectorFilter');
-      const rows = $$('#apfTable tbody tr');
+      const rows = $$('#apfTable tbody tr.apf-row-main');
       const countEl = $('#apfCount');
       const pagerPrev = $('#apfPagerPrev');
       const pagerNext = $('#apfPagerNext');
@@ -5065,6 +5221,10 @@ add_shortcode('apf_inbox', function () {
       const assignCount = $('#apfAssignCount');
       const assignHelper = $('#apfAssignHelper');
       const assignCheckboxes = $$('.apf-row-checkbox');
+      const getMobileRow = (row)=>{
+        const next = row ? row.nextElementSibling : null;
+        return (next && next.classList && next.classList.contains('apf-row-mobile')) ? next : null;
+      };
       const assignModal = $('#apfAssignModal');
       const assignModalSelect = $('#apfAssignModalSelect');
       const assignModalConfirm = $('#apfAssignModalConfirm');
@@ -6489,10 +6649,16 @@ add_shortcode('apf_inbox', function () {
         const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
         if(currentPage >= totalPages){ currentPage = totalPages - 1; }
         if(currentPage < 0){ currentPage = 0; }
-        rows.forEach(row=>row.classList.remove('apf-page-hide'));
+        rows.forEach(row=>{
+          row.classList.remove('apf-page-hide');
+          const mobile = getMobileRow(row);
+          if(mobile){ mobile.classList.remove('apf-page-hide'); }
+        });
         visibleRows.forEach((row, idx)=>{
           const hide = idx < (currentPage * PAGE_SIZE) || idx >= ((currentPage + 1) * PAGE_SIZE);
           row.classList.toggle('apf-page-hide', hide);
+          const mobile = getMobileRow(row);
+          if(mobile){ mobile.classList.toggle('apf-page-hide', hide); }
         });
         updatePager(total);
       }
@@ -6512,6 +6678,8 @@ add_shortcode('apf_inbox', function () {
           const okDirector = activeFilterKey ? (row.getAttribute('data-director-key') === activeFilterKey) : true;
           const show = okText && okDig && okDirector;
           row.classList.toggle('apf-hide', !show);
+          const mobile = getMobileRow(row);
+          if(mobile){ mobile.classList.toggle('apf-hide', !show); }
           if(show){
             visible++; matches.push(row); highlightRow(row, activeQuery);
           }else{
@@ -6629,6 +6797,24 @@ add_shortcode('apf_inbox', function () {
           }
         });
       }
+
+      const mobileRows = document.querySelectorAll('.apf-row-mobile');
+      mobileRows.forEach(row=>{
+        const toggle = row.querySelector('.apf-row-mobile__toggle');
+        const panel = row.querySelector('.apf-row-mobile__panel');
+        if(!toggle || !panel){ return; }
+        // Garante estado fechado inicial
+        toggle.setAttribute('aria-expanded','false');
+        panel.hidden = true;
+        row.classList.remove('is-open');
+        toggle.addEventListener('click', ()=>{
+          const expanded = toggle.getAttribute('aria-expanded') === 'true';
+          const nextState = !expanded;
+          toggle.setAttribute('aria-expanded', nextState ? 'true' : 'false');
+          panel.hidden = !nextState;
+          row.classList.toggle('is-open', nextState);
+        });
+      });
 
       document.addEventListener('click', (e)=>{
         const btn = e.target.closest('.apf-btn-details');
