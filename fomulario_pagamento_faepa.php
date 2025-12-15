@@ -1363,8 +1363,8 @@ add_shortcode('apf_form', function () {
         --apf-primary:#125791;
         --apf-primary-strong:#0f456e;
         --apf-primary-soft:rgba(18,87,145,.12);
-        --apf-accent:#a9cf44;
-        --apf-accent-soft:rgba(169,207,68,.18);
+        --apf-accent:#125791;
+        --apf-accent-soft:rgba(18,87,145,.18);
         --apf-border:#d6deeb;
         --apf-muted:#667085;
         --apf-ink:#1d2939;
@@ -1374,7 +1374,7 @@ add_shortcode('apf_form', function () {
         margin:12px auto 24px;
         padding:clamp(16px, 2vw + 12px, 28px);
         box-sizing:border-box;
-        background:linear-gradient(135deg,rgba(18,87,145,.08) 0%,#ffffff 45%,rgba(169,207,68,.12) 100%);
+        background:rgba(18,87,145,.06);
         border-radius:16px;
         border:1px solid var(--apf-border);
         box-shadow:0 18px 48px rgba(15,23,42,.16);
@@ -1409,7 +1409,7 @@ add_shortcode('apf_form', function () {
         border:1px solid var(--apf-border);
         border-radius:12px;
         padding:12px 14px;
-        font-size:13px;
+        font-size:12px;
         color:var(--apf-muted);
         font-weight:600;
         box-shadow:inset 0 -1px 0 rgba(255,255,255,.6);
@@ -1432,7 +1432,7 @@ add_shortcode('apf_form', function () {
         flex-shrink:0;
       }
       .apf-step.is-active{
-        background:linear-gradient(120deg, var(--apf-primary-soft), var(--apf-accent-soft));
+        background:var(--apf-primary-soft);
         border-color:rgba(18,87,145,.35);
         color:var(--apf-ink);
         box-shadow:0 6px 18px rgba(18,87,145,.08);
@@ -1442,7 +1442,7 @@ add_shortcode('apf_form', function () {
         background:var(--apf-primary);
         border-color:var(--apf-primary);
         color:#fff;
-        box-shadow:0 0 0 4px var(--apf-accent-soft),0 1px 2px rgba(16,24,40,.16);
+        box-shadow:0 0 0 4px rgba(18,87,145,.16),0 1px 2px rgba(16,24,40,.16);
       }
       @media(max-width:767px){
         .apf-steps{overflow:visible;padding:0;margin:6px 0 12px;gap:0;justify-content:center}
@@ -1456,7 +1456,7 @@ add_shortcode('apf_form', function () {
           justify-content:center;
           padding:12px 14px;
           gap:8px;
-          font-size:14px;
+          font-size:12px;
           line-height:1.25;
           text-align:center;
           margin:0 auto;
@@ -1473,7 +1473,7 @@ add_shortcode('apf_form', function () {
       @keyframes apfFade{from{opacity:.2;transform:translateY(6px);}to{opacity:1;transform:none;}}
       .apf-pane .apf-grid{
         display:grid;
-        grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+        grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
         gap:14px;
       }
       .apf-grid label{
@@ -1486,6 +1486,7 @@ add_shortcode('apf_form', function () {
         border:1px solid #e7ecf3;
         border-radius:12px;
         padding:10px 12px;
+        min-width:0;
         box-shadow:inset 0 1px 0 rgba(255,255,255,.8);
       }
       .apf-grid input,
@@ -1499,6 +1500,7 @@ add_shortcode('apf_form', function () {
         color:var(--apf-ink);
         width:100%;
         max-width:100%;
+        min-width:0;
         box-sizing:border-box;
         transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
         min-height:44px;
@@ -1508,7 +1510,7 @@ add_shortcode('apf_form', function () {
       .apf-grid textarea:focus,
       .apf-grid select:focus{
         border-color:var(--apf-primary);
-        box-shadow:0 0 0 3px rgba(18,87,145,.17),0 0 0 6px var(--apf-accent-soft);
+        box-shadow:0 0 0 3px rgba(18,87,145,.17),0 0 0 6px rgba(18,87,145,.12);
         outline:none;
         background:#fff;
       }
@@ -1527,7 +1529,7 @@ add_shortcode('apf_form', function () {
         grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
         gap:12px;
         border:1px dashed #d8e1ed;
-        margin:14px 0 6px;
+        margin:14px 0 12px;
         padding:12px 14px;
         border-radius:12px;
         background:#f8fafc;
@@ -1565,31 +1567,60 @@ add_shortcode('apf_form', function () {
         margin-top:18px;
       }
       .apf-actions button{
-        background:var(--apf-primary);
+        background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));
         color:#fff;
-        border:none;
+        border:1px solid rgba(18,87,145,.35);
         border-radius:12px;
-        padding:12px 14px;
+        padding:0 16px;
         cursor:pointer;
         font-weight:700;
         font-size:15px;
         letter-spacing:0.01em;
         box-shadow:0 10px 26px rgba(18,87,145,.25);
         transition:background .2s ease, transform .15s ease, box-shadow .2s ease;
+        width:269px;
+        max-width:100%;
+        min-height:42px;
+        height:42px;
       }
       .apf-actions button:hover{background:var(--apf-primary-strong);box-shadow:0 14px 30px rgba(12,59,102,.28);transform:translateY(-1px)}
-      .apf-actions button:focus{outline:2px solid rgba(18,87,145,.35);outline-offset:2px;box-shadow:0 0 0 6px var(--apf-accent-soft)}
-      .apf-actions .apf-prev{background:#a0a7b4;box-shadow:none}
-      .apf-actions .apf-prev:hover{background:#82899a}
-      .apf-actions .apf-prev:focus{outline-color:rgba(130,137,154,.4)}
+      .apf-actions button:focus{outline:2px solid rgba(18,87,145,.35);outline-offset:2px;box-shadow:0 0 0 6px rgba(18,87,145,.12)}
+      .apf-actions .apf-prev{
+        background:#fff;
+        color:var(--apf-primary);
+        border:1px solid #000;
+        box-shadow:none;
+      }
+      .apf-actions .apf-prev:hover{background:#f5f5f5;box-shadow:none;transform:none}
+      .apf-actions .apf-prev:focus{outline-color:rgba(0,0,0,.5)}
       .apf-field-note{display:block;font-size:12px;color:#b42318;margin-top:6px}
       @media(max-width:640px){
         .apf-card{padding:18px 14px;margin:12px auto;max-width:100%}
+        .apf-pane .apf-grid{grid-template-columns:1fr;gap:12px}
         .apf-row{grid-template-columns:1fr;gap:10px;padding:12px}
+      }
+      @media(max-width:375px){
+        .apf-steps{padding:0;justify-content:center}
+        .apf-step{padding:0}
+        .apf-step.is-active{
+          display:inline-flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          text-align:center;
+          width:auto;
+          min-width:140px;
+          margin:0 auto;
+          gap:6px;
+          padding:8px 10px;
+          font-size:12px;
+        }
+        .apf-step.is-active::before{align-self:center}
+        .apf-radio{font-size:16px}
       }
       @media(min-width:640px){
         .apf-actions{flex-direction:row;justify-content:space-between;align-items:center}
-        .apf-actions button{width:auto;min-width:160px}
+        .apf-actions button{width:269px;max-width:100%;height:42px;min-height:42px}
       }
     </style>
 

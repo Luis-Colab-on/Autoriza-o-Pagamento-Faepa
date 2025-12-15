@@ -511,18 +511,18 @@ add_shortcode('apf_portal', function($atts){
       .apf-portal{
         --apf-primary:#125791;
         --apf-primary-strong:#0f456e;
-        --apf-accent:#a9cf44;
-        --apf-accent-soft:rgba(169,207,68,.18);
+        --apf-accent:#125791;
+        --apf-accent-soft:rgba(18,87,145,.18);
         --apf-border:#d6e1ed;
         --apf-soft:#f6f9fc;
         --apf-muted:#5f6b7a;
         --apf-ink:#0f172a;
         --apf-focus:0 0 0 3px rgba(18,87,145,.18),0 0 0 6px var(--apf-accent-soft);
         color:var(--apf-ink);
-        background:linear-gradient(145deg,rgba(18,87,145,.05) 0%,#fff 42%,rgba(169,207,68,.08) 100%);
+        background:rgba(18,87,145,.05);
       }
       .apf-notice{margin:10px 0;padding:12px 14px;border-radius:12px;font-weight:600}
-      .apf-notice-success{background:rgba(169,207,68,.18);border:1px solid rgba(169,207,68,.5);color:#3d520d}
+      .apf-notice-success{background:rgba(18,87,145,.12);border:1px solid rgba(18,87,145,.45);color:#0f2e4d}
 
       .apf-hero{
         display:flex;
@@ -531,7 +531,7 @@ add_shortcode('apf_portal', function($atts){
         justify-content:center;
         align-items:center;
         text-align:center;
-        background:linear-gradient(135deg,rgba(18,87,145,.12),rgba(169,207,68,.16));
+        background:rgba(18,87,145,.12);
         border:1px solid rgba(18,87,145,.12);
         border-radius:16px;
         padding:18px 20px;
@@ -554,29 +554,29 @@ add_shortcode('apf_portal', function($atts){
       #apf-edit::before,
       #apf-edit::after{content:"";position:absolute;border-radius:999px;filter:blur(12px);opacity:.18;pointer-events:none}
       #apf-edit::before{width:200px;height:200px;background:radial-gradient(circle,rgba(18,87,145,.35),transparent 65%);top:-60px;right:-40px}
-      #apf-edit::after{width:180px;height:180px;background:radial-gradient(circle,rgba(169,207,68,.3),transparent 70%);bottom:-80px;left:-60px}
+      #apf-edit::after{width:180px;height:180px;background:rgba(18,87,145,.24);bottom:-80px;left:-60px}
       #apf-edit h3{display:flex;align-items:center;gap:10px;letter-spacing:.01em}
       #apf-edit form{position:relative;z-index:1;display:flex;flex-direction:column;gap:12px}
-      #apf-edit .apf-tabs{background:linear-gradient(135deg,rgba(18,87,145,.05),rgba(169,207,68,.08));border:1px solid rgba(18,87,145,.18);border-radius:14px;padding:10px;box-shadow:inset 0 1px 0 #fff,0 12px 26px rgba(15,23,42,.08)}
+      #apf-edit .apf-tabs{background:var(--apf-soft);border:1px solid rgba(18,87,145,.18);border-radius:14px;padding:10px;box-shadow:inset 0 1px 0 #fff,0 12px 26px rgba(15,23,42,.08)}
       #apf-edit .apf-tabs button{min-height:46px;flex:1 1 0;border-color:rgba(18,87,145,.2);background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.06)}
       #apf-edit .apf-tabs button.is-active{background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));color:#fff;border-color:rgba(18,87,145,.6);box-shadow:0 12px 22px rgba(18,87,145,.2)}
       #apf-edit .apf-pane{display:none;border:1px solid rgba(18,87,145,.14);background:#fff;border-radius:14px;padding:18px 16px;box-shadow:0 12px 28px rgba(15,23,42,.08)}
       #apf-edit .apf-pane.is-active{display:block;animation:apfFadeUp .2s ease}
-      #apf-edit .apf-grid{grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
-      #apf-edit .apf-grid label{border-color:rgba(18,87,145,.18);background:linear-gradient(135deg,#fff,rgba(18,87,145,.02));box-shadow:inset 0 1px 0 #fff,0 10px 18px rgba(15,23,42,.06)}
+      #apf-edit .apf-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+      #apf-edit .apf-grid label{border-color:rgba(18,87,145,.18);background:linear-gradient(135deg,#fff,rgba(18,87,145,.02));box-shadow:inset 0 1px 0 #fff,0 10px 18px rgba(15,23,42,.06);min-width:0}
       #apf-edit .apf-grid input,
       #apf-edit .apf-grid textarea,
       #apf-edit .apf-grid select{background:#fdfefe;border-color:rgba(18,87,145,.28)}
-      #apf-edit .apf-row{border:1px solid rgba(18,87,145,.2);background:linear-gradient(135deg,#fff,rgba(169,207,68,.1));box-shadow:0 10px 18px rgba(15,23,42,.06)}
+      #apf-edit .apf-row{border:1px solid rgba(18,87,145,.2);background:var(--apf-soft);box-shadow:0 10px 18px rgba(15,23,42,.06)}
       #apf-edit .apf-row legend{padding:0 8px;font-weight:800;letter-spacing:.02em;color:var(--apf-primary)}
-      #apf-edit .apf-actions{justify-content:flex-end;background:linear-gradient(90deg,rgba(18,87,145,.05),rgba(169,207,68,.05));padding:10px;border:1px solid var(--apf-border);border-radius:12px;box-shadow:inset 0 1px 0 #fff,0 8px 16px rgba(15,23,42,.06)}
+      #apf-edit .apf-actions{justify-content:flex-end;background:var(--apf-soft);padding:10px;border:1px solid var(--apf-border);border-radius:12px;box-shadow:inset 0 1px 0 #fff,0 8px 16px rgba(15,23,42,.06)}
       #apf-edit .apf-actions .apf-prev{background:#eef1f6;color:var(--apf-ink);box-shadow:none}
       #apf-edit .apf-actions .apf-submit{min-width:160px}
       @keyframes apfFadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
       .apf-table-wrap{overflow:auto;border:1px solid var(--apf-border);border-radius:14px;background:linear-gradient(135deg,#fff,rgba(18,87,145,.02))}
       .apf-table{width:100%;min-width:640px;border-collapse:collapse}
       .apf-table thead th{background:rgba(18,87,145,.08);text-align:center;padding:12px 14px;border-bottom:1px solid var(--apf-border);font-weight:800;color:var(--apf-ink);letter-spacing:.02em;white-space:nowrap}
-      .apf-table tbody tr:nth-child(odd){background:rgba(169,207,68,.06)}
+      .apf-table tbody tr:nth-child(odd){background:rgba(18,87,145,.04)}
       .apf-table tbody tr:hover{background:rgba(18,87,145,.06)}
       .apf-table tbody td{padding:12px 14px;border-bottom:1px solid #eef2f7;color:var(--apf-ink);vertical-align:middle;text-align:center}
       .apf-table tbody td:nth-child(3){max-width:360px;text-align:center}
@@ -595,10 +595,10 @@ add_shortcode('apf_portal', function($atts){
       .apf-pane.is-active{display:block}
       .apf-grid{
         display:grid;
-        grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+        grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
         gap:clamp(14px,2.4vw,24px);
       }
-      .apf-grid label{display:flex;flex-direction:column;font-size:13px;color:var(--apf-muted);gap:8px;background:#fff;border:1px solid var(--apf-border);border-radius:12px;padding:12px 14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}
+      .apf-grid label{display:flex;flex-direction:column;font-size:13px;color:var(--apf-muted);gap:8px;background:#fff;border:1px solid var(--apf-border);border-radius:12px;padding:12px 14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.75);min-width:0}
       .apf-grid input,
       .apf-grid textarea,
       .apf-grid select{
@@ -609,6 +609,7 @@ add_shortcode('apf_portal', function($atts){
         background:#fdfdff;
         color:var(--apf-ink);
         transition:border-color .18s ease,box-shadow .18s ease,background .18s ease;
+        min-width:0;
       }
       .apf-grid select{
         appearance:none;
@@ -622,25 +623,35 @@ add_shortcode('apf_portal', function($atts){
       .apf-grid input:focus,
       .apf-grid textarea:focus,
       .apf-grid select:focus{border-color:var(--apf-primary);box-shadow:var(--apf-focus);outline:none;background:#fff}
-      .apf-row{display:flex;gap:18px;border:1px dashed var(--apf-border);margin:12px 0 0;padding:14px;border-radius:12px;flex-wrap:wrap;background:var(--apf-soft)}
+      .apf-row{display:flex;gap:18px;border:1px dashed var(--apf-border);margin:12px 0 12px;padding:14px;border-radius:12px;flex-wrap:wrap;background:var(--apf-soft)}
       .apf-radio{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--apf-ink)}
       .apf-panel .apf-actions{justify-content:space-between;margin-top:16px}
       .apf-panel .apf-actions button{
         background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));
         color:#fff;
-        border:none;
+        border:1px solid rgba(18,87,145,.35);
         border-radius:12px;
-        padding:12px 14px;
+        padding:0 16px;
         cursor:pointer;
         min-height:44px;
         flex:1 1 160px;
         font-weight:700;
         box-shadow:0 10px 26px rgba(18,87,145,.25);
         transition:background .2s ease,transform .15s ease,box-shadow .2s ease;
+        width:269px;
+        max-width:100%;
+        height:42px;
+        min-height:42px;
       }
       .apf-panel .apf-actions button:hover{transform:translateY(-1px);box-shadow:0 14px 30px rgba(12,59,102,.28)}
       .apf-panel .apf-actions button:focus{outline:none;box-shadow:var(--apf-focus)}
-      .apf-panel .apf-actions .apf-prev{background:#a0a7b4;box-shadow:none}
+      .apf-panel .apf-actions .apf-prev{
+        background:#fff;
+        color:var(--apf-primary);
+        border:1px solid #000;
+        box-shadow:none;
+      }
+      .apf-panel .apf-actions .apf-prev:hover{background:#f5f5f5;box-shadow:none;transform:none}
       .apf-field-note{display:block;font-size:12px;color:#b42318;margin-top:6px}
 
       .apf-portal-calendar{border:1px solid var(--apf-border);border-radius:14px;background:#fff;padding:18px;margin:12px auto 0;box-shadow:0 8px 20px rgba(15,23,42,.08);overflow:visible;width:100%;max-width:960px;box-sizing:border-box}
@@ -659,7 +670,7 @@ add_shortcode('apf_portal', function($atts){
       .apf-portal-calendar__day{position:relative;height:44px;border-radius:12px;border:1px solid var(--apf-border);background:#fff;color:var(--apf-ink);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:all .15s ease}
       .apf-portal-calendar__day:hover{border-color:var(--apf-primary);box-shadow:0 8px 16px rgba(15,23,42,.1);cursor:pointer}
       .apf-portal-calendar__day--muted{opacity:.35}
-      .apf-portal-calendar__day--has-event{border-color:var(--apf-primary);background:linear-gradient(135deg,rgba(18,87,145,.1),rgba(169,207,68,.12))}
+      .apf-portal-calendar__day--has-event{border-color:var(--apf-primary);background:rgba(18,87,145,.12)}
       .apf-portal-calendar__empty{margin:10px 0 0;font-size:13px;color:var(--apf-muted)}
       .apf-portal-calendar__hint{margin:10px 0 0;font-size:12px;color:var(--apf-muted)}
 
@@ -675,13 +686,13 @@ add_shortcode('apf_portal', function($atts){
       .apf-portal-modal__content{display:flex;flex-direction:column;gap:10px}
       .apf-portal-modal__event{border:1px solid var(--apf-border);border-radius:12px;padding:12px 14px;background:var(--apf-soft)}
       .apf-portal-modal__event--finance{border-color:var(--apf-primary);background:rgba(18,87,145,.08)}
-      .apf-portal-modal__event--faepa{border-color:var(--apf-accent);background:rgba(169,207,68,.12)}
+      .apf-portal-modal__event--faepa{border-color:var(--apf-accent);background:rgba(18,87,145,.12)}
       .apf-portal-modal__event--coordinator{border-color:#d97706;background:rgba(217,119,6,.12)}
       .apf-portal-modal__event h5{margin:0 0 4px;font-size:15px;color:var(--apf-ink)}
       .apf-portal-modal__event p{margin:0;font-size:13px;color:var(--apf-muted);white-space:pre-wrap}
       .apf-portal-modal__event-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:4px 8px;border-radius:999px;margin-bottom:6px}
       .apf-portal-modal__event-tag--finance{background:rgba(18,87,145,.14);color:var(--apf-primary)}
-      .apf-portal-modal__event-tag--faepa{background:rgba(169,207,68,.18);color:#4d5f13}
+      .apf-portal-modal__event-tag--faepa{background:rgba(18,87,145,.18);color:#0f2e4d}
       .apf-portal-modal__event-tag--coordinator{background:rgba(217,119,6,.16);color:#b45309}
       .apf-portal-modal__empty{margin:0;font-size:13px;color:var(--apf-muted)}
 
@@ -718,7 +729,9 @@ add_shortcode('apf_portal', function($atts){
       }
       @media(max-width:640px){
         .apf-panel .apf-actions{flex-direction:column;align-items:stretch}
-        .apf-panel .apf-actions button{width:100%;min-height:40px;padding:10px 12px;font-size:14px;border-radius:10px}
+        .apf-panel .apf-actions button{width:269px;max-width:100%;min-height:42px;height:42px;padding:0 16px;font-size:14px;border-radius:10px}
+        #apf-edit{padding:18px 16px}
+        #apf-edit .apf-grid{grid-template-columns:1fr;gap:12px}
         .apf-grid{grid-template-columns:1fr}
         .apf-portal-calendar{padding:5px;width:90%;max-width:none;overflow:visible;margin-left:auto;margin-right:auto}
         .apf-portal-calendar__weekdays,
@@ -746,8 +759,14 @@ add_shortcode('apf_portal', function($atts){
         #apf-edit .apf-pane{padding:14px 12px}
         #apf-edit .apf-grid{grid-template-columns:1fr;gap:10px}
         #apf-edit .apf-grid label{padding:10px 12px}
-        #apf-edit .apf-actions{display: flex; height: 6rem; align-items: stretch; gap: 8px; padding: 8px; border-radius: 10px; flex-direction: row;}
-        #apf-edit .apf-actions button{width:100%;min-height:38px;padding:9px 11px;font-size:14px}
+        #apf-edit .apf-actions{display:flex;align-items:stretch;gap:8px;padding:8px;border-radius:10px;flex-direction:row}
+        #apf-edit .apf-actions button{width:269px;max-width:100%;min-height:42px;height:42px;padding:0 16px;font-size:14px}
+      }
+      @media(max-width:375px){
+        #apf-edit .apf-tabs button{padding:0}
+        #apf-edit .apf-pane{padding:0}
+        #apf-edit .apf-radio{font-size:16px}
+        #apf-edit .apf-tabs button{font-size:12px}
       }
     </style>
 
