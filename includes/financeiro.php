@@ -2596,7 +2596,7 @@ add_shortcode('apf_inbox', function () {
       .apf-pager__btn{
         width:38px;
         min-width:38px;
-        height:38px;
+        height:38px !important;
         padding:0;
         display:flex;
         align-items:center;
@@ -5085,6 +5085,10 @@ add_shortcode('apf_inbox', function () {
         .apf-toolbar{ flex-direction:column; align-items:stretch; gap:8px; }
         .apf-search{ width:100%; flex-direction:column; align-items:stretch; gap:8px; flex:0 0 auto; }
         .apf-search-field{ width:100%; flex:0 0 auto; min-width:0; }
+        .apf-filter--assign{ order:0; }
+        .apf-search-field{ order:1; }
+        .apf-search-actions{ order:2; }
+        .apf-search input{ border-radius:10px; }
         .apf-search-actions{ flex-direction:column; align-items:stretch; justify-content:flex-start; gap:8px; width:100%; display:flex; flex:0 0 auto; }
         .apf-search-actions .apf-btn,
         #apfBtnSearch{ height:44px; }
@@ -5098,7 +5102,35 @@ add_shortcode('apf_inbox', function () {
         .apf-coord-return__archive-icon-btn{ margin-right:0; }
         .apf-coord-return__grid{ grid-template-columns:1fr; }
         .apf-table{ min-width:100%; border-collapse:separate; }
-        .apf-table thead{ display:none; }
+        .apf-table thead{ display:table-header-group; }
+        .apf-table thead tr:not(.apf-row-pager){ display:none; }
+        .apf-pager-row{ justify-content:flex-end; gap:0; }
+        .apf-pager-row__right{ justify-content:flex-end; gap:0; }
+        .apf-pager{
+          height:25px;
+          gap:0;
+          padding:0;
+          justify-content: space-between;
+        }
+        .apf-pager__btn{
+          width:25px !important;
+          min-width:25px !important;
+          height:26px !important;
+          flex:0 0 25px;
+          padding:0;
+          font-size:14px;
+          line-height:25px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+        }
+        .apf-pager__label{
+          height:25px;
+          line-height:25px;
+          font-size:14px;
+          min-width:52px;
+          text-align:center;
+        }
         .apf-row-main{ display:none; }
         .apf-row-mobile{ display:table-row; }
         .apf-table tbody tr.apf-row-mobile{ background:transparent; }
@@ -5198,11 +5230,11 @@ add_shortcode('apf_inbox', function () {
         #apfBtnSearch{ flex:0 0 auto; width:100%; height:44px; }
         .apf-filter__row{ flex-direction:column; align-items:stretch; }
         .apf-filter__assign-btn{ width:100%; max-width:none; }
-        .apf-pager-row{ flex-direction:column; align-items:stretch; gap:10px; }
+        .apf-pager-row{ flex-direction:column; align-items:flex-end; gap:0; }
         .apf-pager-row__left{ display:none; }
-        .apf-pager-row__right{ width:100%; flex:1 1 auto; justify-content:flex-start; gap:8px; flex-wrap:nowrap; align-items:center; }
+        .apf-pager-row__right{ width:100%; flex:1 1 auto; justify-content:flex-end; gap:0; flex-wrap:nowrap; align-items:center; }
         .apf-count{ order:1; flex:0 0 auto; white-space:nowrap; }
-        .apf-pager{ order:3; flex:1 1 auto; min-width:0; justify-content:flex-start; padding:0; }
+        .apf-pager{ order:3; flex:1 1 auto; min-width:0; justify-content:space-between; padding:0; }
         .apf-table-meta{ justify-content:space-between; gap:8px; flex-wrap:nowrap; }
         .apf-scheduler__audience{ flex-direction:column; align-items:flex-start; gap:8px; }
         .apf-scheduler__tabs{ width:100%; justify-content:space-between; }
