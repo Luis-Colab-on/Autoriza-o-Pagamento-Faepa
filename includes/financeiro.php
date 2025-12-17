@@ -2286,7 +2286,9 @@ add_shortcode('apf_inbox', function () {
               </td>
               <td class="apf-break apf-nowrap apf-email"><?php echo esc_html( $payload['E-mail'] ); ?></td>
               <td class="apf-col--num apf-nowrap" title="<?php echo esc_attr( $payload['Valor (R$)'] ); ?>"><?php echo esc_html( $payload['Valor (R$)'] ); ?></td>
-              <td class="apf-break"><?php echo esc_html( $payload['Curso'] ); ?></td>
+              <td class="apf-break">
+                <div class="apf-course"><?php echo esc_html( $payload['Curso'] ); ?></div>
+              </td>
               <td class="apf-actions">
                 <label class="apf-row-select">
                   <input type="checkbox" class="apf-row-checkbox" value="<?php echo esc_attr( $bundle['latest']['id'] ?? 0 ); ?>" disabled>
@@ -2300,14 +2302,20 @@ add_shortcode('apf_inbox', function () {
             </tr>
             <tr class="apf-row-mobile" data-search="<?php echo esc_attr( $search_blob ); ?>" data-json="<?php echo $data_json; ?>" data-history="<?php echo $history_json; ?>" data-director-key="<?php echo esc_attr( $director_key ); ?>" data-director-label="<?php echo esc_attr( $director_label ); ?>" data-total="<?php echo esc_attr( $count_badge ); ?>" data-group-key="<?php echo esc_attr( $bundle['group_key'] ); ?>" data-latest-id="<?php echo esc_attr( $bundle['latest']['id'] ?? 0 ); ?>">
               <td colspan="6">
-                <button type="button" class="apf-row-mobile__toggle" aria-expanded="false">
-                  <span class="apf-row-mobile__summary">
-                    <strong><?php echo esc_html( $payload['Tipo'] ); ?></strong>
-                    <span class="apf-row-mobile__separator">|</span>
-                    <span class="apf-row-mobile__name"><?php echo esc_html( $nome_display ); ?></span>
-                  </span>
-                  <span class="apf-row-mobile__chevron" aria-hidden="true"></span>
-                </button>
+                <div class="apf-row-mobile__toggle-wrap">
+                  <button type="button" class="apf-row-mobile__toggle" aria-expanded="false">
+                    <span class="apf-row-mobile__summary">
+                      <strong><?php echo esc_html( $payload['Tipo'] ); ?></strong>
+                      <span class="apf-row-mobile__separator">|</span>
+                      <span class="apf-row-mobile__name"><?php echo esc_html( $nome_display ); ?></span>
+                    </span>
+                    <span class="apf-row-mobile__chevron" aria-hidden="true"></span>
+                  </button>
+                  <label class="apf-row-select apf-row-select--mobile">
+                    <input type="checkbox" class="apf-row-checkbox" value="<?php echo esc_attr( $bundle['latest']['id'] ?? 0 ); ?>" disabled>
+                    <span>Selecionar</span>
+                  </label>
+                </div>
                 <div class="apf-row-mobile__panel" hidden>
                   <div class="apf-row-mobile__line"><span>Tipo</span><strong><?php echo esc_html( $payload['Tipo'] ); ?></strong></div>
                   <div class="apf-row-mobile__line"><span>Nome/Empresa</span><strong><?php echo esc_html( $nome_display ); ?></strong></div>
@@ -2316,7 +2324,7 @@ add_shortcode('apf_inbox', function () {
                   <?php endif; ?>
                   <div class="apf-row-mobile__line"><span>E-mail</span><span class="apf-row-mobile__value apf-row-mobile__value--email"><?php echo esc_html( $payload['E-mail'] ); ?></span></div>
                   <div class="apf-row-mobile__line"><span>Valor</span><strong><?php echo esc_html( $payload['Valor (R$)'] ); ?></strong></div>
-                  <div class="apf-row-mobile__line"><span>Curso</span><strong><?php echo esc_html( $payload['Curso'] ); ?></strong></div>
+                  <div class="apf-row-mobile__line"><span>Curso</span><strong><span class="apf-course"><?php echo esc_html( $payload['Curso'] ); ?></span></strong></div>
                   <div class="apf-row-mobile__line apf-row-mobile__line--split">
                     <button type="button" class="apf-link apf-btn--inline apf-btn-details">Detalhes</button>
                     <?php if ( $envios_label ) : ?>
@@ -2533,13 +2541,14 @@ add_shortcode('apf_inbox', function () {
       .apf-toolbar{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:16px; margin:8px 0 14px; width:100%; }
       .apf-search{
         display:flex;
-        flex:1 1 520px;
+        flex:1 1 min(520px, 100%);
         gap:12px;
         align-items:flex-end;
         flex-wrap:wrap;
         min-width:0;
+        max-width:100%;
       }
-      .apf-search-field{ flex:1 1 320px; min-width:220px; }
+      .apf-search-field{ flex:1 1 320px; min-width:220px; max-width:100%; width:100%; }
       .apf-filter{ display:flex; flex-direction:column; gap:4px; flex:0 1 200px; min-width:180px; width:auto; max-width:240px; }
       .apf-filter span{ font-size:12px; color:var(--apf-muted); font-weight:500; }
       .apf-filter select{
@@ -4221,14 +4230,18 @@ add_shortcode('apf_inbox', function () {
       /* ===== Tabela (enxuta) */
       .apf-table-scroller{
         overflow:auto;
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
         border:1px solid var(--apf-border);
         border-radius:var(--apf-radius);
         background:var(--apf-bg);
         box-shadow:var(--apf-shadow);
         flex:1 1 auto;
         min-width:0;
+        width:100%;
+        max-width:100%;
       }
-      .apf-table{ width:100%; border-collapse:collapse; border-spacing:0; min-width:760px; }
+      .apf-table{ width:100%; border-collapse:collapse; border-spacing:0; min-width:min(760px, 100%); table-layout:fixed; }
       th, td{ word-break: normal; hyphens: manual; line-height:1.35; }
       .apf-table thead th{
         position:sticky; top:0; z-index:1; background:var(--apf-soft);
@@ -4260,9 +4273,15 @@ add_shortcode('apf_inbox', function () {
         font-weight:700;
         color:var(--apf-text);
         font-size:18px;
-        display:block;
+        display:-webkit-box;
+        -webkit-line-clamp:2;
+        -webkit-box-orient:vertical;
         text-align:center;
         margin-bottom:6px;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:normal;
+        word-break:break-word;
       }
       .apf-table__subtitle{
         display:block;
@@ -4276,6 +4295,15 @@ add_shortcode('apf_inbox', function () {
       .apf-col--num{ text-align:center; font-variant-numeric:tabular-nums; }
       .apf-nowrap{ white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:220px; }
       .apf-break{ overflow-wrap:anywhere; }
+      .apf-course{
+        display:-webkit-box;
+        -webkit-line-clamp:2;
+        -webkit-box-orient:vertical;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:normal;
+        word-break:break-word;
+      }
       .apf-actions{
         display:flex;
         flex-direction:column;
@@ -4303,13 +4331,6 @@ add_shortcode('apf_inbox', function () {
       .apf-link:hover{ text-decoration:underline; }
       .apf-btn--inline{ background:transparent; border:none; padding:0; height:auto; }
       .apf-assign-inline-desktop{ display:inline-flex; align-items:center; }
-      .apf-table-meta{
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        gap:8px;
-        margin:4px 0 8px;
-      }
       .apf-table-meta{
         display:flex;
         justify-content:space-between;
@@ -4660,11 +4681,11 @@ add_shortcode('apf_inbox', function () {
         overflow:hidden;
       }
       .apf-coord-return-modal__head{
-        padding:18px 20px;
+        padding:18px 20px 14px;
         border-bottom:1px solid rgba(255,255,255,.08);
         display:flex;
-        align-items:flex-start;
-        justify-content:space-between;
+        flex-direction:column;
+        align-items:stretch;
         gap:12px;
       }
       .apf-coord-return-modal__head h3{
@@ -4678,10 +4699,15 @@ add_shortcode('apf_inbox', function () {
         color:#cbd5f5;
       }
       .apf-coord-return-modal__close{
+        align-self:flex-end;
+        order:-1;
+        width:36px;
+        height:36px;
         border:none;
         background:transparent;
         color:#cbd5f5;
         font-size:28px;
+        line-height:1;
         cursor:pointer;
       }
       .apf-coord-return-modal__body{
@@ -4755,6 +4781,7 @@ add_shortcode('apf_inbox', function () {
         text-transform:uppercase;
         letter-spacing:.04em;
         font-size:11px;
+        white-space:nowrap;
       }
       .apf-coord-return-modal__count-box--approved{
         background:rgba(16,185,129,.12);
@@ -4962,12 +4989,14 @@ add_shortcode('apf_inbox', function () {
         display:flex;
         flex-direction:column;
         gap:12px;
+        width:100%;
       }
       .apf-coord-modal__entry{
         border:1px solid rgba(255,255,255,.08);
         border-radius:14px;
         background:rgba(10,15,28,.7);
         overflow:hidden;
+        width:100%;
       }
       .apf-coord-modal__toggle{
         width:100%;
@@ -4982,16 +5011,26 @@ add_shortcode('apf_inbox', function () {
       }
       .apf-coord-modal__summary{
         display:flex;
+        flex-direction:column;
+        align-items:flex-start;
+        gap:8px;
+        width:100%;
+        color:#f8fafc;
+      }
+      .apf-coord-modal__summary-row{
+        display:flex;
         align-items:center;
         justify-content:space-between;
         gap:12px;
-        color:#f8fafc;
+        width:100%;
+        flex-wrap:wrap;
       }
       .apf-coord-modal__summary strong{
         font-size:15px;
         color:#fff;
       }
-      .apf-coord-modal__summary span{
+      .apf-coord-modal__value{
+        display:block;
         font-weight:600;
         color:#cbd5f5;
       }
@@ -5042,13 +5081,21 @@ add_shortcode('apf_inbox', function () {
       }
       .apf-coord-modal__section{
         margin:0 0 12px;
+        padding:12px 14px;
+        border:1px solid rgba(255,255,255,.12);
+        border-radius:12px;
+        background:rgba(255,255,255,.02);
       }
       .apf-coord-modal__section h4{
         margin:0 0 8px;
         font-size:13px;
         text-transform:uppercase;
         letter-spacing:.04em;
-        color:#cbd5f5;
+        color:#fff;
+        font-weight:500;
+      }
+      .apf-coord-modal__section h4.apf-coord-modal__heading--strong{
+        font-weight:700;
       }
       .apf-coord-modal__section dl{
         margin:0;
@@ -5057,13 +5104,14 @@ add_shortcode('apf_inbox', function () {
         gap:6px 14px;
       }
       .apf-coord-modal__section dt{
-        color:#94a3b8;
+        color:#fff;
         font-size:12px;
+        font-weight:500;
       }
       .apf-coord-modal__section dd{
         margin:0;
         font-size:13px;
-        color:#f8fafc;
+        color:#cbd5f5;
       }
       .apf-coord-modal__admin{
         display:inline-flex;
@@ -5096,11 +5144,75 @@ add_shortcode('apf_inbox', function () {
         .apf-filter select{ width:100%; max-width:none; min-width:0; height:44px; }
         .apf-filter__row{ gap:8px; flex-direction:column; align-items:stretch; }
         .apf-filter__row select{ flex:0 0 auto; height:45px; min-width:0; }
-        .apf-coord-return__head{ flex-direction:column; align-items:flex-start; }
-        .apf-coord-return__actions{ flex-direction:column; align-items:flex-start; }
+        .apf-coord-return__head{ flex-direction:column; align-items:center; text-align:center; }
+        .apf-coord-return__actions{ flex-direction:column; align-items:center; }
         .apf-coord-return__stats{ flex-direction:column; }
         .apf-coord-return__archive-icon-btn{ margin-right:0; }
         .apf-coord-return__grid{ grid-template-columns:1fr; }
+        .apf-coord-return__controls{ flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:10px; }
+        .apf-coord-return__filter{ width:100%; align-items:center; text-align:center; }
+        .apf-coord-return__filter select{ text-align:center; }
+        .apf-coord-return__pager{ justify-content:center; width:100%; text-align:center; }
+        .apf-coord-return__pager-btn{ min-width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; }
+        .apf-coord-return__summary,
+        .apf-coord-return__course,
+        .apf-coord-return__faepa,
+        .apf-coord-return__total,
+        .apf-coord-return__stats{ text-align:center; align-items:center; justify-content:center; }
+        .apf-coord-return__card header{ flex-direction:column; align-items:center; text-align:center; }
+        .apf-coord-return__stats li{ text-align:center; }
+        .apf-coord-return__details{ align-self:center; }
+        .apf-coord-return__course{
+          max-width:100%;
+          display:-webkit-box;
+          -webkit-line-clamp:2;
+          -webkit-box-orient:vertical;
+          overflow:hidden;
+          text-align:center;
+        }
+        .apf-coord-return-modal__head{ flex-direction:column; align-items:center; text-align:center; }
+        .apf-coord-return-modal__body{ text-align:center; align-items:center; }
+        .apf-coord-return-modal__footer{ align-items:center; text-align:center; }
+        .apf-coord-return-modal__counts{ justify-content:center; }
+        .apf-coord-modal__summary{ align-items:flex-start; gap:6px; width:100%; }
+        .apf-coord-modal__summary-row{ width:100%; justify-content:space-between; }
+        .apf-coord-modal__value{ font-size:14px; }
+        .apf-coord-modal__meta{ flex-direction:column; align-items:flex-start; }
+        .apf-coord-modal__details{ text-align:left; }
+        .apf-coord-modal__section dl{ grid-template-columns:1fr; gap:8px; }
+        .apf-coord-modal__section dt{ margin-top:6px; }
+        .apf-coord-modal__section dd{ margin-bottom:6px; }
+        .apf-coord-modal__list,
+        .apf-coord-modal__entry,
+        .apf-coord-modal__toggle{ width:100%; }
+        .apf-assign-panel{
+          flex-direction:column;
+          align-items:flex-start;
+          text-align:left;
+          gap:12px;
+        }
+        .apf-assign-panel__actions{
+          width:100%;
+          justify-content:space-between;
+          flex-wrap:wrap;
+          gap:8px;
+        }
+        .apf-assign-panel__actions .apf-btn,
+        .apf-assign-panel__actions .apf-btn--secondary,
+        .apf-assign-panel__actions .apf-btn--ghost{
+          width:100%;
+          justify-content:center;
+        }
+        .apf-assign-panel__count{
+          width:100%;
+          text-align:left;
+        }
+        .apf-assign-mode .apf-row-mobile__toggle{
+          padding-right:140px;
+        }
+        .apf-assign-mode .apf-row-mobile__chevron{
+          display:none;
+        }
         .apf-table{ min-width:100%; border-collapse:separate; }
         .apf-table thead{ display:table-header-group; }
         .apf-table thead tr:not(.apf-row-pager){ display:none; }
@@ -5135,13 +5247,17 @@ add_shortcode('apf_inbox', function () {
         .apf-row-mobile{ display:table-row; }
         .apf-table tbody tr.apf-row-mobile{ background:transparent; }
         .apf-row-mobile td{ padding:0; border:0; }
+        .apf-row-mobile__toggle-wrap{
+          position:relative;
+          width:100%;
+        }
         .apf-row-mobile__toggle{
           width:100%;
           box-sizing:border-box;
           border:1px solid var(--apf-border);
           border-radius:12px;
           background:var(--apf-soft);
-          padding:14px 14px;
+          padding:14px 48px 14px 14px;
           display:flex;
           align-items:center;
           justify-content:space-between;
@@ -5151,36 +5267,67 @@ add_shortcode('apf_inbox', function () {
           cursor:pointer;
           text-align:left;
           max-width:100%;
+          position:relative;
         }
         .apf-row-mobile__summary{
           display:flex;
           align-items:center;
           gap:8px;
           font-weight:700;
-          flex:1 1 auto;
-          min-width:0;
+          flex:1 1 0;
+          min-width:158px;
           max-width:100%;
+          white-space:normal;
+          overflow:hidden;
         }
+        .apf-row-mobile__summary strong,
+        .apf-row-mobile__summary .apf-row-mobile__separator{ flex:0 0 auto; }
+        .apf-row-select--mobile{
+          position:absolute;
+          right:28px;
+          top:50%;
+          transform:translateY(-50%);
+          gap:6px;
+          font-size:13px;
+          white-space:nowrap;
+        }
+        .apf-row-select--mobile span{ display:none; }
         .apf-row-mobile__separator{ color:var(--apf-muted); }
         .apf-row-mobile__name{
-          display:block;
+          display:-webkit-box;
+          -webkit-line-clamp:2;
+          -webkit-box-orient:vertical;
+          flex:1 1 auto;
+          min-width:0;
           overflow:hidden;
           text-overflow:ellipsis;
           white-space:normal;
           word-break:break-word;
           max-width:100%;
         }
+        .apf-course{
+          display:-webkit-box;
+          -webkit-line-clamp:2;
+          -webkit-box-orient:vertical;
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:normal;
+          word-break:break-word;
+        }
         .apf-row-mobile__chevron{
+          position:absolute;
+          right:12px;
+          top:50%;
+          transform:translateY(-50%) rotate(45deg);
           width:10px;
           height:10px;
           border-right:2px solid var(--apf-muted);
           border-bottom:2px solid var(--apf-muted);
-          transform:rotate(45deg);
           transition:transform .2s ease;
           flex:0 0 auto;
         }
         .apf-row-mobile.is-open .apf-row-mobile__chevron{
-          transform:rotate(225deg);
+          transform:translateY(-50%) rotate(225deg);
         }
         .apf-row-mobile.is-open .apf-row-mobile__toggle{
           border-bottom-left-radius:0;
@@ -5423,9 +5570,7 @@ add_shortcode('apf_inbox', function () {
           cb.checked = false;
           cb.disabled = true;
           const row = cb.closest('tr');
-          if(row){
-            row.classList.remove('apf-row-selected');
-          }
+          toggleRowSelection(row, false);
         });
         updateAssignCount();
       }
@@ -5439,9 +5584,7 @@ add_shortcode('apf_inbox', function () {
             cb.checked = false;
             assignSelected.delete(cb.value);
             const row = cb.closest('tr');
-            if(row){
-              row.classList.remove('apf-row-selected');
-            }
+            toggleRowSelection(row, false);
           }
         });
         updateAssignCount();
@@ -5494,6 +5637,39 @@ add_shortcode('apf_inbox', function () {
         document.body.style.overflow = '';
         if(focusBack && directorModalLastFocus){
           directorModalLastFocus.focus();
+        }
+      }
+
+      function toggleRowSelection(row, checked){
+        if(row){
+          row.classList.toggle('apf-row-selected', checked);
+        }
+        if(!row){ return; }
+        let pair = null;
+        if(row.classList.contains('apf-row-mobile')){
+          const prev = row.previousElementSibling;
+          pair = prev && prev.classList && prev.classList.contains('apf-row-main') ? prev : null;
+        }else if(row.classList.contains('apf-row-main')){
+          pair = getMobileRow(row);
+        }
+        if(pair){
+          pair.classList.toggle('apf-row-selected', checked);
+        }
+      }
+
+      function syncCheckboxPair(source, checked){
+        if(!source){ return; }
+        const row = source.closest('tr');
+        let pair = null;
+        if(row && row.classList.contains('apf-row-mobile')){
+          const prev = row.previousElementSibling;
+          pair = prev && prev.classList && prev.classList.contains('apf-row-main') ? prev : null;
+        }else if(row){
+          pair = getMobileRow(row);
+        }
+        const pairCb = pair ? pair.querySelector('.apf-row-checkbox') : null;
+        if(pairCb && pairCb !== source){
+          pairCb.checked = checked;
         }
       }
 
@@ -5782,10 +5958,9 @@ add_shortcode('apf_inbox', function () {
           }else{
             assignSelected.delete(id);
           }
+          syncCheckboxPair(cb, cb.checked);
           const row = cb.closest('tr');
-          if(row){
-            row.classList.toggle('apf-row-selected', cb.checked);
-          }
+          toggleRowSelection(row, cb.checked);
           updateAssignCount();
           updateAssignHelper();
           updateAssignActions();
@@ -7063,6 +7238,14 @@ add_shortcode('apf_inbox', function () {
         section.className = 'apf-coord-modal__section';
         const heading = document.createElement('h4');
         heading.textContent = title;
+        const strongHeadings = [
+          'Informações de pagamento',
+          'Prestação de serviço',
+          'Dados para pagamento'
+        ];
+        if(strongHeadings.includes(title)){
+          heading.classList.add('apf-coord-modal__heading--strong');
+        }
         section.appendChild(heading);
         const dl = document.createElement('dl');
         keys.forEach(label=>{
@@ -7194,19 +7377,23 @@ add_shortcode('apf_inbox', function () {
           summary.className = 'apf-coord-modal__summary';
           const name = document.createElement('strong');
           name.textContent = item.name || 'Colaborador';
-          const value = document.createElement('span');
-          value.textContent = item.value || '';
           summary.appendChild(name);
-          summary.appendChild(value);
-          toggle.appendChild(summary);
-          const meta = document.createElement('div');
-          meta.className = 'apf-coord-modal__meta';
+          const summaryRow = document.createElement('div');
+          summaryRow.className = 'apf-coord-modal__summary-row';
+          const value = document.createElement('span');
+          value.className = 'apf-coord-modal__value';
+          value.textContent = item.value || '';
+          summaryRow.appendChild(value);
           if(item.status){
             const pill = document.createElement('span');
             pill.className = 'apf-coord-modal__pill apf-coord-modal__pill--' + item.status;
             pill.textContent = item.status_label || item.status;
-            meta.appendChild(pill);
+            summaryRow.appendChild(pill);
           }
+          summary.appendChild(summaryRow);
+          toggle.appendChild(summary);
+          const meta = document.createElement('div');
+          meta.className = 'apf-coord-modal__meta';
           if(item.decision_label){
             const dateLabel = document.createElement('span');
             const prefix = item.status === 'approved'
