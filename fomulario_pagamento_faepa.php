@@ -712,6 +712,7 @@ if ( ! function_exists( 'apf_coord_render_request_detail_inner' ) ) {
                   $status  = isset( $entry['status'] ) ? $entry['status'] : 'pending';
                   $status_label = 'pending' === $status ? 'Pendente' : ( 'approved' === $status ? 'Aprovado' : 'Recusado' );
                   $value_label  = isset( $entry['provider_value'] ) ? $entry['provider_value'] : '';
+                  $status_label_display = $value_label ? ' •  ' . $status_label : $status_label;
                   $sent_at      = isset( $entry['created_at'] ) && $entry['created_at']
                       ? date_i18n( 'd/m/Y H:i', (int) $entry['created_at'] )
                       : '';
@@ -736,13 +737,21 @@ if ( ! function_exists( 'apf_coord_render_request_detail_inner' ) ) {
               <div class="apf-coord-collab__header">
                 <button type="button" class="apf-coord-collab__toggle" data-collab-toggle="<?php echo esc_attr( $panel_id ); ?>" aria-expanded="false" aria-controls="<?php echo esc_attr( $panel_id ); ?>">
                   <span class="apf-coord-collab__name"><?php echo esc_html( $entry['provider_name'] ?? '—' ); ?></span>
-                  <?php if ( $value_label ) : ?>
-                    <span class="apf-coord-collab__value"><?php echo esc_html( $value_label ); ?></span>
-                  <?php endif; ?>
-                  <span class="apf-coord-collab__status-label"><?php echo esc_html( $status_label ); ?></span>
                   <?php if ( $company_label && $company_label !== ( $entry['provider_name'] ?? '' ) ) : ?>
                     <span class="apf-coord-collab__company"><?php echo esc_html( $company_label ); ?></span>
                   <?php endif; ?>
+                  <span class="apf-coord-collab__line">
+                    <?php if ( $value_label ) : ?>
+                      <span class="apf-coord-collab__value"><?php echo esc_html( $value_label ); ?></span>
+                    <?php endif; ?>
+                    <span class="apf-coord-collab__status-label">
+                      <?php if ( $value_label ) : ?>
+                        <span class="apf-coord-collab__status-bullet" aria-hidden="true" data-status-bullet>•</span>
+                        <span class="apf-coord-collab__status-gap" aria-hidden="true"></span>
+                      <?php endif; ?>
+                      <span data-status-text><?php echo esc_html( $status_label ); ?></span>
+                    </span>
+                  </span>
                 </button>
                 <div class="apf-coord-collab__actions">
                   <?php if ( 'pending' === $status && ! $options['lock_actions'] ) : ?>

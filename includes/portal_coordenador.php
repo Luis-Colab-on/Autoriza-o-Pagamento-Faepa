@@ -1667,6 +1667,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
         font-weight:600;
         padding:12px 16px;
         cursor:pointer;
+        transition:background .15s ease,color .15s ease,border-color .15s ease,transform .15s ease;
       }
       .apf-coord-btn:hover{
         background:#154cba;
@@ -1842,18 +1843,20 @@ add_shortcode( 'apf_portal_coordenador', function () {
       }
       .apf-coord-requests__cards{
         display:grid;
-        grid-template-columns:1fr;
-        gap:12px;
+        grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        gap:10px;
       }
       .apf-coord-request-card{
         border:1px solid #d0d5dd;
         border-radius:16px;
         background:#fff;
-        padding:14px;
+        padding:12px;
         display:flex;
         flex-direction:column;
-        gap:12px;
+        gap:10px;
         min-height:0;
+        max-width:100%;
+        box-sizing:border-box;
       }
       .apf-coord-request-card[data-status="pending"]{
         border-color:#fde68a;
@@ -1951,14 +1954,21 @@ add_shortcode( 'apf_portal_coordenador', function () {
       }
       .apf-coord-requests__pager{
         display:flex;
-        align-items:center;
+        align-items:baseline;
         gap:8px;
         font-size:13px;
         color:#475467;
+        justify-content:center;
+      }
+      .apf-coord-requests__pager span{
+        min-width:48px;
+        text-align:center;
       }
       .apf-coord-requests__pager-btn{
         padding:6px 10px;
         min-width:36px;
+        color:var(--apf-primary);
+        border-color:currentColor;
       }
       .apf-coord-requests__hidden{ display:none !important; }
       .apf-coord-requests__controls{
@@ -1968,7 +1978,8 @@ add_shortcode( 'apf_portal_coordenador', function () {
       }
       .apf-coord-requests__pager{
         display:flex;
-        align-items:center;
+        align-items:baseline;
+        justify-content:center;
         gap:8px;
         font-size:13px;
         color:#475467;
@@ -1976,6 +1987,8 @@ add_shortcode( 'apf_portal_coordenador', function () {
       .apf-coord-requests__pager-btn{
         padding:6px 10px;
         min-width:36px;
+        color:var(--apf-primary);
+        border-color:currentColor;
       }
       .apf-coord-requests__hidden{ display:none !important; }
       .apf-coord-requests__empty{
@@ -2314,16 +2327,25 @@ add_shortcode( 'apf_portal_coordenador', function () {
         text-align:left;
         cursor:pointer;
       }
+      .apf-coord-collab__line{
+        display:flex;
+        flex-wrap:wrap;
+        align-items:center;
+        gap:8px;
+        width:100%;
+      }
       .apf-coord-collab__name{
         font-weight:600;
         font-size:15px;
         color:#0f172a;
+        width:100%;
       }
       .apf-coord-collab__company{
         font-size:12px;
         color:#475467;
         display:block;
         width:100%;
+        margin-top:2px;
       }
       .apf-coord-collab__value{
         font-size:13px;
@@ -2337,6 +2359,19 @@ add_shortcode( 'apf_portal_coordenador', function () {
         font-weight:600;
         color:#475467;
       }
+      .apf-coord-collab__status-bullet{
+        margin-right:6px;
+      }
+      .apf-coord-collab__status-gap{
+        display:inline-block;
+        width:4px;
+      }
+      .apf-coord-collab--approved .apf-coord-collab__status-label{
+        color:var(--apf-primary);
+      }
+      .apf-coord-collab--rejected .apf-coord-collab__status-label{
+        color:#b91c1c;
+      }
       .apf-coord-collab__actions{
         display:flex;
         flex-wrap:wrap;
@@ -2345,13 +2380,19 @@ add_shortcode( 'apf_portal_coordenador', function () {
       .apf-coord-request__actions{
         display:flex;
         gap:10px;
-        flex-wrap:wrap;
+        flex-wrap:nowrap;
+        align-items:center;
       }
       .apf-coord-request__actions--inline{
         justify-content:flex-end;
       }
       .apf-coord-request__edit-link-form{
         margin-left:auto;
+      }
+      .apf-coord-request__actions .apf-coord-btn{
+        width:auto;
+        min-width:120px;
+        flex:0 0 auto;
       }
       .apf-coord-edit-link{
         background:none;
@@ -2397,7 +2438,17 @@ add_shortcode( 'apf_portal_coordenador', function () {
       .apf-coord-btn--ghost-danger{
         background:transparent !important;
         color:#b91c1c !important;
-        border:1px solid #fca5a5 !important;
+        border:1px solid #b91c1c !important;
+      }
+      .apf-coord-btn--ghost-danger:hover,
+      .apf-coord-btn--ghost-danger:focus{
+        background:
+          linear-gradient(120deg,#ef4444,#b91c1c) padding-box,
+          linear-gradient(120deg,#ef4444,#b91c1c) border-box !important;
+        color:#fff !important;
+        border:1px solid transparent !important;
+        border-radius:12px !important;
+        background-clip:padding-box,border-box;
       }
       .apf-coord-collab__note{
         margin:0;
@@ -2461,16 +2512,27 @@ add_shortcode( 'apf_portal_coordenador', function () {
         white-space:pre-line;
       }
       .apf-coord-btn--success{
-        background:#15803d;
+        background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));
+        border:1px solid rgba(18,87,145,.3);
+        color:#fff;
       }
       .apf-coord-btn--success:hover{
-        background:#166534;
+        background:#fff;
+        color:var(--apf-primary);
+        border-color:var(--apf-primary);
       }
       .apf-coord-btn--danger{
-        background:#b91c1c;
+        background:
+          linear-gradient(120deg,#ef4444,#b91c1c) padding-box,
+          linear-gradient(120deg,#ef4444,#b91c1c) border-box !important;
+        border:1px solid transparent !important;
+        border-radius:12px !important;
+        color:#fff !important;
       }
       .apf-coord-btn--danger:hover{
-        background:#991b1b;
+        background:#fff !important;
+        color:#b91c1c !important;
+        border-color:#b91c1c !important;
       }
       .apf-coord-alerts__pill{
         align-self:flex-start;
@@ -2968,6 +3030,23 @@ add_shortcode( 'apf_portal_coordenador', function () {
           margin:16px;
           padding:20px;
         }
+        .apf-coord-requests{
+          padding:12px;
+        }
+        .apf-coord-requests__cards{
+          grid-template-columns:1fr;
+          gap:10px;
+        }
+        .apf-coord-request-card{
+          padding:12px;
+        }
+        .apf-coord-request-card__header{
+          flex-wrap:wrap;
+        }
+        .apf-coord-request-card__foot{
+          flex-wrap:wrap;
+          gap:8px;
+        }
         .apf-coord-calendar__wrap,
         .apf-coord-calendar__wrap.has-compose{
           grid-template-columns:1fr;
@@ -2983,6 +3062,360 @@ add_shortcode( 'apf_portal_coordenador', function () {
         .apf-coord-calendar__weekdays,
         .apf-coord-calendar__days{
           grid-template-columns:repeat(7,minmax(28px,1fr));
+        }
+      }
+      /* Tema e responsividade inspirados no portal do colaborador */
+      .apf-coord-portal{
+        --apf-primary:#125791;
+        --apf-primary-strong:#0f456e;
+        --apf-border:#d6e1ed;
+        --apf-soft:#f6f9fc;
+        --apf-muted:#5f6b7a;
+        --apf-ink:#0f172a;
+        --apf-focus:0 0 0 3px rgba(18,87,145,.18),0 0 0 6px rgba(18,87,145,.12);
+        background:radial-gradient(circle at 0 0,rgba(18,87,145,.08),transparent 32%),radial-gradient(circle at 100% 16%,rgba(18,87,145,.06),transparent 30%),#f3f6fb;
+        color:var(--apf-ink);
+        padding:clamp(12px,2vw,26px);
+        box-sizing:border-box;
+        overflow-x:hidden;
+      }
+      .apf-coord-card{
+        max-width:1100px;
+        padding:clamp(18px,2.5vw,28px);
+        margin:0 auto;
+        background:linear-gradient(135deg,#fff,rgba(18,87,145,.03));
+        border:1px solid var(--apf-border);
+        box-shadow:0 12px 28px rgba(15,23,42,.12);
+        box-sizing:border-box;
+      }
+      .apf-coord-card h2{
+        color:var(--apf-ink);
+        letter-spacing:.01em;
+      }
+      .apf-coord-card > p{
+        color:var(--apf-muted);
+      }
+      .apf-coord-notice{
+        box-shadow:0 8px 16px rgba(15,23,42,.05);
+      }
+      .apf-coord-status{
+        box-shadow:0 8px 16px rgba(15,23,42,.05);
+      }
+      .apf-coord-edit-bar{
+        flex-wrap:wrap;
+      }
+      .apf-coord-edit-btn{
+        border-color:var(--apf-border);
+        background:var(--apf-soft);
+        color:var(--apf-primary);
+        box-shadow:0 8px 16px rgba(15,23,42,.06);
+      }
+      .apf-coord-form{
+        background:var(--apf-soft);
+        border:1px solid var(--apf-border);
+        border-radius:14px;
+        padding:14px;
+        box-shadow:inset 0 1px 0 #fff,0 8px 18px rgba(15,23,42,.06);
+      }
+      .apf-coord-form label{
+        color:var(--apf-muted);
+      }
+      .apf-coord-form input,
+      .apf-coord-form select{
+        border-color:#cad6e4;
+        background:#fdfefe;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.6);
+      }
+      .apf-coord-form input:focus,
+      .apf-coord-form select:focus{
+        border-color:var(--apf-primary);
+        box-shadow:var(--apf-focus);
+        outline:none;
+      }
+      .apf-coord-btn{
+        background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));
+        box-shadow:0 10px 22px rgba(18,87,145,.22);
+        border:1px solid rgba(18,87,145,.3);
+        transition:transform .15s ease,box-shadow .2s ease,background .2s ease;
+      }
+      .apf-coord-btn:hover{
+        transform:translateY(-1px);
+      }
+      .apf-coord-btn:focus{
+        outline:none;
+        box-shadow:var(--apf-focus);
+      }
+      .apf-coord-btn--ghost{
+        background:#fff;
+        color:var(--apf-primary);
+        border:1px solid var(--apf-border);
+        box-shadow:none;
+      }
+      .apf-coord-btn--primary{
+        background:linear-gradient(120deg,#0f172a,var(--apf-primary));
+        color:#fff;
+        border:1px solid rgba(18,87,145,.3);
+      }
+      .apf-coord-btn--primary:hover{
+        background:#fff;
+        color:var(--apf-primary);
+        border-color:var(--apf-primary);
+      }
+      .apf-coord-summary{
+        background:linear-gradient(135deg,#fff,var(--apf-soft));
+        border-color:var(--apf-border);
+      }
+      .apf-coord-requests{
+        background:linear-gradient(135deg,#fff,var(--apf-soft));
+        border-color:var(--apf-border);
+        box-shadow:0 10px 26px rgba(15,23,42,.08);
+        box-sizing:border-box;
+      }
+      .apf-coord-requests__head,
+      .apf-coord-requests__controls{
+        gap:14px;
+      }
+      .apf-coord-requests__controls{
+        flex-wrap:wrap;
+        align-items:flex-start;
+      }
+      .apf-coord-requests__cards{
+        grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+      }
+      .apf-coord-request-card{
+        box-shadow:0 10px 20px rgba(15,23,42,.08);
+        width:100%;
+        min-width:0;
+        box-sizing:border-box;
+      }
+      .apf-coord-request-card__header{
+        gap:10px;
+      }
+      .apf-coord-request-card__foot{
+        gap:10px;
+      }
+      .apf-coord-requests__pager{
+        gap:10px;
+      }
+      .apf-coord-calendar{
+        border-color:var(--apf-border);
+        background:#fff;
+        box-shadow:0 10px 22px rgba(15,23,42,.08);
+      }
+      .apf-coord-calendar__filters{
+        gap:10px;
+        flex-wrap:wrap;
+      }
+      .apf-coord-calendar__filter{
+        border-color:var(--apf-border);
+        color:var(--apf-ink);
+      }
+      .apf-coord-calendar__filter.is-active{
+        background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));
+        border-color:rgba(18,87,145,.4);
+      }
+      .apf-coord-calendar__body{
+        gap:14px;
+      }
+      .apf-coord-calendar__header{
+        flex-wrap:wrap;
+        gap:10px;
+      }
+      .apf-coord-calendar__btn{
+        border-color:var(--apf-border);
+        color:var(--apf-ink);
+      }
+      .apf-coord-calendar__weekdays,
+      .apf-coord-calendar__days{
+        grid-template-columns:repeat(7,minmax(32px,1fr));
+      }
+      .apf-coord-calendar__day{
+        border-color:var(--apf-border);
+        background:#fff;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.6);
+      }
+      .apf-coord-calendar__day--has-event{
+        box-shadow:0 6px 14px rgba(18,87,145,.16);
+      }
+      .apf-coord-calendar__compose{
+        border-color:var(--apf-border);
+        box-shadow:0 8px 18px rgba(15,23,42,.06);
+      }
+      .apf-coord-calendar__legend{
+        gap:10px;
+      }
+      .apf-coord-modal__dialog,
+      .apf-coord-request-modal__dialog,
+      .apf-coord-archive-modal__dialog,
+      .apf-coord-alert-edit__dialog{
+        width:min(960px,calc(100vw - 26px));
+      }
+      .apf-coord-collab__section dl{
+        background:var(--apf-soft);
+        border-color:var(--apf-border);
+      }
+      @media(max-width:980px){
+        .apf-coord-card{
+          padding:18px;
+        }
+        .apf-coord-requests__head{
+          flex-direction:column;
+        }
+        .apf-coord-requests__head > div{
+          width:100%;
+        }
+        .apf-coord-requests__controls{
+          width:100%;
+        }
+        .apf-coord-request-card__header,
+        .apf-coord-request-card__foot{
+          flex-direction:column;
+          align-items:flex-start;
+        }
+        .apf-coord-request-card__foot button{
+          width:100%;
+        }
+        .apf-coord-calendar__wrap,
+        .apf-coord-calendar__wrap.has-compose{
+          grid-template-columns:1fr;
+        }
+        .apf-coord-calendar__compose{
+          order:2;
+        }
+      }
+      @media(max-width:760px){
+        .apf-coord-card{
+          margin:0 auto;
+          border-radius:14px;
+        }
+        .apf-coord-requests{
+          padding:12px;
+        }
+        .apf-coord-edit-bar{
+          flex-direction:column;
+          align-items:flex-start;
+        }
+        .apf-coord-calendar__legend{
+          flex-direction:column;
+          align-items:flex-start;
+        }
+        .apf-coord-collab__section dl{
+          grid-template-columns:1fr;
+        }
+        .apf-coord-request-card__header strong{
+          font-size:14px;
+        }
+        .apf-coord-collab__toggle{
+          align-items:flex-start;
+          gap:6px;
+        }
+        .apf-coord-collab__line{
+          gap:6px;
+        }
+        .apf-coord-requests__cards{
+          grid-template-columns:1fr;
+          gap:10px;
+        }
+        .apf-coord-request-card{
+          padding:12px;
+        }
+        .apf-coord-requests__pager{
+          width:100%;
+          justify-content:center;
+          gap:16px;
+        }
+        .apf-coord-requests__filter{
+          width:100%;
+        }
+        .apf-coord-requests__filter select{
+          width:100%;
+        }
+        .apf-coord-calendar__header{
+          flex-direction:column;
+          align-items:flex-start;
+        }
+        .apf-coord-calendar__filters{
+          width:100%;
+        }
+        .apf-coord-request-modal__dialog,
+        .apf-coord-archive-modal__dialog,
+        .apf-coord-alert-edit__dialog{
+          max-height:92vh;
+        }
+      }
+      @media(max-width:560px){
+        .apf-coord-card{
+          padding:16px;
+        }
+        .apf-coord-form{
+          padding:12px;
+        }
+        .apf-coord-requests{
+          padding:10px;
+        }
+        .apf-coord-requests__controls{
+          justify-content:center;
+        }
+        .apf-coord-requests__pager{
+          justify-content:center;
+          gap:14px;
+        }
+        .apf-coord-requests__pager-btn{
+          width:32px;
+          min-width:32px;
+          padding:6px;
+          flex:0 0 auto;
+          justify-content:center;
+        }
+        .apf-coord-btn,
+        .apf-coord-btn--ghost,
+        .apf-coord-btn--primary{
+          width:100%;
+          justify-content:center;
+        }
+        .apf-coord-requests__pager-btn{
+          width:32px !important;
+          min-width:32px !important;
+          max-width:42px;
+          padding:6px 0;
+          border-color:currentColor;
+        }
+        .apf-coord-request-card{
+          padding:10px;
+        }
+        .apf-coord-request-card__foot button{
+          width:100%;
+        }
+        .apf-coord-request-modal__dialog{
+          width:calc(100vw - 14px);
+        }
+        .apf-coord-request-modal__head{
+          padding:12px 14px;
+        }
+        .apf-coord-request-modal__content{
+          padding:12px;
+        }
+        .apf-coord-request-card__foot{
+          align-items:stretch;
+        }
+        .apf-coord-calendar__weekdays,
+        .apf-coord-calendar__days{
+          grid-template-columns:repeat(7,minmax(26px,1fr));
+          gap:4px;
+        }
+        .apf-coord-calendar__day{
+          height:34px;
+          font-size:12px;
+        }
+        .apf-coord-calendar__btn{
+          width:30px;
+          height:30px;
+        }
+        .apf-coord-modal__dialog,
+        .apf-coord-request-modal__dialog,
+        .apf-coord-archive-modal__dialog,
+        .apf-coord-alert-edit__dialog{
+          width:calc(100vw - 18px);
         }
       }
     </style>
@@ -3105,6 +3538,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
       if(rejectConfirm){
         rejectConfirm.addEventListener('click', ()=>{
           if(!rejectModalForm || !rejectModalNoteInput){ closeRejectOverlay(); return; }
+          const formToSubmit = rejectModalForm;
           const message = rejectTextarea.value ? rejectTextarea.value.trim() : '';
           if(!message){
             rejectTextarea.focus();
@@ -3112,12 +3546,16 @@ add_shortcode( 'apf_portal_coordenador', function () {
             return;
           }
           rejectModalNoteInput.value = message;
-          rejectModalForm.dataset.apfRejectReady = '1';
+          formToSubmit.dataset.apfRejectReady = '1';
+          const rejectBtn = formToSubmit.querySelector('button[name="apf_coord_request_action"][value="reject"]');
           closeRejectOverlay();
-          if(typeof rejectModalForm.requestSubmit === 'function'){
-            rejectModalForm.requestSubmit();
+          if(formToSubmit && typeof formToSubmit.requestSubmit === 'function'){
+            if(rejectBtn){ formToSubmit.requestSubmit(rejectBtn); }
+            else{ formToSubmit.requestSubmit(); }
+          }else if(rejectBtn){
+            rejectBtn.click();
           }else{
-            rejectModalForm.dispatchEvent(new Event('submit', { cancelable:true, bubbles:true }));
+            formToSubmit && formToSubmit.dispatchEvent(new Event('submit', { cancelable:true, bubbles:true }));
           }
         });
       }
@@ -3140,7 +3578,14 @@ add_shortcode( 'apf_portal_coordenador', function () {
         if(status){ wrapper.classList.add('apf-coord-collab--' + status); }
         wrapper.dataset.status = status || '';
         const statusEl = wrapper.querySelector('.apf-coord-collab__status-label');
-        if(statusEl){ statusEl.textContent = statusLabel; }
+        if(statusEl){
+          const statusText = statusEl.querySelector('[data-status-text]');
+          if(statusText){
+            statusText.textContent = statusLabel;
+          }else{
+            statusEl.textContent = statusLabel;
+          }
+        }
         const actions = wrapper.querySelector('.apf-coord-collab__actions');
         if(actions){
           actions.innerHTML = '';
@@ -3444,7 +3889,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
         document.body.style.overflow = (requestOpen || archiveOpen) ? 'hidden' : '';
       };
 
-      const REQUEST_PAGE_SIZE = 5;
+      const REQUEST_PAGE_SIZE = 6;
       let requestPage = 0;
       const renderRequestPager = (reset = false) => {
         if(!requestCardsContainer){ return; }
