@@ -20,7 +20,8 @@
     polling: null,
     searchTimer: null,
     overlayOpen: false,
-    autoScroll: true
+    autoScroll: true,
+    mobileView: 'list',
   };
 
   const qs = (id) => document.getElementById(id);
@@ -28,6 +29,7 @@
   const isDesk = !!faepaChatbox.isFinanceDesk;
   const portalReadyFlag = (typeof window.faepaChatboxPortalReady !== 'undefined') ? !!window.faepaChatboxPortalReady : null;
   const portalContextFlag = (window.faepaChatboxPortalContext || '').trim();
+  const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5MB
   const resolvedContext = (() => {
     if (portalReadyFlag === false) {
       return '';
@@ -58,6 +60,9 @@
   const formEl = qs('faepaChatForm');
   const inputEl = qs('faepaChatInput');
   const fileEl = qs('faepaChatFile');
+  const modalEl = overlay ? overlay.querySelector('.faepa-chat-modal') : null;
+  const backEl = qs('faepaChatBack');
+  const mobileMq = window.matchMedia('(max-width: 1000px)');
   const defaultEmptyMsg = msgsEl ? (msgsEl.dataset.empty || faepaChatbox.strings.emptyMsg) : 'Nenhuma mensagem ainda.';
   const contactKeyOf = (contact) => contact.key || `${contact.user_id}-${contact.context || ''}`;
 
@@ -70,16 +75,43 @@
       body
     }).then(res => res.json());
   };
+  const setMobileView = (view) => {
+    state.mobileView = view;
+    if (!modalEl) { return; }
+    const isMobile = mobileMq.matches;
+    modalEl.classList.toggle('is-mobile-list', isMobile && view === 'list');
+    modalEl.classList.toggle('is-mobile-chat', isMobile && view === 'chat');
+    if (backEl) {
+      backEl.hidden = !(isMobile && view === 'chat');
+    }
+  };
+  const applyMobileLayout = () => {
+    if (!modalEl) { return; }
+    const isMobile = mobileMq.matches;
+    if (!state.overlayOpen || !isMobile) {
+      modalEl.classList.remove('is-mobile-list', 'is-mobile-chat');
+      if (backEl) { backEl.hidden = true; }
+      return;
+    }
+    const view = state.mobileView || (state.currentContact ? 'chat' : 'list');
+    setMobileView(view);
+  };
+
+  mobileMq.addEventListener('change', applyMobileLayout);
 
   const toggleOverlay = (show) => {
     state.overlayOpen = show;
     overlay.hidden = !show;
     if (show) {
+      state.mobileView = mobileMq.matches ? 'list' : 'chat';
+      applyMobileLayout();
       loadContacts();
       loadUnread();
       startPolling();
     } else {
       stopPolling();
+      state.mobileView = 'list';
+      applyMobileLayout();
     }
   };
 
@@ -239,6 +271,7 @@
       const normalizedContact = { ...contactFromServer, key: contactKeyOf(contactFromServer) };
       state.currentContact = normalizedContact;
       headerEl.textContent = (isDesk && normalizedContact.label) ? normalizedContact.label : (normalizedContact.name || normalizedContact.email || 'Contato');
+      setMobileView('chat');
       // Atualiza thread_id e limpa badge
       state.contacts = state.contacts.map(c => {
         const cKey = contactKeyOf(c);
@@ -264,6 +297,7 @@
     headerEl.textContent = 'Selecione um contato';
     msgsEl.dataset.empty = 'Selecione um contato';
     state.autoScroll = true;
+    setMobileView('list');
     renderMessages();
   };
 
@@ -278,6 +312,11 @@
     const text = inputEl.value.trim();
     const file = fileEl.files[0];
 
+    if (file && file.size > MAX_FILE_BYTES) {
+      alert('O arquivo deve ter no máximo 5MB.');
+      fileEl.value = '';
+      return;
+    }
     if (!text && !file) { return; }
 
     const form = new FormData();
@@ -336,6 +375,11 @@
       toggleOverlay(false);
     }
   });
+  if (backEl) {
+    backEl.addEventListener('click', () => {
+      setMobileView('list');
+    });
+  }
   searchEl.addEventListener('input', debounceSearch);
   formEl.addEventListener('submit', sendMessage);
   msgsEl.addEventListener('scroll', handleScroll);
@@ -344,5 +388,6 @@
   if (overlay) {
     overlay.hidden = true; // garante fechado ao carregar
   }
+  applyMobileLayout();
   loadUnread();
 })();

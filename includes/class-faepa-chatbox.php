@@ -404,7 +404,10 @@ class Faepa_Chatbox {
                             <div id="faepaChatContacts" class="faepa-chat-contacts" role="listbox"></div>
                         </aside>
                         <section class="faepa-chat-main">
-                            <div id="faepaChatHeader" class="faepa-chat-main__header">Selecione um contato</div>
+                            <div class="faepa-chat-main__header">
+                                <button type="button" id="faepaChatBack" class="faepa-chat-back" aria-label="Voltar" hidden>&larr;</button>
+                                <span id="faepaChatHeader">Selecione um contato</span>
+                            </div>
                             <div id="faepaChatMessages" class="faepa-chat-messages" data-empty="Nenhuma mensagem ainda."></div>
                             <form id="faepaChatForm" class="faepa-chat-form">
                                 <textarea id="faepaChatInput" rows="2" placeholder="Digite sua mensagem"></textarea>
@@ -550,6 +553,7 @@ class Faepa_Chatbox {
         $thread_id  = isset( $_POST['thread_id'] ) ? absint( $_POST['thread_id'] ) : 0;
         $contact_id = isset( $_POST['contact_id'] ) ? absint( $_POST['contact_id'] ) : 0;
         $message    = isset( $_POST['message'] ) ? wp_kses_post( wp_unslash( $_POST['message'] ) ) : '';
+        $max_size   = 5 * 1024 * 1024; // 5MB
 
         if ( ! $user_id || ( $thread_id <= 0 && $contact_id <= 0 ) ) {
             wp_send_json_error( array( 'message' => 'Parâmetros inválidos.' ), 400 );
@@ -572,6 +576,9 @@ class Faepa_Chatbox {
         // Upload de imagem (opcional)
         $attachment_id = 0;
         if ( ! empty( $_FILES['attachment']['name'] ) ) {
+            if ( isset( $_FILES['attachment']['size'] ) && (int) $_FILES['attachment']['size'] > $max_size ) {
+                wp_send_json_error( array( 'message' => 'O arquivo deve ter no máximo 5MB.' ), 400 );
+            }
             if ( ! function_exists( 'media_handle_upload' ) ) {
                 require_once ABSPATH . 'wp-admin/includes/file.php';
                 require_once ABSPATH . 'wp-admin/includes/media.php';

@@ -137,6 +137,23 @@ body:not(.logged-in) #faepaChatboxRoot { display: none !important; }
   padding: 12px 14px;
   border-bottom: 1px solid #e5e7eb;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.faepa-chat-back {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
 }
 .faepa-chat-messages {
   flex: 1;
@@ -219,6 +236,43 @@ body:not(.logged-in) #faepaChatboxRoot { display: none !important; }
   color: #6b7280;
   font-size: 14px;
   padding: 12px;
+}
+@media (max-width: 1000px) {
+  .faepa-chat-modal {
+    width: 94%;
+    height: 86vh;
+    max-height: none;
+  }
+  .faepa-chat-modal__body {
+    flex-direction: column;
+  }
+  .faepa-chat-sidebar {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .faepa-chat-main {
+    width: 100%;
+  }
+  .faepa-chat-modal.is-mobile-list .faepa-chat-main {
+    display: none;
+  }
+  .faepa-chat-modal.is-mobile-chat .faepa-chat-sidebar {
+    display: none;
+  }
+  .faepa-chat-modal.is-mobile-chat .faepa-chat-back {
+    display: inline-flex;
+  }
+  .faepa-chat-main__header {
+    padding: 10px 12px;
+  }
+  .faepa-chat-messages {
+    padding: 12px;
+  }
+  .faepa-chat-form__actions input[type="file"] {
+    max-width: 100%;
+  }
 }
 @media (max-width: 840px) {
   .faepa-chat-modal__body { flex-direction: column; }

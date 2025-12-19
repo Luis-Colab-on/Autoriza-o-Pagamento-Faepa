@@ -2778,6 +2778,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
       }
       .apf-coord-calendar__day--has-event{
         border-color:#1f6feb;
+        border-width:2px;
       }
       .apf-coord-calendar__day--group-providers{
         border-color:#1f6feb;
@@ -3397,7 +3398,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
         box-shadow:inset 0 1px 0 rgba(255,255,255,.6);
       }
       .apf-coord-calendar__day--has-event{
-        box-shadow:0 6px 14px rgba(18,87,145,.16);
+        box-shadow:none;
       }
       .apf-coord-calendar__compose{
         border-color:var(--apf-border);
@@ -3411,6 +3412,23 @@ add_shortcode( 'apf_portal_coordenador', function () {
       .apf-coord-archive-modal__dialog,
       .apf-coord-alert-edit__dialog{
         width:min(960px,calc(100vw - 26px));
+      }
+      .apf-coord-calendar__day--group-coordinators{
+        border-color:#f97316 !important;
+        border-width:2px;
+      }
+      .apf-coord-calendar__day--group-providers{
+        border-color:#1f6feb !important;
+        border-width:2px;
+      }
+      .apf-coord-calendar__day--group-providers-own{
+        border-color:#7c3aed !important;
+        border-width:2px;
+      }
+      .apf-coord-calendar__day--group-mixed{
+        border-color:#7c3aed !important;
+        border-width:2px;
+        box-shadow:inset 0 0 0 1px #1f6feb;
       }
       .apf-coord-collab__section dl{
         background:var(--apf-soft);
