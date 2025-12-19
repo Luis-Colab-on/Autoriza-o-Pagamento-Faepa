@@ -853,16 +853,18 @@ $apf_portal_faepa_cb = function () {
             ?>
               <details class="apf-faepa-return__row" role="row">
                 <summary>
-                  <span class="apf-faepa-return__cell apf-faepa-return__cell--title">
+                  <span class="apf-faepa-return__cell apf-faepa-return__cell--title" data-label="Lote">
                     <strong><?php echo esc_html( $return['title'] ); ?></strong>
                   </span>
-                  <span class="apf-faepa-return__cell"><?php echo esc_html( $forwarded_label ?: '—' ); ?></span>
-                  <span class="apf-faepa-return__cell"><?php echo esc_html( $coord ?: '—' ); ?></span>
-                  <span class="apf-faepa-return__cell"><?php echo esc_html( $course ?: '—' ); ?></span>
-                  <span class="apf-faepa-return__cell">
+                  <span class="apf-faepa-return__cell" data-label="Enviado"><?php echo esc_html( $forwarded_label ?: '—' ); ?></span>
+                  <span class="apf-faepa-return__cell" data-label="Coordenador"><?php echo esc_html( $coord ?: '—' ); ?></span>
+                  <span class="apf-faepa-return__cell apf-faepa-return__cell--course" data-label="Curso">
+                    <span class="apf-faepa-return__value apf-faepa-return__value--course"><?php echo esc_html( $course ?: '—' ); ?></span>
+                  </span>
+                  <span class="apf-faepa-return__cell" data-label="Colaboradores">
                     <span class="apf-faepa-chip apf-faepa-chip--info"><?php echo esc_html( $counts['total'] . ' colaborador(es)' ); ?></span>
                   </span>
-                  <span class="apf-faepa-return__cell">
+                  <span class="apf-faepa-return__cell" data-label="Pagos">
                     <span class="apf-faepa-chip apf-faepa-chip--success" data-faepa-notify-count><?php echo esc_html( ( $counts['paid'] ?? 0 ) . ' pagos' ); ?></span>
                   </span>
                 </summary>
@@ -994,7 +996,7 @@ $apf_portal_faepa_cb = function () {
                             <?php endif; ?>
 
                             <?php if ( ! empty( $detail_service ) ) : ?>
-                              <div class="apf-faepa-entry__block">
+                              <div class="apf-faepa-entry__block apf-faepa-entry__block--emphasis">
                                 <strong>Prestação de serviço</strong>
                                 <dl>
                                   <?php foreach ( $detail_service as $label => $value ) : ?>
@@ -1006,7 +1008,7 @@ $apf_portal_faepa_cb = function () {
                             <?php endif; ?>
 
                             <?php if ( ! empty( $detail_payout ) ) : ?>
-                              <div class="apf-faepa-entry__block">
+                              <div class="apf-faepa-entry__block apf-faepa-entry__block--emphasis">
                                 <strong>Dados para pagamento</strong>
                                 <dl>
                                   <?php foreach ( $detail_payout as $label => $value ) : ?>
@@ -1231,31 +1233,31 @@ $apf_portal_faepa_cb = function () {
   </script>
 
   <style>
-    .apf-faepa{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:1080px;margin:28px auto;padding:0 12px;color:#0f172a}
-      .apf-faepa__hero{background:linear-gradient(120deg,#0ea5e9,#075985);color:#e2f3ff;border-radius:16px;padding:22px 24px;box-shadow:0 16px 36px rgba(15,23,42,.18);margin-bottom:18px}
+    .apf-faepa{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;--apf-ink:#0f172a;--apf-muted:#5f6b7a;--apf-border:#d6e1ed;--apf-soft:#f6f9fc;--apf-primary:#125791;--apf-primary-strong:#0f456e;--apf-focus:0 0 0 3px rgba(18,87,145,.18),0 0 0 6px rgba(18,87,145,.12);max-width:1180px;margin:24px auto;padding:clamp(10px,2vw,24px);color:var(--apf-ink);background:radial-gradient(circle at 0 0,rgba(18,87,145,.08),transparent 34%),radial-gradient(circle at 100% 14%,rgba(18,87,145,.06),transparent 32%),#f4f7fb;box-sizing:border-box}
+      .apf-faepa__hero{background:linear-gradient(120deg,#0ea5e9,#075985);color:#e2f3ff;border-radius:18px;padding:clamp(18px,2vw,26px);box-shadow:0 16px 36px rgba(15,23,42,.18);margin-bottom:18px}
       .apf-faepa__eyebrow{margin:0 0 6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#e0f2fe}
-      .apf-faepa__hero h2{margin:0;font-size:24px;line-height:1.2}
+      .apf-faepa__hero h2{margin:0;font-size:clamp(22px,3vw,28px);line-height:1.2}
       .apf-faepa__lede{margin:8px 0 0;font-size:14px;max-width:720px;color:#d9edff}
-      .apf-faepa__notice{margin:12px 0;padding:12px 14px;border-radius:10px;font-size:13px;border:1px solid #cbd5e1;background:#f1f5f9;color:#0f172a}
+      .apf-faepa__notice{margin:12px 0;padding:12px 14px;border-radius:12px;font-size:13px;border:1px solid #cbd5e1;background:#f1f5f9;color:var(--apf-ink);box-shadow:0 10px 20px rgba(15,23,42,.06)}
       .apf-faepa__notice--error{border-color:#fecdd3;background:#fef2f2;color:#991b1b}
       .apf-faepa__notice--success{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
-      .apf-faepa-calendar{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:16px;box-shadow:0 12px 28px rgba(15,23,42,.06)}
-      .apf-faepa-calendar__tabs{display:inline-flex;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:12px}
-      .apf-faepa-calendar__tab{border:none;background:#f8fafc;padding:8px 14px;font-size:13px;color:#475467;cursor:pointer;transition:background .15s ease,color .15s ease}
+      .apf-faepa-calendar{background:#fff;border:1px solid var(--apf-border);border-radius:16px;padding:16px;box-shadow:0 12px 28px rgba(15,23,42,.08)}
+      .apf-faepa-calendar__tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:12px}
+      .apf-faepa-calendar__tab{border:none;background:#f8fafc;padding:10px 14px;font-size:13px;color:#475467;cursor:pointer;transition:background .15s ease,color .15s ease}
       .apf-faepa-calendar__tab + .apf-faepa-calendar__tab{border-left:1px solid #e5e7eb}
-      .apf-faepa-calendar__tab.is-active{background:#1f6feb;color:#fff;font-weight:600}
+      .apf-faepa-calendar__tab.is-active{background:#1f6feb;color:#fff;font-weight:700}
       .apf-faepa-calendar__body{display:flex;flex-direction:column;gap:12px}
       .apf-faepa-calendar__inner{display:flex;flex-direction:column;gap:12px}
       .apf-faepa-calendar__header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-      .apf-faepa-calendar__header h4{margin:0;font-size:18px;color:#0f172a}
+      .apf-faepa-calendar__header h4{margin:0;font-size:18px;color:var(--apf-ink)}
       .apf-faepa-calendar__nav{display:flex;gap:8px}
-      .apf-faepa-calendar__btn{width:34px;height:34px;border-radius:10px;border:1px solid #cfd4dc;background:#f8fafc;color:#0f172a;font-weight:700;cursor:pointer;transition:all .15s ease}
+      .apf-faepa-calendar__btn{width:34px;height:34px;border-radius:10px;border:1px solid #cfd4dc;background:#f8fafc;color:var(--apf-ink);font-weight:700;cursor:pointer;transition:all .15s ease}
       .apf-faepa-calendar__btn:hover,
-      .apf-faepa-calendar__btn:focus{border-color:#0ea5e9;outline:none;box-shadow:0 0 0 3px rgba(14,165,233,.18)}
+      .apf-faepa-calendar__btn:focus{border-color:#0ea5e9;outline:none;box-shadow:var(--apf-focus)}
       .apf-faepa-calendar__weekdays,
       .apf-faepa-calendar__days{display:grid;grid-template-columns:repeat(7,minmax(36px,1fr));gap:8px}
       .apf-faepa-calendar__weekday{text-align:center;font-size:12px;font-weight:700;color:#475467;text-transform:uppercase;letter-spacing:.02em}
-      .apf-faepa-calendar__day{position:relative;height:54px;border-radius:12px;border:1px solid #e4e7ec;background:#f8fafc;color:#0f172a;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:border-color .15s ease,background .15s ease;outline:none}
+      .apf-faepa-calendar__day{position:relative;height:54px;border-radius:12px;border:1px solid var(--apf-border);background:#f8fafc;color:var(--apf-ink);font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:border-color .15s ease,background .15s ease;outline:none}
       .apf-faepa-calendar__day--muted{opacity:.35}
       .apf-faepa-calendar__day--has-event{border-color:#0ea5e9;background:linear-gradient(160deg,rgba(14,165,233,.12),rgba(59,130,246,.08))}
       .apf-faepa-calendar__day--group-coordinators{border-color:#1d4ed8}
@@ -1272,18 +1274,18 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-calendar__dot--coordinators{background:#1d4ed8}
       .apf-faepa__empty{margin:12px 2px 0;font-size:14px;color:#b42318;font-weight:600}
       .apf-faepa__hint{margin:12px 2px 0;font-size:13px;color:#475467}
-      .apf-faepa-return{margin-top:20px;border:1px solid #e4e7ec;border-radius:16px;padding:16px;background:#fff;box-shadow:0 12px 28px rgba(15,23,42,.06);display:flex;flex-direction:column;gap:14px}
+      .apf-faepa-return{margin-top:20px;border:1px solid var(--apf-border);border-radius:16px;padding:16px;background:#fff;box-shadow:0 12px 28px rgba(15,23,42,.08);display:flex;flex-direction:column;gap:14px}
       .apf-faepa-return__head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-      .apf-faepa-return__head h3{margin:4px 0 0;font-size:18px;color:#0f172a}
-      .apf-faepa-return__head p{margin:6px 0 0;font-size:13px;color:#475467;max-width:720px}
-      .apf-faepa-return__badge{border:1px solid #e4e7ec;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:#475467;background:#f8fafc}
+      .apf-faepa-return__head h3{margin:4px 0 0;font-size:18px;color:var(--apf-ink)}
+      .apf-faepa-return__head p{margin:6px 0 0;font-size:13px;color:var(--apf-muted);max-width:720px}
+      .apf-faepa-return__badge{border:1px solid var(--apf-border);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:#475467;background:#f8fafc}
       .apf-faepa-return__empty{margin:6px 0 0;font-size:13px;color:#b42318;font-weight:600}
-      .apf-faepa-return__table{border:1px solid #e4e7ec;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 10px 20px rgba(15,23,42,.04)}
-      .apf-faepa-return__table-head{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 1fr 70px;gap:10px;align-items:center;padding:12px 14px;background:#f8fafc;font-size:12px;font-weight:700;color:#475467}
+      .apf-faepa-return__table{border:1px solid var(--apf-border);border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 10px 20px rgba(15,23,42,.06)}
+      .apf-faepa-return__table-head{display:grid;grid-template-columns:minmax(160px,1.6fr) repeat(4,minmax(130px,1fr)) 80px;gap:10px;align-items:center;padding:12px 14px;background:#f8fafc;font-size:12px;font-weight:700;color:#475467}
       .apf-faepa-return__cell{font-size:12px;color:#475467}
       .apf-faepa-return__cell--title strong{font-size:14px;color:#0f172a}
       .apf-faepa-return__row{border-top:1px solid #e4e7ec}
-      .apf-faepa-return__row summary{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 1fr 70px;gap:10px;align-items:center;padding:12px 14px;cursor:pointer;list-style:none;outline:none}
+      .apf-faepa-return__row summary{display:grid;grid-template-columns:minmax(160px,1.6fr) repeat(4,minmax(130px,1fr)) 80px;gap:10px;align-items:center;padding:12px 14px;cursor:pointer;list-style:none;outline:none}
       .apf-faepa-return__row summary:focus-visible{box-shadow:0 0 0 2px rgba(14,165,233,.4)}
       .apf-faepa-return__row summary::-webkit-details-marker{display:none}
       .apf-faepa-return__row[open] summary{background:#ecfeff}
@@ -1314,6 +1316,7 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-entry__meta{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#475467}
       .apf-faepa-entry__note{margin:6px 0 0;font-size:13px;color:#0f172a;background:#ecfeff;border:1px dashed #7dd3fc;border-radius:10px;padding:10px 12px}
       .apf-faepa-entry__block{border-top:1px dashed #e4e7ec;padding-top:8px;margin-top:4px}
+      .apf-faepa-entry__block--emphasis{border-top:2px solid #0f172a;padding-top:10px;margin-top:8px}
       .apf-faepa-entry__block dl{display:grid;grid-template-columns: minmax(140px,1fr) 2fr;gap:6px 12px;margin:6px 0 0}
       .apf-faepa-entry__block dt{font-size:12px;color:#475467;padding-bottom:6px;border-bottom:1px solid #e4e7ec}
       .apf-faepa-entry__block dd{margin:0;font-size:13px;color:#0f172a;word-break:break-word;padding-bottom:6px;border-bottom:1px solid #e4e7ec}
@@ -1362,26 +1365,60 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-recipient__name{font-weight:700;color:#0f172a}
       .apf-faepa-recipient__meta{font-size:12px;color:#475467;margin-top:4px}
       .apf-faepa-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:#ecfeff;color:#0f172a;font-size:12px;font-weight:700}
-      @media(max-width:900px){
+      @media(max-width:1100px){
         .apf-faepa-return__table-head,
-        .apf-faepa-return__row summary{grid-template-columns:1.2fr 1fr 1fr 1fr 1fr 60px}
+        .apf-faepa-return__row summary{grid-template-columns:minmax(150px,1.5fr) repeat(3,minmax(120px,1fr)) minmax(100px,1fr) 70px}
+      }
+      @media(max-width:960px){
+        .apf-faepa-calendar__header h4{font-size:16px}
+        .apf-faepa-calendar__btn{width:32px;height:32px}
+        .apf-faepa-calendar__weekdays,
+        .apf-faepa-calendar__days{grid-template-columns:repeat(7,minmax(32px,1fr))}
+        .apf-faepa-calendar__day{height:48px;font-size:14px}
+        .apf-faepa-return__table-head,
+        .apf-faepa-return__row summary{grid-template-columns:minmax(150px,1.5fr) repeat(2,minmax(120px,1fr)) minmax(110px,1fr) minmax(90px,1fr) 64px}
+        .apf-faepa__hero{text-align:center}
+        .apf-faepa__hero div{display:flex;flex-direction:column;gap:6px;align-items:center}
       }
       @media(max-width:720px){
+        .apf-faepa-calendar__tabs{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
         .apf-faepa-calendar__weekdays,
         .apf-faepa-calendar__days{grid-template-columns:repeat(7,minmax(30px,1fr))}
         .apf-faepa-calendar__day{height:48px;font-size:14px}
         .apf-faepa-modal__dialog{padding:16px}
+        .apf-faepa-return__table{border:none;box-shadow:none;background:transparent}
         .apf-faepa-return__table-head{display:none}
-        .apf-faepa-return__row summary{grid-template-columns:1fr;align-items:flex-start}
-        .apf-faepa-return__cell{display:block}
-        .apf-faepa-return__cell--caret{text-align:left}
-        .apf-faepa-return__cell + .apf-faepa-return__cell{margin-top:4px}
+        .apf-faepa-return__row{border:1px solid #e4e7ec;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 10px 20px rgba(15,23,42,.06);margin-bottom:12px}
+        .apf-faepa-return__row:last-of-type{margin-bottom:0}
+        .apf-faepa-return__head{flex-direction:column;align-items:flex-start;text-align:left}
+        .apf-faepa-return__row summary{display:flex;flex-direction:column;gap:10px;align-items:flex-start;padding:12px;text-align:left}
+        .apf-faepa-return__cell{display:flex;flex-direction:column;align-items:flex-start;gap:4px;font-size:13px;color:#0f172a;width:100%;text-align:left}
+        .apf-faepa-return__cell::before{content:attr(data-label);font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em}
+        .apf-faepa-return__cell--title strong{font-size:15px}
+        .apf-faepa-return__value--course{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+        .apf-faepa-return__row-details{padding:12px;background:#f8fafc}
+        .apf-faepa-entry__body{text-align:center}
+        .apf-faepa-entry__meta{flex-direction:column;align-items:center;gap:6px;text-align:center}
+        .apf-faepa-entry__note,
+        .apf-faepa-pay__note{text-align:center}
+        .apf-faepa-entry__block{text-align:center}
+        .apf-faepa-entry__block dl{grid-template-columns:1fr;gap:4px}
+        .apf-faepa-entry__block dt{padding-bottom:0;border-bottom:none;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:center}
+        .apf-faepa-entry__block dd{padding-bottom:8px}
+        .apf-faepa-entry__block dl > dd:last-of-type{padding-bottom:0;border-bottom:none}
+        .apf-faepa{margin:16px auto}
       }
       @media(max-width:540px){
         .apf-faepa-calendar__weekdays,
         .apf-faepa-calendar__days{grid-template-columns:repeat(7,minmax(26px,1fr))}
         .apf-faepa-calendar__day{height:44px}
+        .apf-faepa-calendar__markers{left:50%;transform:translateX(-50%);gap:4px}
+        .apf-faepa-calendar__marker{width:8px;height:8px}
+        .apf-faepa-calendar__legend{justify-content:center;text-align:center}
         .apf-faepa-modal{padding:12px}
+      }
+      @media(max-width:375px){
+        .apf-faepa-calendar__markers{left:51.27%}
       }
     </style>
 
