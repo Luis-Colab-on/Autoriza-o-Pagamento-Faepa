@@ -831,17 +831,17 @@ $apf_portal_faepa_cb = function () {
           <?php if ( empty( $faepa_returns ) ) : ?>
             <p class="apf-faepa-return__empty">Nenhum retorno recebido do financeiro até o momento.</p>
           <?php else : ?>
-            <div class="apf-faepa-return__table" role="table" aria-label="Retornos do financeiro">
-              <div class="apf-faepa-return__table-head" role="row">
-                <span class="apf-faepa-return__cell apf-faepa-return__cell--title" role="columnheader">Lote</span>
-                <span class="apf-faepa-return__cell" role="columnheader">Enviado</span>
-                <span class="apf-faepa-return__cell" role="columnheader">Coordenador</span>
-                <span class="apf-faepa-return__cell" role="columnheader">Curso</span>
-                <span class="apf-faepa-return__cell" role="columnheader">Colaboradores</span>
-                <span class="apf-faepa-return__cell" role="columnheader">Pagos</span>
-                <span class="apf-faepa-return__cell apf-faepa-return__cell--actions" role="columnheader">Detalhes</span>
-              </div>
-
+            <div class="apf-table-scroller apf-faepa-return__scroller" tabindex="0" aria-label="Retornos enviados">
+              <div class="apf-faepa-return__table" role="table" aria-label="Retornos do financeiro">
+                <div class="apf-faepa-return__pager apf-pager-row" role="row">
+                  <div class="apf-pager-row__right">
+                    <div class="apf-pager" id="apfFaepaReturnPager" data-faepa-return-pager aria-label="Paginação dos lotes">
+                      <button type="button" class="apf-pager__btn" id="apfFaepaReturnPrev" data-faepa-return-prev aria-label="Página anterior">&larr;</button>
+                      <span class="apf-pager__label" id="apfFaepaReturnLabel" data-faepa-return-label>1/1</span>
+                      <button type="button" class="apf-pager__btn" id="apfFaepaReturnNext" data-faepa-return-next aria-label="Próxima página">&rarr;</button>
+                    </div>
+                  </div>
+                </div>
             <?php foreach ( $faepa_returns as $return ) :
                 $counts = $return['counts'];
                 if ( ! isset( $counts['paid'] ) ) {
@@ -850,11 +850,20 @@ $apf_portal_faepa_cb = function () {
                 $course = $return['coordinator']['course'] ?? '';
                 $coord  = $return['coordinator']['name'] ?? '';
                 $forwarded_label = $return['forwarded_label'];
+                $title_full  = isset( $return['title'] ) ? (string) $return['title'] : '';
+                $title_short = preg_replace( '/^\s*Lote\s*-\s*/i', '', $title_full );
+                $title_short = trim( $title_short );
+                if ( '' === $title_short ) {
+                    $title_short = $title_full;
+                }
             ?>
               <details class="apf-faepa-return__row" role="row">
                 <summary>
                   <span class="apf-faepa-return__cell apf-faepa-return__cell--title" data-label="Lote">
-                    <strong><?php echo esc_html( $return['title'] ); ?></strong>
+                    <strong>
+                      <span class="apf-faepa-return__title-full"><?php echo esc_html( $title_full ); ?></span>
+                      <span class="apf-faepa-return__title-short"><?php echo esc_html( $title_short ); ?></span>
+                    </strong>
                   </span>
                   <span class="apf-faepa-return__cell" data-label="Enviado"><?php echo esc_html( $forwarded_label ?: '—' ); ?></span>
                   <span class="apf-faepa-return__cell" data-label="Coordenador"><?php echo esc_html( $coord ?: '—' ); ?></span>
@@ -921,9 +930,10 @@ $apf_portal_faepa_cb = function () {
                           <summary class="apf-faepa-entry__head">
                             <div>
                               <div class="apf-faepa-entry__title-line">
-                                <strong><?php echo esc_html( $item['name'] ?: 'Colaborador' ); ?></strong>
+                                <strong class="apf-faepa-entry__name"><?php echo esc_html( $item['name'] ?: 'Colaborador' ); ?></strong>
                                 <?php if ( $value_label ) : ?>
-                                  <span class="apf-faepa-entry__value">&nbsp;—&nbsp;<?php echo esc_html( $value_label ); ?></span>
+                                  <span class="apf-faepa-entry__separator" aria-hidden="true">—</span>
+                                  <span class="apf-faepa-entry__value"><?php echo esc_html( $value_label ); ?></span>
                                 <?php endif; ?>
                               </div>
                             <?php if ( $company_label && $company_label !== ( $item['name'] ?? '' ) ) : ?>
@@ -984,7 +994,7 @@ $apf_portal_faepa_cb = function () {
                             <?php endif; ?>
 
                             <?php if ( ! empty( $detail_payment ) ) : ?>
-                              <div class="apf-faepa-entry__block">
+                              <div class="apf-faepa-entry__block apf-faepa-entry__block--payment">
                                 <strong>Informações de pagamento</strong>
                                 <dl>
                                   <?php foreach ( $detail_payment as $label => $value ) : ?>
@@ -1046,7 +1056,8 @@ $apf_portal_faepa_cb = function () {
                 </div>
               </details>
             <?php endforeach; ?>
-          </div>
+              </div>
+            </div>
         <?php endif; ?>
       </section>
   </div>
@@ -1070,7 +1081,7 @@ $apf_portal_faepa_cb = function () {
 
   <script>
     (function(){
-      if (window.apfFaepaApproveInit) { return; }
+      var approveAlreadyInit = !!window.apfFaepaApproveInit;
       window.apfFaepaApproveInit = true;
 
       function findParent(el, selector){
@@ -1116,6 +1127,130 @@ $apf_portal_faepa_cb = function () {
         if(notifyCount){
           notifyCount.textContent = approved + ' pagos';
         }
+      }
+
+      function initReturnPager(){
+        var tables = document.querySelectorAll('.apf-faepa-return__table');
+        if(!tables.length){ return; }
+        tables.forEach(function(table){
+          if(table.dataset.apfPagerInit === '1'){ return; }
+          table.dataset.apfPagerInit = '1';
+
+          var rows = Array.prototype.slice.call(table.querySelectorAll('.apf-faepa-return__row'));
+          if(!rows.length){ return; }
+
+          var scroller = table.closest('.apf-faepa-return__scroller') || table;
+          var pagerRow = table.querySelector('.apf-faepa-return__pager');
+          var prevBtn = table.querySelector('[data-faepa-return-prev]');
+          var nextBtn = table.querySelector('[data-faepa-return-next]');
+          var pagerLabel = table.querySelector('[data-faepa-return-label]');
+          var pageSize = 10;
+          var page = 0;
+
+          function isTypingTarget(target){
+            if(!target){ return false; }
+            if(target.isContentEditable){ return true; }
+            var tag = target.tagName;
+            return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+          }
+
+          function isInteractiveTarget(target){
+            if(!target){ return false; }
+            if(target.isContentEditable){ return true; }
+            if(target.closest){
+              return !!target.closest('a, button, input, select, textarea, summary, [role=\"button\"]');
+            }
+            return false;
+          }
+
+          function setBtnState(btn, disabled){
+            if(!btn){ return; }
+            btn.disabled = disabled;
+            btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+          }
+
+          function getTotalPages(){
+            return Math.max(1, Math.ceil(rows.length / pageSize));
+          }
+
+          function clampPage(nextPage){
+            var totalPages = getTotalPages();
+            if(nextPage < 0){ nextPage = 0; }
+            if(nextPage >= totalPages){ nextPage = totalPages - 1; }
+            return nextPage;
+          }
+
+          function renderPage(){
+            var total = rows.length;
+            var totalPages = getTotalPages();
+            page = clampPage(page);
+            var start = page * pageSize;
+            var end = start + pageSize;
+            rows.forEach(function(row, index){
+              var hide = index < start || index >= end;
+              row.classList.toggle('apf-page-hide', hide);
+            });
+            if(pagerLabel){
+              pagerLabel.textContent = total ? ((page + 1) + '/' + totalPages) : '0/0';
+            }
+            setBtnState(prevBtn, total === 0 || page <= 0);
+            setBtnState(nextBtn, total === 0 || page >= totalPages - 1);
+            var showControls = totalPages > 1;
+            if(prevBtn){ prevBtn.style.visibility = showControls ? 'visible' : 'hidden'; }
+            if(nextBtn){ nextBtn.style.visibility = showControls ? 'visible' : 'hidden'; }
+            if(pagerRow){ pagerRow.hidden = !showControls; }
+          }
+
+          function setPage(nextPage){
+            page = clampPage(nextPage);
+            renderPage();
+            if(scroller){
+              scroller.scrollTop = 0;
+            }
+          }
+
+          if(prevBtn){
+            prevBtn.addEventListener('click', function(){
+              setPage(page - 1);
+            });
+          }
+          if(nextBtn){
+            nextBtn.addEventListener('click', function(){
+              setPage(page + 1);
+            });
+          }
+          if(scroller){
+            if(!scroller.hasAttribute('tabindex')){
+              scroller.setAttribute('tabindex','0');
+            }
+            if(scroller.dataset.apfPagerBound !== '1'){
+              scroller.dataset.apfPagerBound = '1';
+              scroller.addEventListener('mousedown', function(event){
+                if(isInteractiveTarget(event.target)){ return; }
+                try {
+                  scroller.focus({ preventScroll: true });
+                } catch(_e){
+                  scroller.focus();
+                }
+              });
+              scroller.addEventListener('keydown', function(event){
+                if(event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey){ return; }
+                if(isTypingTarget(event.target)){ return; }
+                if(event.key === 'ArrowLeft'){
+                  event.preventDefault();
+                  setPage(page - 1);
+                  return;
+                }
+                if(event.key === 'ArrowRight'){
+                  event.preventDefault();
+                  setPage(page + 1);
+                }
+              });
+            }
+          }
+
+          renderPage();
+        });
       }
 
       function captureEntryState(article){
@@ -1224,16 +1359,23 @@ $apf_portal_faepa_cb = function () {
         });
       }
 
+      function initPortalFaepa(){
+        if(!approveAlreadyInit){
+          initFaepaApprove();
+        }
+        initReturnPager();
+      }
+
       if(document.readyState === 'loading'){
-        document.addEventListener('DOMContentLoaded', initFaepaApprove);
+        document.addEventListener('DOMContentLoaded', initPortalFaepa);
       } else {
-        initFaepaApprove();
+        initPortalFaepa();
       }
     })();
   </script>
 
   <style>
-    .apf-faepa{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;--apf-ink:#0f172a;--apf-muted:#5f6b7a;--apf-border:#d6e1ed;--apf-soft:#f6f9fc;--apf-primary:#125791;--apf-primary-strong:#0f456e;--apf-focus:0 0 0 3px rgba(18,87,145,.18),0 0 0 6px rgba(18,87,145,.12);max-width:1180px;margin:24px auto;padding:clamp(10px,2vw,24px);color:var(--apf-ink);background:radial-gradient(circle at 0 0,rgba(18,87,145,.08),transparent 34%),radial-gradient(circle at 100% 14%,rgba(18,87,145,.06),transparent 32%),#f4f7fb;box-sizing:border-box}
+    .apf-faepa{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;--apf-ink:#0f172a;--apf-muted:#5f6b7a;--apf-border:#d6e1ed;--apf-soft:#f6f9fc;--apf-primary:#125791;--apf-primary-strong:#0f456e;--apf-focus:0 0 0 3px rgba(18,87,145,.18),0 0 0 6px rgba(18,87,145,.12);max-width:1180px;margin:24px auto;padding:clamp(10px,2vw,24px);color:var(--apf-ink);background:transparent;box-sizing:border-box}
       .apf-faepa__hero{background:linear-gradient(120deg,#0ea5e9,#075985);color:#e2f3ff;border-radius:18px;padding:clamp(18px,2vw,26px);box-shadow:0 16px 36px rgba(15,23,42,.18);margin-bottom:18px}
       .apf-faepa__eyebrow{margin:0 0 6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#e0f2fe}
       .apf-faepa__hero h2{margin:0;font-size:clamp(22px,3vw,28px);line-height:1.2}
@@ -1274,17 +1416,33 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-calendar__dot--coordinators{background:#1d4ed8}
       .apf-faepa__empty{margin:12px 2px 0;font-size:14px;color:#b42318;font-weight:600}
       .apf-faepa__hint{margin:12px 2px 0;font-size:13px;color:#475467}
-      .apf-faepa-return{margin-top:20px;border:1px solid var(--apf-border);border-radius:16px;padding:16px;background:#fff;box-shadow:0 12px 28px rgba(15,23,42,.08);display:flex;flex-direction:column;gap:14px}
+      .apf-faepa-return{margin-top:20px;border:1px solid #000;border-radius:16px;padding:16px;background:#fff;box-shadow:0 12px 28px rgba(15,23,42,.08);display:flex;flex-direction:column;gap:14px}
       .apf-faepa-return__head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
       .apf-faepa-return__head h3{margin:4px 0 0;font-size:18px;color:var(--apf-ink)}
       .apf-faepa-return__head p{margin:6px 0 0;font-size:13px;color:var(--apf-muted);max-width:720px}
       .apf-faepa-return__badge{border:1px solid var(--apf-border);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:#475467;background:#f8fafc}
       .apf-faepa-return__empty{margin:6px 0 0;font-size:13px;color:#b42318;font-weight:600}
-      .apf-faepa-return__table{border:1px solid var(--apf-border);border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 10px 20px rgba(15,23,42,.06)}
+      .apf-table-scroller{overflow:auto;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #000;border-radius:14px;background:#fff;box-shadow:0 10px 20px rgba(15,23,42,.06)}
+      .apf-faepa-return__scroller:focus,
+      .apf-faepa-return__scroller:focus-visible,
+      .apf-faepa-return__table:focus,
+      .apf-faepa-return__table:focus-visible{outline:none;box-shadow:none}
+      .apf-faepa-return__table{border:none;box-shadow:none;background:transparent}
+      .apf-faepa-return__pager{padding:10px 12px;background:#f8fafc}
+      .apf-pager-row{display:flex;align-items:center;justify-content:flex-end;gap:12px}
+      .apf-pager-row__right{display:flex;align-items:center;justify-content:flex-end;gap:12px}
+      .apf-pager{display:flex;align-items:center;gap:6px}
+      .apf-pager__btn{width:34px;min-width:34px;height:34px;border-radius:999px;border:1px solid #000;background:#fff;color:#0f172a;font-size:16px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s ease, box-shadow .15s ease}
+      .apf-pager__btn:hover{background:#f8fafc}
+      .apf-pager__btn:focus-visible{outline:none;box-shadow:var(--apf-focus)}
+      .apf-pager__btn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
+      .apf-pager__label{min-width:64px;text-align:center;font-size:12px;font-weight:700;color:#475467}
+      .apf-faepa-return__row.apf-page-hide{display:none}
       .apf-faepa-return__table-head{display:grid;grid-template-columns:minmax(160px,1.6fr) repeat(4,minmax(130px,1fr)) 80px;gap:10px;align-items:center;padding:12px 14px;background:#f8fafc;font-size:12px;font-weight:700;color:#475467}
       .apf-faepa-return__cell{font-size:12px;color:#475467}
       .apf-faepa-return__cell--title strong{font-size:14px;color:#0f172a}
-      .apf-faepa-return__row{border-top:1px solid #e4e7ec}
+      .apf-faepa-return__title-short{display:none}
+      .apf-faepa-return__row{border-top:1px solid #000}
       .apf-faepa-return__row summary{display:grid;grid-template-columns:minmax(160px,1.6fr) repeat(4,minmax(130px,1fr)) 80px;gap:10px;align-items:center;padding:12px 14px;cursor:pointer;list-style:none;outline:none}
       .apf-faepa-return__row summary:focus-visible{box-shadow:0 0 0 2px rgba(14,165,233,.4)}
       .apf-faepa-return__row summary::-webkit-details-marker{display:none}
@@ -1299,7 +1457,7 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-return__note{margin:0;font-size:13px;color:#0f172a;background:#e0f2fe;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px}
       .apf-faepa-return__section-title{margin:0;font-size:13px;font-weight:700;color:#0f172a}
       .apf-faepa-return__list{display:flex;flex-direction:column;gap:10px}
-      .apf-faepa-entry{border:1px solid #e4e7ec;border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column;gap:8px}
+      .apf-faepa-entry{border:1px solid #000;border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column;gap:8px}
       .apf-faepa-entry details summary{cursor:pointer;list-style:none;outline:none}
       .apf-faepa-entry details summary:focus-visible{box-shadow:0 0 0 2px rgba(14,165,233,.35)}
       .apf-faepa-entry details summary::-webkit-details-marker{display:none}
@@ -1308,7 +1466,8 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-entry__head strong{font-size:13px}
       .apf-faepa-entry__value{color:#0f172a;font-weight:600}
       .apf-faepa-entry__company{font-size:12px;color:#475467;margin-top:2px}
-      .apf-faepa-entry__value{margin-left:8px;font-weight:600;color:#0ea5e9;font-size:12px}
+      .apf-faepa-entry__separator{margin:0 6px;font-weight:600;color:#0ea5e9;font-size:12px}
+      .apf-faepa-entry__value{font-weight:600;color:#0ea5e9;font-size:12px}
       .apf-faepa-pill{padding:4px 8px;border-radius:10px;font-size:12px;font-weight:700;background:#e5e7eb;color:#0f172a}
       .apf-faepa-pill--approved{background:rgba(16,185,129,.18);color:#047857}
       .apf-faepa-pill--rejected{background:rgba(248,113,113,.22);color:#991b1b}
@@ -1316,7 +1475,8 @@ $apf_portal_faepa_cb = function () {
       .apf-faepa-entry__meta{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#475467}
       .apf-faepa-entry__note{margin:6px 0 0;font-size:13px;color:#0f172a;background:#ecfeff;border:1px dashed #7dd3fc;border-radius:10px;padding:10px 12px}
       .apf-faepa-entry__block{border-top:1px dashed #e4e7ec;padding-top:8px;margin-top:4px}
-      .apf-faepa-entry__block--emphasis{border-top:2px solid #0f172a;padding-top:10px;margin-top:8px}
+      .apf-faepa-entry__block--emphasis{border-top:1px solid #0f172a;padding-top:10px;margin-top:8px}
+      .apf-faepa-entry__block--payment{border-top:1px solid #000}
       .apf-faepa-entry__block dl{display:grid;grid-template-columns: minmax(140px,1fr) 2fr;gap:6px 12px;margin:6px 0 0}
       .apf-faepa-entry__block dt{font-size:12px;color:#475467;padding-bottom:6px;border-bottom:1px solid #e4e7ec}
       .apf-faepa-entry__block dd{margin:0;font-size:13px;color:#0f172a;word-break:break-word;padding-bottom:6px;border-bottom:1px solid #e4e7ec}
@@ -1381,23 +1541,33 @@ $apf_portal_faepa_cb = function () {
         .apf-faepa__hero div{display:flex;flex-direction:column;gap:6px;align-items:center}
       }
       @media(max-width:720px){
+        .apf-pager-row{justify-content:center}
+        .apf-pager-row__right{justify-content:center;width:100%}
         .apf-faepa-calendar__tabs{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
         .apf-faepa-calendar__weekdays,
         .apf-faepa-calendar__days{grid-template-columns:repeat(7,minmax(30px,1fr))}
         .apf-faepa-calendar__day{height:48px;font-size:14px}
         .apf-faepa-modal__dialog{padding:16px}
-        .apf-faepa-return__table{border:none;box-shadow:none;background:transparent}
+        .apf-table-scroller{border:none;box-shadow:none;background:transparent}
+        .apf-faepa-return__table{background:transparent}
         .apf-faepa-return__table-head{display:none}
-        .apf-faepa-return__row{border:1px solid #e4e7ec;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 10px 20px rgba(15,23,42,.06);margin-bottom:12px}
+        .apf-faepa-return__row{border:1px solid #000;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 10px 20px rgba(15,23,42,.06);margin-bottom:12px}
         .apf-faepa-return__row:last-of-type{margin-bottom:0}
         .apf-faepa-return__head{flex-direction:column;align-items:flex-start;text-align:left}
         .apf-faepa-return__row summary{display:flex;flex-direction:column;gap:10px;align-items:flex-start;padding:12px;text-align:left}
         .apf-faepa-return__cell{display:flex;flex-direction:column;align-items:flex-start;gap:4px;font-size:13px;color:#0f172a;width:100%;text-align:left}
+        .apf-faepa-return__cell--title{align-items:center;text-align:center}
+        .apf-faepa-return__cell--title strong{width:100%;text-align:center}
+        .apf-faepa-return__title-full{display:none}
+        .apf-faepa-return__title-short{display:inline}
         .apf-faepa-return__cell::before{content:attr(data-label);font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em}
         .apf-faepa-return__cell--title strong{font-size:15px}
         .apf-faepa-return__value--course{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;max-width:100%}
         .apf-faepa-return__row-details{padding:12px;background:#f8fafc}
+        .apf-faepa-entry__head{flex-direction:column;align-items:center;text-align:center;gap:6px}
         .apf-faepa-entry__body{text-align:center}
+        .apf-faepa-entry__title-line{flex-direction:column;align-items:center;gap:2px;text-align:center}
+        .apf-faepa-entry__separator{display:none}
         .apf-faepa-entry__meta{flex-direction:column;align-items:center;gap:6px;text-align:center}
         .apf-faepa-entry__note,
         .apf-faepa-pay__note{text-align:center}
