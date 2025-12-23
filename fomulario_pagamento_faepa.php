@@ -187,6 +187,329 @@ if ( ! function_exists( 'apf_resolve_channel_email' ) ) {
     }
 }
 
+if ( ! function_exists( 'apf_user_is_finance' ) ) {
+    /**
+     * Verifica se o usuario possui perfil financeiro (ou admin).
+     *
+     * @param int $user_id
+     * @return bool
+     */
+    function apf_user_is_finance( $user_id = 0 ) {
+        $user_id = (int) $user_id;
+        $user    = $user_id > 0 ? get_user_by( 'id', $user_id ) : wp_get_current_user();
+        if ( ! $user || empty( $user->roles ) ) {
+            return false;
+        }
+        $roles = (array) $user->roles;
+        if ( in_array( 'administrator', $roles, true ) ) {
+            return true;
+        }
+        return in_array( 'financeiro', $roles, true );
+    }
+}
+
+if ( ! function_exists( 'apf_get_mail_sender_email' ) ) {
+    /**
+     * Retorna o e-mail configurado como remetente (pode ser vazio).
+     *
+     * @return string
+     */
+    function apf_get_mail_sender_email() {
+        $email = get_option( 'apf_mail_sender_email', '' );
+        return is_scalar( $email ) ? sanitize_email( $email ) : '';
+    }
+}
+
+if ( ! function_exists( 'apf_get_mail_sender_name' ) ) {
+    /**
+     * Retorna o nome do remetente a partir do site.
+     *
+     * @return string
+     */
+    function apf_get_mail_sender_name() {
+        $name = get_bloginfo( 'name' );
+        $name = is_string( $name ) ? sanitize_text_field( wp_strip_all_tags( $name ) ) : '';
+        return $name ?: 'FAEPA';
+    }
+}
+
+if ( ! function_exists( 'apf_get_form_confirmation_default_template' ) ) {
+    /**
+     * Template padrao do e-mail de confirmacao do formulario.
+     *
+     * @return string
+     */
+    function apf_get_form_confirmation_default_template() {
+        return "Olá [nome],\n\n"
+            . "Recebemos seu formulário com sucesso.\n"
+            . "Você pode modificar os dados do formulário no Portal do Colaborador sempre que precisar.\n\n"
+            . "Número de controle: [numero_controle]\n"
+            . "E-mail: [email]\n"
+            . "Telefone: [telefone]\n"
+            . "Curso: [curso]\n"
+            . "Valor: [valor]\n\n"
+            . "Se tiver dúvidas, fale com o financeiro.";
+    }
+}
+
+if ( ! function_exists( 'apf_get_form_confirmation_template' ) ) {
+    /**
+     * Retorna o template configurado ou o padrao.
+     *
+     * @return string
+     */
+    function apf_get_form_confirmation_template() {
+        $template = get_option( 'apf_form_confirmation_template', '' );
+        $template = is_string( $template ) ? trim( $template ) : '';
+        if ( '' === $template ) {
+            return apf_get_form_confirmation_default_template();
+        }
+        return $template;
+    }
+}
+
+if ( ! function_exists( 'apf_replace_placeholders' ) ) {
+    /**
+     * Substitui placeholders no template.
+     *
+     * @param string $template
+     * @param array $map
+     * @return string
+     */
+    function apf_replace_placeholders( $template, $map ) {
+        if ( ! is_string( $template ) ) {
+            $template = '';
+        }
+        if ( ! is_array( $map ) ) {
+            $map = array();
+        }
+        $map = apply_filters( 'apf_form_confirmation_placeholders', $map );
+        if ( empty( $map ) ) {
+            return $template;
+        }
+        return str_replace( array_keys( $map ), array_values( $map ), $template );
+    }
+}
+
+if ( ! function_exists( 'apf_set_mail_override' ) ) {
+    /**
+     * Define remetente temporario para um unico envio.
+     *
+     * @param string $email
+     * @param string $name
+     */
+    function apf_set_mail_override( $email, $name = '' ) {
+        global $apf_mail_override;
+        $email = sanitize_email( $email );
+        $name  = is_string( $name ) ? sanitize_text_field( $name ) : '';
+        if ( '' === $email ) {
+            $apf_mail_override = array();
+            return;
+        }
+        $apf_mail_override = array(
+            'email' => $email,
+            'name'  => $name,
+        );
+    }
+}
+
+if ( ! function_exists( 'apf_get_mail_override' ) ) {
+    /**
+     * Recupera remetente temporario.
+     *
+     * @return array
+     */
+    function apf_get_mail_override() {
+        global $apf_mail_override;
+        return is_array( $apf_mail_override ) ? $apf_mail_override : array();
+    }
+}
+
+if ( ! function_exists( 'apf_clear_mail_override' ) ) {
+    /**
+     * Limpa remetente temporario.
+     */
+    function apf_clear_mail_override() {
+        global $apf_mail_override;
+        $apf_mail_override = array();
+    }
+}
+
+if ( ! function_exists( 'apf_is_local_environment' ) ) {
+    /**
+     * Detecta ambiente local para captura de e-mails.
+     *
+     * @return bool
+     */
+    function apf_is_local_environment() {
+        if ( function_exists( 'wp_get_environment_type' ) ) {
+            return ( 'local' === wp_get_environment_type() );
+        }
+        if ( defined( 'WP_ENVIRONMENT_TYPE' ) ) {
+            return ( 'local' === WP_ENVIRONMENT_TYPE );
+        }
+        $host = '';
+        if ( ! empty( $_SERVER['HTTP_HOST'] ) ) {
+            $host = sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) );
+        }
+        if ( '' === $host ) {
+            $host = parse_url( home_url(), PHP_URL_HOST );
+        }
+        $host = is_string( $host ) ? strtolower( trim( $host ) ) : '';
+        if ( '' === $host ) {
+            return false;
+        }
+        $host = preg_replace( '/:\d+$/', '', $host );
+        $host = trim( $host, '[]' );
+        if ( in_array( $host, array( 'localhost', '127.0.0.1', '::1' ), true ) ) {
+            return true;
+        }
+        if ( substr( $host, -10 ) === '.localhost' || substr( $host, -11 ) === '.localdomain' ) {
+            return true;
+        }
+        if ( substr( $host, -6 ) === '.local' || substr( $host, -5 ) === '.test' ) {
+            return true;
+        }
+        if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
+            $is_public = filter_var(
+                $host,
+                FILTER_VALIDATE_IP,
+                FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+            );
+            if ( false === $is_public ) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+if ( ! function_exists( 'apf_mail_capture_enabled' ) ) {
+    /**
+     * Define se a captura local de e-mails esta habilitada.
+     *
+     * @return bool
+     */
+    function apf_mail_capture_enabled() {
+        $enabled = apf_is_local_environment();
+        return (bool) apply_filters( 'apf_mail_capture_enabled', $enabled );
+    }
+}
+
+if ( ! function_exists( 'apf_store_mail_capture' ) ) {
+    /**
+     * Persiste o ultimo e-mail capturado.
+     *
+     * @param array $entry
+     * @return bool
+     */
+    function apf_store_mail_capture( $entry ) {
+        if ( ! is_array( $entry ) || empty( $entry ) ) {
+            return false;
+        }
+        return (bool) update_option( 'apf_mail_capture_last', $entry, false );
+    }
+}
+
+if ( ! function_exists( 'apf_capture_mail' ) ) {
+    /**
+     * Captura o ultimo e-mail enviado para exibicao no portal.
+     *
+     * @param array $args
+     * @return array
+     */
+    function apf_capture_mail( $args ) {
+        if ( ! apf_mail_capture_enabled() ) {
+            return $args;
+        }
+
+        $override = apf_get_mail_override();
+        $to = $args['to'] ?? '';
+        if ( is_array( $to ) ) {
+            $to = implode( ', ', array_filter( array_map( 'sanitize_email', $to ) ) );
+        } else {
+            $to = sanitize_email( (string) $to );
+        }
+
+        $subject = isset( $args['subject'] ) && is_scalar( $args['subject'] ) ? sanitize_text_field( $args['subject'] ) : '';
+        $message = isset( $args['message'] ) && is_string( $args['message'] ) ? $args['message'] : '';
+        $message = trim( wp_strip_all_tags( $message ) );
+        if ( strlen( $message ) > 5000 ) {
+            $message = substr( $message, 0, 5000 ) . '...';
+        }
+
+        $headers = $args['headers'] ?? array();
+        if ( is_array( $headers ) ) {
+            $headers = implode( "\n", array_map( 'trim', $headers ) );
+        } elseif ( ! is_string( $headers ) ) {
+            $headers = '';
+        }
+
+        $from_email = $override['email'] ?? apf_get_mail_sender_email();
+        $from_name  = $override['name'] ?? apf_get_mail_sender_name();
+
+        $entry = array(
+            'time'       => current_time( 'Y-m-d H:i:s' ),
+            'to'         => $to,
+            'subject'    => $subject,
+            'message'    => $message,
+            'headers'    => $headers,
+            'from_email' => $from_email,
+            'from_name'  => $from_name,
+        );
+
+        apf_store_mail_capture( $entry );
+
+        return $args;
+    }
+}
+
+if ( ! function_exists( 'apf_filter_mail_from' ) ) {
+    /**
+     * Aplica remetente customizado nos envios.
+     *
+     * @param string $email
+     * @return string
+     */
+    function apf_filter_mail_from( $email ) {
+        $override = apf_get_mail_override();
+        if ( ! empty( $override['email'] ) ) {
+            return $override['email'];
+        }
+        $custom = apf_get_mail_sender_email();
+        return $custom !== '' ? $custom : $email;
+    }
+}
+
+if ( ! function_exists( 'apf_filter_mail_from_name' ) ) {
+    /**
+     * Aplica nome do remetente quando houver e-mail customizado.
+     *
+     * @param string $name
+     * @return string
+     */
+    function apf_filter_mail_from_name( $name ) {
+        $override = apf_get_mail_override();
+        if ( ! empty( $override['email'] ) ) {
+            $label = $override['name'] ?? '';
+            if ( '' !== $label ) {
+                return $label;
+            }
+            return apf_get_mail_sender_name();
+        }
+        $custom = apf_get_mail_sender_email();
+        if ( '' === $custom ) {
+            return $name;
+        }
+        $label = apf_get_mail_sender_name();
+        return $label !== '' ? $label : $name;
+    }
+}
+
+add_filter( 'wp_mail_from', 'apf_filter_mail_from', 99 );
+add_filter( 'wp_mail_from_name', 'apf_filter_mail_from_name', 99 );
+add_filter( 'wp_mail', 'apf_capture_mail', 99 );
+
 if ( ! function_exists( 'apf_get_coordinator_requests' ) ) {
     /**
      * Recupera as solicitações enviadas aos coordenadores.
@@ -1202,6 +1525,68 @@ add_shortcode('apf_form', function () {
                     update_post_meta($post_id, 'apf_'.$k, $v);
                 }
 
+                $confirmation_email = sanitize_email( $email_prest );
+                if ( $confirmation_email ) {
+                    $display_name = $nome_colaborador ?: $nome_prof ?: $nome_empresa;
+                    if ( '' === $display_name ) {
+                        $display_name = $confirmation_email;
+                    }
+                    $subject = 'FAEPA - Formulário enviado com sucesso';
+                    $valor_fmt = apf_format_currency_for_input( $valor_norm );
+                    $valor_display = $valor_fmt ? 'R$ ' . $valor_fmt : $valor_norm;
+                    $placeholders = array(
+                        '[nome]'             => $display_name,
+                        '[email]'            => $confirmation_email,
+                        '[telefone]'         => $tel_prestador,
+                        '[cpf]'              => $cpf,
+                        '[cnpj]'             => $cnpj,
+                        '[valor]'            => $valor_display,
+                        '[diretor]'          => $nome_diretor,
+                        '[curso]'            => $nome_curto,
+                        '[numero_controle]'  => $num_controle,
+                        '[documento_fiscal]' => $num_doc_fiscal,
+                        '[data_servico]'     => $data_prest,
+                        '[descricao]'        => $descricao,
+                        '[classificacao]'    => $classificacao,
+                        '[carga_horaria]'    => $carga_horaria,
+                        '[banco]'            => $banco,
+                        '[agencia]'          => $agencia,
+                        '[conta]'            => $conta,
+                        '[tipo_pessoa]'      => strtoupper( $pessoa_tipo ),
+                        '[empresa]'          => $nome_empresa,
+                        '[colaborador]'      => $nome_colaborador ?: $nome_prof,
+                        '[prestacao_contas]' => $prest_contas,
+                    );
+
+                    $template = apf_get_form_confirmation_template();
+                    $body = apf_replace_placeholders( $template, $placeholders );
+
+                    $headers = array( 'Content-Type: text/plain; charset=UTF-8' );
+                    if ( function_exists( 'apf_set_mail_override' ) ) {
+                        apf_set_mail_override( $confirmation_email, $display_name );
+                    }
+                    wp_mail(
+                        $confirmation_email,
+                        $subject,
+                        $body,
+                        $headers
+                    );
+                    if ( function_exists( 'apf_store_mail_capture' ) ) {
+                        apf_store_mail_capture( array(
+                            'time'       => current_time( 'Y-m-d H:i:s' ),
+                            'to'         => $confirmation_email,
+                            'subject'    => $subject,
+                            'message'    => $body,
+                            'headers'    => implode( "\n", $headers ),
+                            'from_email' => $confirmation_email,
+                            'from_name'  => $display_name,
+                        ) );
+                    }
+                    if ( function_exists( 'apf_clear_mail_override' ) ) {
+                        apf_clear_mail_override();
+                    }
+                }
+
                 $out .= '<div style="padding:12px;border:1px solid #cde;border-radius:8px;background:#f7fbff;margin-bottom:16px">Formulário enviado com sucesso.</div>';
             } else {
                 $out .= '<div style="padding:12px;border:1px solid #f3c;border-radius:8px;background:#fff5f8;margin-bottom:16px;color:#b00020">Não foi possível enviar agora.</div>';
@@ -1514,6 +1899,11 @@ add_shortcode('apf_form', function () {
         transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
         min-height:44px;
       }
+      .apf-pane[data-step="1"] .apf-grid label > input,
+      .apf-pane[data-step="1"] .apf-grid label > textarea,
+      .apf-pane[data-step="1"] .apf-grid label > select{
+        margin-top:auto;
+      }
       .apf-grid textarea{min-height:110px;resize:vertical}
       .apf-grid input:focus,
       .apf-grid textarea:focus,
@@ -1789,4 +2179,5 @@ require_once __DIR__ . '/includes/admin-meta.php';
 require_once __DIR__ . '/includes/portal_colaborador.php';
 require_once __DIR__ . '/includes/portal_coordenador.php';
 require_once __DIR__ . '/includes/portal_faepa.php';
+require_once __DIR__ . '/includes/portal_financeiro_email.php';
 require_once __DIR__ . '/includes/class-faepa-chatbox.php';
