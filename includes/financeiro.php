@@ -56,6 +56,106 @@ if ( ! function_exists( 'apf_inbox_normalize_director_name' ) ) {
     }
 }
 
+if ( ! function_exists( 'apf_sort_faepa_access_list' ) ) {
+    /**
+     * Ordena lista de acessos FAEPA por status e data.
+     *
+     * @param array $list
+     * @return array
+     */
+    function apf_sort_faepa_access_list( $list ) {
+        if ( ! is_array( $list ) ) {
+            return array();
+        }
+        $list = array_values( $list );
+        usort( $list, function( $a, $b ) {
+            $order = array( 'pending' => 0, 'approved' => 1, 'rejected' => 2 );
+            $a_status = isset( $a['status'] ) ? sanitize_key( $a['status'] ) : 'pending';
+            $b_status = isset( $b['status'] ) ? sanitize_key( $b['status'] ) : 'pending';
+            $a_rank = isset( $order[ $a_status ] ) ? $order[ $a_status ] : 99;
+            $b_rank = isset( $order[ $b_status ] ) ? $order[ $b_status ] : 99;
+            if ( $a_rank !== $b_rank ) {
+                return ( $a_rank < $b_rank ) ? -1 : 1;
+            }
+            $a_time = isset( $a['requested_at'] ) ? (int) $a['requested_at'] : 0;
+            $b_time = isset( $b['requested_at'] ) ? (int) $b['requested_at'] : 0;
+            if ( $a_time === $b_time ) {
+                return 0;
+            }
+            return ( $a_time > $b_time ) ? -1 : 1;
+        } );
+        return $list;
+    }
+}
+
+if ( ! function_exists( 'apf_render_faepa_access_cards' ) ) {
+    /**
+     * Renderiza cards de acesso FAEPA para o modal financeiro.
+     *
+     * @param array $faepa_access_list
+     * @return string
+     */
+    function apf_render_faepa_access_cards( $faepa_access_list ) {
+        if ( ! is_array( $faepa_access_list ) ) {
+            $faepa_access_list = array();
+        }
+        $nonce_field = wp_nonce_field( 'apf_faepa_access_manage', 'apf_faepa_access_nonce', true, false );
+        ob_start();
+        if ( ! empty( $faepa_access_list ) ) :
+            foreach ( $faepa_access_list as $entry ) :
+                $status = isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'pending';
+                if ( ! in_array( $status, array( 'approved', 'pending', 'rejected' ), true ) ) {
+                    $status = 'pending';
+                }
+                $status_label = ( 'approved' === $status )
+                    ? 'Aprovado'
+                    : ( 'rejected' === $status ? 'Recusado' : 'Pendente' );
+                $display_email = isset( $entry['email'] ) ? sanitize_text_field( (string) $entry['email'] ) : '';
+                if ( '' === $display_email && ! empty( $entry['login'] ) ) {
+                    $display_email = sanitize_text_field( (string) $entry['login'] );
+                }
+        ?>
+          <form method="post" class="apf-director-card apf-faepa-access-card">
+            <?php echo $nonce_field; ?>
+            <input type="hidden" name="apf_faepa_access_id" value="<?php echo esc_attr( $entry['id'] ?? '' ); ?>">
+            <div class="apf-director-card__fields">
+              <div class="apf-director-card__field">
+                <span>Nome</span>
+                <input type="text" name="apf_faepa_access_name" value="<?php echo esc_attr( $entry['name'] ?? '' ); ?>" required disabled data-initial="<?php echo esc_attr( $entry['name'] ?? '' ); ?>">
+              </div>
+              <div class="apf-director-card__field">
+                <span>E-mail</span>
+                <input type="email" name="apf_faepa_access_email" value="<?php echo esc_attr( $display_email ?: '' ); ?>" required disabled data-initial="<?php echo esc_attr( $display_email ?: '' ); ?>" placeholder="—">
+              </div>
+            </div>
+            <div class="apf-director-card__footer">
+              <span class="apf-directors__status apf-directors__status--<?php echo esc_attr( $status ); ?>">
+                <?php echo esc_html( $status_label ); ?>
+              </span>
+              <div class="apf-director-card__actions">
+                <?php if ( 'pending' === $status ) : ?>
+                  <button type="submit" name="apf_faepa_access_action" value="approve" class="apf-btn apf-btn--primary">Aprovar</button>
+                  <button type="submit" name="apf_faepa_access_action" value="reject" class="apf-btn apf-btn--danger">Recusar</button>
+                <?php else : ?>
+                  <button type="button" class="apf-btn apf-btn--outline-white" data-faepa-access-edit>Editar</button>
+                  <button type="submit" name="apf_faepa_access_action" value="delete" class="apf-btn apf-btn--ghost" data-faepa-access-delete onclick="return confirm('Remover este acesso?');">Excluir</button>
+                  <button type="submit" name="apf_faepa_access_action" value="update" class="apf-btn apf-btn--primary" data-faepa-access-save hidden>Salvar</button>
+                  <button type="button" class="apf-btn apf-btn--ghost" data-faepa-access-cancel hidden>Cancelar</button>
+                <?php endif; ?>
+              </div>
+            </div>
+          </form>
+        <?php
+            endforeach;
+        else :
+        ?>
+          <p class="apf-director-list__hint">Nenhuma solicitação de acesso até o momento.</p>
+        <?php
+        endif;
+        return ob_get_clean();
+    }
+}
+
 if ( ! function_exists('apf_inbox_resolve_course_name') ) {
     /**
      * Resolves a human-friendly course name for a given WooCommerce product ID.
@@ -652,12 +752,179 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         exit;
     }
 
+    $faepa_access_requests = function_exists( 'apf_get_faepa_access_requests' )
+        ? apf_get_faepa_access_requests()
+        : get_option( 'apf_faepa_access_requests', array() );
+    if ( function_exists( 'apf_normalize_faepa_access_list' ) ) {
+        $faepa_access_requests = apf_normalize_faepa_access_list( $faepa_access_requests );
+    } elseif ( ! is_array( $faepa_access_requests ) ) {
+        $faepa_access_requests = array();
+    }
+
+    if ( isset( $_POST['apf_faepa_access_action'] ) ) {
+        $user_id         = get_current_user_id();
+        $redirect_notice = '';
+        $redirect_type   = 'success';
+
+        if ( ! isset( $_POST['apf_faepa_access_nonce'] ) || ! wp_verify_nonce( $_POST['apf_faepa_access_nonce'], 'apf_faepa_access_manage' ) ) {
+            $redirect_notice = 'Não foi possível processar o acesso. Recarregue a página e tente novamente.';
+            $redirect_type   = 'error';
+        } else {
+            $action = sanitize_text_field( wp_unslash( $_POST['apf_faepa_access_action'] ) );
+            $faepa_access_requests = array_values( $faepa_access_requests );
+
+            if ( 'approve' === $action || 'reject' === $action ) {
+                $id = isset( $_POST['apf_faepa_access_id'] ) ? preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', wp_unslash( $_POST['apf_faepa_access_id'] ) ) : '';
+                $target_status = ( 'approve' === $action ) ? 'approved' : 'rejected';
+                $updated = false;
+
+                foreach ( $faepa_access_requests as $idx => $entry ) {
+                    $entry_id = isset( $entry['id'] ) ? preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', (string) $entry['id'] ) : '';
+                    if ( '' !== $entry_id && $entry_id === $id ) {
+                        $timestamp = time();
+                        $faepa_access_requests[ $idx ]['status'] = $target_status;
+                        $faepa_access_requests[ $idx ]['status_updated_at'] = $timestamp;
+                        $faepa_access_requests[ $idx ]['status_updated_by'] = $user_id;
+                        if ( 'approved' === $target_status ) {
+                            $faepa_access_requests[ $idx ]['approved_at'] = $timestamp;
+                            $faepa_access_requests[ $idx ]['approved_by'] = $user_id;
+                            unset( $faepa_access_requests[ $idx ]['rejected_at'], $faepa_access_requests[ $idx ]['rejected_by'] );
+                        } else {
+                            $faepa_access_requests[ $idx ]['rejected_at'] = $timestamp;
+                            $faepa_access_requests[ $idx ]['rejected_by'] = $user_id;
+                        }
+                        $updated = true;
+                        break;
+                    }
+                }
+
+                if ( $updated ) {
+                    if ( function_exists( 'apf_store_faepa_access_requests' ) ) {
+                        apf_store_faepa_access_requests( $faepa_access_requests );
+                    }
+                    $redirect_notice = ( 'approved' === $target_status )
+                        ? 'Acesso aprovado com sucesso.'
+                        : 'Acesso recusado.';
+                } else {
+                    $redirect_notice = 'Não foi possível localizar o acesso selecionado.';
+                    $redirect_type   = 'error';
+                }
+            } elseif ( 'update' === $action ) {
+                $id    = isset( $_POST['apf_faepa_access_id'] ) ? preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', wp_unslash( $_POST['apf_faepa_access_id'] ) ) : '';
+                $name  = sanitize_text_field( wp_unslash( $_POST['apf_faepa_access_name'] ?? '' ) );
+                $email = sanitize_email( wp_unslash( $_POST['apf_faepa_access_email'] ?? '' ) );
+                $updated = false;
+
+                if ( '' === $name || '' === $email ) {
+                    $redirect_notice = 'Informe nome e e-mail para atualizar.';
+                    $redirect_type   = 'error';
+                } elseif ( ! is_email( $email ) ) {
+                    $redirect_notice = 'Informe um e-mail válido para atualizar.';
+                    $redirect_type   = 'error';
+                } else {
+                    $timestamp = time();
+                    $email_key = strtolower( $email );
+                    $lookup_user = get_user_by( 'email', $email );
+                    $lookup_id = $lookup_user ? (int) $lookup_user->ID : 0;
+
+                    foreach ( $faepa_access_requests as $idx => $entry ) {
+                        $entry_id = isset( $entry['id'] ) ? preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', (string) $entry['id'] ) : '';
+                        if ( '' !== $entry_id && $entry_id === $id ) {
+                            $faepa_access_requests[ $idx ]['name']  = $name;
+                            $faepa_access_requests[ $idx ]['email'] = $email_key;
+                            $faepa_access_requests[ $idx ]['login'] = $email_key;
+                            if ( $lookup_id > 0 ) {
+                                $faepa_access_requests[ $idx ]['user_id'] = $lookup_id;
+                            }
+                            $faepa_access_requests[ $idx ]['updated_at'] = $timestamp;
+                            $faepa_access_requests[ $idx ]['source'] = 'finance_portal_update';
+                            $updated = true;
+                            break;
+                        }
+                    }
+
+                    if ( $updated ) {
+                        if ( function_exists( 'apf_store_faepa_access_requests' ) ) {
+                            apf_store_faepa_access_requests( $faepa_access_requests );
+                        }
+                        $redirect_notice = 'Dados atualizados.';
+                    } else {
+                        $redirect_notice = 'Não foi possível localizar o acesso para atualizar.';
+                        $redirect_type   = 'error';
+                    }
+                }
+            } elseif ( 'delete' === $action ) {
+                $id = isset( $_POST['apf_faepa_access_id'] ) ? preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', wp_unslash( $_POST['apf_faepa_access_id'] ) ) : '';
+                $initial = count( $faepa_access_requests );
+                $faepa_access_requests = array_values( array_filter( $faepa_access_requests, function( $entry ) use ( $id ) {
+                    $entry_id = isset( $entry['id'] ) ? preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', (string) $entry['id'] ) : '';
+                    return $entry_id !== $id;
+                } ) );
+
+                if ( count( $faepa_access_requests ) !== $initial ) {
+                    if ( function_exists( 'apf_store_faepa_access_requests' ) ) {
+                        apf_store_faepa_access_requests( $faepa_access_requests );
+                    }
+                    $redirect_notice = 'Acesso removido.';
+                } else {
+                    $redirect_notice = 'Acesso não encontrado para remoção.';
+                    $redirect_type   = 'error';
+                }
+            } else {
+                $redirect_notice = 'Ação inválida.';
+                $redirect_type   = 'error';
+            }
+        }
+
+        if ( '' === $redirect_notice ) {
+            $redirect_notice = ( 'error' === $redirect_type )
+                ? 'Não foi possível processar o acesso.'
+                : 'Acessos FAEPA atualizados.';
+        }
+
+        $redirect_notice = sanitize_text_field( $redirect_notice );
+        $redirect_type   = ( 'error' === $redirect_type ) ? 'error' : 'success';
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target && function_exists( 'get_permalink' ) ) {
+            $target = get_permalink();
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+
+        $target = remove_query_arg( array( 'apf_faepa_access_notice', 'apf_faepa_access_status' ), $target );
+        if ( strpos( $target, 'http' ) !== 0 && strpos( $target, '/' ) !== 0 ) {
+            $target = '/' . ltrim( $target, '/' );
+        }
+
+        $target = add_query_arg( array(
+            'apf_faepa_access_notice' => $redirect_notice,
+            'apf_faepa_access_status' => $redirect_type,
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
     $director_notice      = '';
     $director_notice_type = 'success';
     if ( isset($_GET['apf_dir_notice']) ) {
         $director_notice = sanitize_text_field( wp_unslash( $_GET['apf_dir_notice'] ) );
         if ( isset($_GET['apf_dir_status']) && 'error' === sanitize_text_field( wp_unslash( $_GET['apf_dir_status'] ) ) ) {
             $director_notice_type = 'error';
+        }
+    }
+
+    $faepa_access_notice      = '';
+    $faepa_access_notice_type = 'success';
+    if ( isset( $_GET['apf_faepa_access_notice'] ) ) {
+        $faepa_access_notice = sanitize_text_field( wp_unslash( $_GET['apf_faepa_access_notice'] ) );
+        if ( isset( $_GET['apf_faepa_access_status'] ) && 'error' === sanitize_text_field( wp_unslash( $_GET['apf_faepa_access_status'] ) ) ) {
+            $faepa_access_notice_type = 'error';
         }
     }
 
@@ -677,6 +944,27 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         if ( isset( $_GET['apf_assign_status'] ) && 'error' === sanitize_text_field( wp_unslash( $_GET['apf_assign_status'] ) ) ) {
             $assign_notice_type = 'error';
         }
+    }
+
+    $faepa_access_list = $faepa_access_requests;
+    if ( function_exists( 'apf_sort_faepa_access_list' ) ) {
+        $faepa_access_list = apf_sort_faepa_access_list( $faepa_access_list );
+    }
+    $faepa_access_hash = '';
+    $faepa_access_pending_count = 0;
+    if ( ! empty( $faepa_access_list ) ) {
+        foreach ( $faepa_access_list as $entry ) {
+            $status = isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'pending';
+            if ( 'pending' === $status ) {
+                $faepa_access_pending_count++;
+            }
+        }
+    }
+    $faepa_access_encoded = wp_json_encode( $faepa_access_list );
+    if ( is_string( $faepa_access_encoded ) ) {
+        $faepa_access_hash = md5( $faepa_access_encoded );
+    } elseif ( ! empty( $faepa_access_list ) ) {
+        $faepa_access_hash = md5( serialize( $faepa_access_list ) );
     }
 
     // ordena lista por curso/coordenador para exibição consistente
@@ -1869,6 +2157,8 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
             <p>Cadastre os coordenadores fixos que ficarão disponíveis no formulário público.</p>
           </div>
           <div class="apf-directors__head-actions">
+            <button type="button" class="apf-directors__faepa-link" id="apfFaepaAccessBtn">FAEPA<span class="apf-directors__faepa-badge" id="apfFaepaAccessBadge" aria-hidden="true"></span></button>
+            <span class="apf-directors__head-divider" aria-hidden="true"></span>
             <button type="button" class="apf-btn apf-director-list-btn" id="apfDirectorListBtn" aria-label="Ver coordenadores">
               <img src="<?php echo esc_url( $coord_archive_icon_url ); ?>" alt="" class="apf-director-list-btn__icon">
             </button>
@@ -1879,6 +2169,12 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         <?php if ( $director_notice ) : ?>
           <div class="apf-directors__notice apf-directors__notice--<?php echo esc_attr($director_notice_type); ?>">
             <?php echo esc_html($director_notice); ?>
+          </div>
+        <?php endif; ?>
+
+        <?php if ( $faepa_access_notice ) : ?>
+          <div class="apf-directors__notice apf-directors__notice--<?php echo esc_attr( $faepa_access_notice_type ); ?>">
+            <?php echo esc_html( $faepa_access_notice ); ?>
           </div>
         <?php endif; ?>
 
@@ -1999,6 +2295,31 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
             </div>
           </div>
         <?php endif; ?>
+
+        <div class="apf-assign-modal apf-faepa-access-modal" id="apfFaepaAccessModal" aria-hidden="true">
+          <div class="apf-assign-modal__overlay" data-faepa-access-close></div>
+          <div class="apf-assign-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="apfFaepaAccessTitle">
+            <div class="apf-assign-modal__head">
+              <div>
+                <h3 id="apfFaepaAccessTitle">Acessos Portal FAEPA</h3>
+                <p class="apf-director-list__hint">Aprove ou recuse contas para visualizar o portal FAEPA.</p>
+              </div>
+              <button type="button" class="apf-assign-modal__close" data-faepa-access-close aria-label="Fechar">&times;</button>
+            </div>
+            <div class="apf-assign-modal__body">
+              <div class="apf-faepa-access-section">
+                <h4 class="apf-faepa-access-section__title">Solicitações</h4>
+                <label class="apf-director-list__search">
+                  <span>Campo de busca</span>
+                  <input type="search" id="apfFaepaAccessSearch" placeholder="Digite nome ou e-mail">
+                </label>
+                <div class="apf-director-list__body" id="apfFaepaAccessBody" data-faepa-hash="<?php echo esc_attr( $faepa_access_hash ); ?>" data-faepa-pending="<?php echo esc_attr( $faepa_access_pending_count ); ?>">
+                  <?php echo apf_render_faepa_access_cards( $faepa_access_list ); ?>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="apf-scheduler" aria-labelledby="apfSchedulerHeading">
@@ -2974,6 +3295,31 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         flex:1 1 auto;
         min-height:0;
       }
+      .apf-faepa-access-modal .apf-assign-modal__dialog{
+        max-width:720px;
+        max-height:calc(100vh - 32px);
+        display:flex;
+        flex-direction:column;
+      }
+      .apf-faepa-access-modal .apf-assign-modal__body{
+        flex:1 1 auto;
+        min-height:0;
+      }
+      .apf-faepa-access-section{
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+        margin-bottom:16px;
+      }
+      .apf-faepa-access-section:last-child{
+        margin-bottom:0;
+      }
+      .apf-faepa-access-section__title{
+        margin:0;
+        font-size:14px;
+        font-weight:700;
+        color:var(--apf-text);
+      }
       .apf-director-list__body{
         display:flex;
         flex-direction:column;
@@ -3123,7 +3469,14 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         .apf-director-list-modal .apf-assign-modal__dialog{
           max-height:calc(100vh - 20px);
         }
+        .apf-faepa-access-modal .apf-assign-modal__dialog{
+          max-width:100%;
+          max-height:calc(100vh - 20px);
+        }
         .apf-director-list-modal .apf-assign-modal__body{
+          padding:16px;
+        }
+        .apf-faepa-access-modal .apf-assign-modal__body{
           padding:16px;
         }
         .apf-director-list__body{
@@ -3187,6 +3540,7 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         border:1px solid var(--apf-border);
         border-radius:var(--apf-radius);
         background:var(--apf-soft);
+        position:relative;
       }
       .apf-directors__head{
         display:flex;
@@ -3196,6 +3550,7 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         text-align:center;
         gap:12px;
         flex-wrap:wrap;
+        position:relative;
       }
       .apf-directors__head-actions{
         display:flex;
@@ -3203,6 +3558,58 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         gap:8px;
         justify-content:center;
         width:100%;
+        position:relative;
+      }
+      .apf-directors__faepa-link{
+        border:none;
+        background:transparent;
+        padding:0;
+        font-size:12px;
+        font-weight:700;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:var(--apf-muted);
+        cursor:pointer;
+        margin-right:10px;
+        position:relative;
+      }
+      .apf-directors__faepa-badge{
+        position:absolute;
+        top:-15px;
+        left:-10px;
+        min-width:14px;
+        height:14px;
+        padding:0 3px;
+        border-radius:999px;
+        background:#ef4444;
+        color:#fff;
+        font-size:10px;
+        font-weight:700;
+        line-height:14px;
+        display:none;
+        align-items:center;
+        justify-content:center;
+        pointer-events:none;
+      }
+      .apf-directors__faepa-badge.is-visible{
+        display:inline-flex;
+      }
+      .apf-directors__faepa-link:hover,
+      .apf-directors__faepa-link:focus{
+        color:var(--apf-text);
+        outline:none;
+        text-decoration:underline;
+        text-decoration-thickness:2px;
+        text-underline-offset:4px;
+      }
+      .apf-directors__head-divider{
+        position:absolute;
+        width:1px;
+        top:0;
+        bottom:0;
+        background:#ffffff;
+        opacity:.9;
+        pointer-events:none;
       }
       @media(min-width:781px){
         .apf-directors__head{
@@ -3214,6 +3621,18 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         .apf-directors__head-actions{
           width:auto;
           justify-content:flex-end;
+        }
+      }
+      @media(max-width:926px){
+        .apf-directors__head{
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          text-align:center;
+        }
+        .apf-directors__head-actions{
+          width:100%;
+          justify-content:center;
         }
       }
       .apf-directors__head h2{
@@ -4132,6 +4551,16 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
           padding:5px 10px;
           font-size:12px;
           white-space:nowrap;
+        }
+        .apf-directors__head-actions{
+          flex-wrap:wrap;
+          gap:12px;
+        }
+        .apf-directors__head-divider{
+          height:44%;
+          top:0;
+          bottom:auto;
+          transform:none;
         }
       }
       @media(max-width:330px){
@@ -5646,19 +6075,52 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
       const directorListSearch = $('#apfDirectorListSearch');
       const directorListBody = $('#apfDirectorListBody');
       let directorListLastFocus = null;
+      const faepaAccessBtn = $('#apfFaepaAccessBtn');
+      const faepaAccessModal = $('#apfFaepaAccessModal');
+      const faepaAccessCloseTriggers = faepaAccessModal ? $$('[data-faepa-access-close]', faepaAccessModal) : [];
+      const faepaAccessSearch = $('#apfFaepaAccessSearch');
+      const faepaAccessBody = $('#apfFaepaAccessBody');
+      const faepaAccessBadge = $('#apfFaepaAccessBadge');
+      const faepaAccessAjaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
+      const faepaAccessAjaxNonce = <?php echo wp_json_encode( wp_create_nonce( 'apf_faepa_access_poll' ) ); ?>;
+      let faepaAccessListHash = faepaAccessBody ? (faepaAccessBody.getAttribute('data-faepa-hash') || '') : '';
+      let faepaAccessPendingCount = faepaAccessBody ? parseInt(faepaAccessBody.getAttribute('data-faepa-pending') || '0', 10) : 0;
+      let faepaAccessPollTimer = null;
+      let faepaAccessPollBusy = false;
+      let faepaAccessLastFocus = null;
+      const directorsSection = $('.apf-directors');
+      const directorsHead = directorsSection ? directorsSection.querySelector('.apf-directors__head') : null;
+      const directorsHeadActions = directorsHead ? directorsHead.querySelector('.apf-directors__head-actions') : null;
+      const faepaDivider = directorsHeadActions ? directorsHeadActions.querySelector('.apf-directors__head-divider') : null;
       const assignNoteCloseTriggers = assignNoteModal ? $$('[data-note-close]', assignNoteModal) : [];
       let assignModalLastFocus = null;
       let assignNoteLastFocus = null;
       const assignSelected = new Set();
       let assignMode = false;
       let activeCoordinatorKey = directorSelect ? (directorSelect.value || '') : '';
-      const noticeParams = ['apf_dir_notice','apf_dir_status','apf_sched_notice','apf_sched_status','apf_assign_notice','apf_assign_status'];
+      const noticeParams = ['apf_dir_notice','apf_dir_status','apf_faepa_access_notice','apf_faepa_access_status','apf_sched_notice','apf_sched_status','apf_assign_notice','apf_assign_status'];
       const dismissNotices = () => {
         $$('.apf-directors__notice, .apf-notice').forEach(node=>{
           if(node && node.parentNode){
             node.parentNode.removeChild(node);
           }
         });
+      };
+      const autoHideNotices = () => {
+        const notices = $$('.apf-directors__notice, .apf-notice');
+        if(!notices.length){ return; }
+        setTimeout(()=>{
+          notices.forEach(node=>{
+            if(!node){ return; }
+            node.style.opacity = '0';
+            node.style.transform = 'translateY(-6px)';
+            setTimeout(()=>{
+              if(node && node.parentNode){
+                node.parentNode.removeChild(node);
+              }
+            }, 320);
+          });
+        }, 5000);
       };
       const autoCleanNotices = () => {
         if(window.history.replaceState){
@@ -5679,6 +6141,9 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         }
       };
       autoCleanNotices();
+      autoHideNotices();
+      positionFaepaDivider();
+      window.addEventListener('resize', positionFaepaDivider);
       const noticeForms = $$('.apf-directors__form, .apf-directors__item, #apfSchedulerForm, #apfSchedulerEditForm');
       noticeForms.forEach(form=>{
         if(!form){ return; }
@@ -5777,6 +6242,23 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         updateAssignActions();
       }
 
+      function getMarginRight(node){
+        if(!node || !window.getComputedStyle){ return 10; }
+        const styles = window.getComputedStyle(node);
+        const raw = (styles.marginRight || '').toString().trim();
+        const parsed = parseFloat(raw);
+        return Number.isFinite(parsed) ? parsed : 10;
+      }
+
+      function positionFaepaDivider(){
+        if(!directorsHeadActions || !faepaAccessBtn || !faepaDivider){ return; }
+        const sectionRect = directorsHeadActions.getBoundingClientRect();
+        const btnRect = faepaAccessBtn.getBoundingClientRect();
+        const offset = getMarginRight(faepaAccessBtn);
+        const left = (btnRect.right - sectionRect.left) + offset;
+        faepaDivider.style.left = left + 'px';
+      }
+
       function openDirectorModal(){
         if(!directorModal){ return; }
         directorModalLastFocus = document.activeElement;
@@ -5847,6 +6329,150 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         if(focusBack && directorListLastFocus){
           directorListLastFocus.focus();
         }
+      }
+
+      function openFaepaAccessModal(){
+        if(!faepaAccessModal){ return; }
+        faepaAccessLastFocus = document.activeElement;
+        faepaAccessModal.setAttribute('aria-hidden','false');
+        document.body.style.overflow = 'hidden';
+        const focusable = faepaAccessModal.querySelector('input, button, select, textarea') || faepaAccessModal;
+        focusable.focus();
+        refreshFaepaAccessList();
+      }
+
+      function closeFaepaAccessModal(focusBack = true){
+        if(!faepaAccessModal){ return; }
+        faepaAccessModal.setAttribute('aria-hidden','true');
+        document.body.style.overflow = '';
+        if(focusBack && faepaAccessLastFocus){
+          faepaAccessLastFocus.focus();
+        }
+      }
+
+      function updateFaepaAccessBadge(count){
+        if(!faepaAccessBadge){ return; }
+        const total = Number.isFinite(Number(count)) ? Math.max(0, parseInt(count, 10)) : 0;
+        if(total > 0){
+          faepaAccessBadge.textContent = total;
+          faepaAccessBadge.classList.add('is-visible');
+        }else{
+          faepaAccessBadge.textContent = '';
+          faepaAccessBadge.classList.remove('is-visible');
+        }
+      }
+
+      function applyFaepaAccessSearch(){
+        if(!faepaAccessSearch || !faepaAccessBody){ return; }
+        const term = norm(faepaAccessSearch.value);
+        $$('.apf-faepa-access-card', faepaAccessBody).forEach(card=>{
+          const inputs = $$('input', card).filter(inp=>inp.type !== 'hidden');
+          const haystack = inputs.map(inp=>norm(inp.value || '')).join(' ');
+          const match = !term || haystack.includes(term);
+          card.style.display = match ? '' : 'none';
+        });
+      }
+
+      function bindFaepaAccessCard(form){
+        if(!form || form.dataset.faepaAccessBound === '1'){ return; }
+        form.dataset.faepaAccessBound = '1';
+        const inputs = $$('input', form).filter(el=>el.type !== 'hidden');
+        const editBtn = form.querySelector('[data-faepa-access-edit]');
+        const deleteBtn = form.querySelector('[data-faepa-access-delete]');
+        const saveBtn = form.querySelector('[data-faepa-access-save]');
+        const cancelBtn = form.querySelector('[data-faepa-access-cancel]');
+        inputs.forEach(inp=>{
+          if(typeof inp.dataset.initialValue === 'undefined'){
+            const initial = inp.getAttribute('data-initial');
+            inp.dataset.initialValue = initial !== null ? initial : inp.value;
+          }
+          inp.disabled = true;
+        });
+        function setEditing(state){
+          inputs.forEach(inp=>{
+            inp.disabled = !state;
+            if(!state){
+              inp.value = inp.dataset.initialValue || inp.value;
+            }
+          });
+          if(editBtn){ editBtn.hidden = state; }
+          if(deleteBtn){ deleteBtn.hidden = state; }
+          if(saveBtn){ saveBtn.hidden = !state; }
+          if(cancelBtn){ cancelBtn.hidden = !state; }
+          if(state && inputs[0]){ inputs[0].focus(); }
+        }
+        if(editBtn){
+          editBtn.addEventListener('click', ()=>setEditing(true));
+        }
+        if(cancelBtn){
+          cancelBtn.addEventListener('click', ()=>setEditing(false));
+        }
+        form.addEventListener('submit', ()=>{
+          inputs.forEach(inp=>{
+            inp.disabled = false;
+            inp.dataset.initialValue = inp.value;
+          });
+        });
+      }
+
+      function bindFaepaAccessCards(){
+        if(!faepaAccessBody){ return; }
+        $$('.apf-faepa-access-card', faepaAccessBody).forEach(bindFaepaAccessCard);
+      }
+
+      function isFaepaAccessEditing(){
+        if(!faepaAccessBody){ return false; }
+        if(faepaAccessBody.querySelector('[data-faepa-access-save]:not([hidden])')){ return true; }
+        return !!faepaAccessBody.querySelector('.apf-faepa-access-card input:not([type="hidden"]):not([disabled])');
+      }
+
+      function refreshFaepaAccessList(){
+        if(!faepaAccessBody || !faepaAccessAjaxUrl || !faepaAccessAjaxNonce || !window.fetch){ return; }
+        if(faepaAccessPollBusy || isFaepaAccessEditing()){ return; }
+        faepaAccessPollBusy = true;
+        const formData = new FormData();
+        formData.append('action', 'apf_faepa_access_list');
+        formData.append('nonce', faepaAccessAjaxNonce);
+        if(faepaAccessListHash){
+          formData.append('hash', faepaAccessListHash);
+        }
+        fetch(faepaAccessAjaxUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: formData
+        })
+          .then(res=>res.json())
+          .then(payload=>{
+            if(!payload || !payload.success || !payload.data){ return; }
+            const data = payload.data;
+            if(typeof data.pending_count !== 'undefined'){
+              faepaAccessPendingCount = parseInt(data.pending_count, 10);
+              updateFaepaAccessBadge(faepaAccessPendingCount);
+              faepaAccessBody.setAttribute('data-faepa-pending', String(isNaN(faepaAccessPendingCount) ? 0 : faepaAccessPendingCount));
+            }
+            if(data.unchanged){ return; }
+            if(data.hash && data.hash === faepaAccessListHash && !data.html){ return; }
+            if(typeof data.html === 'string'){
+              faepaAccessBody.innerHTML = data.html;
+              if(data.hash){
+                faepaAccessListHash = data.hash;
+                faepaAccessBody.setAttribute('data-faepa-hash', data.hash);
+              }
+              bindFaepaAccessCards();
+              applyFaepaAccessSearch();
+            }
+          })
+          .catch(()=>{})
+          .finally(()=>{
+            faepaAccessPollBusy = false;
+          });
+      }
+
+      function startFaepaAccessPolling(){
+        if(!faepaAccessBody || !faepaAccessAjaxUrl || !faepaAccessAjaxNonce || !window.fetch){ return; }
+        if(faepaAccessPollTimer){ return; }
+        refreshFaepaAccessList();
+        faepaAccessPollTimer = setInterval(refreshFaepaAccessList, 8000);
       }
 
       function openAssignModal(){
@@ -5949,6 +6575,32 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         }
       }
 
+      if(faepaAccessBtn){
+        faepaAccessBtn.addEventListener('click', openFaepaAccessModal);
+      }
+      if(faepaAccessCloseTriggers.length){
+        faepaAccessCloseTriggers.forEach(trigger=>{
+          trigger.addEventListener('click', ()=>closeFaepaAccessModal());
+        });
+      }
+      if(faepaAccessModal){
+        faepaAccessModal.addEventListener('keydown', ev=>{
+          if(ev.key === 'Escape'){
+            ev.preventDefault();
+            closeFaepaAccessModal();
+          }
+        });
+        faepaAccessModal.addEventListener('submit', ev=>{
+          const form = ev.target;
+          if(form && form.classList && form.classList.contains('apf-faepa-access-card')){
+            closeFaepaAccessModal(false);
+          }
+        });
+        if(faepaAccessSearch && faepaAccessBody){
+          faepaAccessSearch.addEventListener('input', applyFaepaAccessSearch);
+        }
+      }
+
       if(assignStartBtn){
         assignStartBtn.addEventListener('click', ()=>{
           if(!assignModal){
@@ -5990,6 +6642,11 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
       }
       document.addEventListener('keydown', e=>{
         if(e.key === 'Escape'){
+          if(faepaAccessModal && faepaAccessModal.getAttribute('aria-hidden') === 'false'){
+            e.preventDefault();
+            closeFaepaAccessModal();
+            return;
+          }
           if(directorListModal && directorListModal.getAttribute('aria-hidden') === 'false'){
             e.preventDefault();
             closeDirectorListModal();
@@ -6062,6 +6719,11 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
             });
           });
         });
+      }
+      if(faepaAccessBody){
+        updateFaepaAccessBadge(faepaAccessPendingCount);
+        bindFaepaAccessCards();
+        startFaepaAccessPolling();
       }
       if(assignNoteCancel){
         assignNoteCancel.addEventListener('click', ()=>{

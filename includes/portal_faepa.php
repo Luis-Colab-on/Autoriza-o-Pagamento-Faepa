@@ -503,13 +503,380 @@ if ( ! function_exists( 'apf_faepa_try_autonotify_from_request' ) ) {
 
 if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
     function apf_render_portal_faepa() {
-    if ( ! is_user_logged_in() ) {
+    $is_logged  = is_user_logged_in();
+    $user       = $is_logged ? wp_get_current_user() : null;
+    $user_id    = $is_logged ? get_current_user_id() : 0;
+    $user_login = ( $user && ! empty( $user->user_login ) ) ? sanitize_text_field( (string) $user->user_login ) : '';
+    $user_email = ( $user && ! empty( $user->user_email ) ) ? sanitize_email( (string) $user->user_email ) : '';
+    $user_name  = ( $user && ! empty( $user->display_name ) ) ? sanitize_text_field( (string) $user->display_name ) : $user_login;
+
+    $access_requests = function_exists( 'apf_get_faepa_access_requests' )
+        ? apf_get_faepa_access_requests()
+        : array();
+    if ( function_exists( 'apf_normalize_faepa_access_list' ) ) {
+        $access_requests = apf_normalize_faepa_access_list( $access_requests );
+    }
+
+    $access_index = null;
+    $access_entry = null;
+    if ( function_exists( 'apf_find_faepa_access_request' ) ) {
+        list( $access_index, $access_entry ) = apf_find_faepa_access_request(
+            $access_requests,
+            $user_id,
+            $user_login,
+            $user_email
+        );
+    }
+
+    $access_notice      = '';
+    $access_notice_type = 'success';
+    $access_notice_token = '';
+    if ( isset( $_GET['apf_faepa_access_notice'] ) ) {
+        $access_notice = sanitize_text_field( wp_unslash( $_GET['apf_faepa_access_notice'] ) );
+        if ( isset( $_GET['apf_faepa_access_status'] ) && 'error' === sanitize_text_field( wp_unslash( $_GET['apf_faepa_access_status'] ) ) ) {
+            $access_notice_type = 'error';
+        }
+    }
+    if ( isset( $_GET['apf_faepa_access_token'] ) ) {
+        $access_notice_token = sanitize_text_field( wp_unslash( $_GET['apf_faepa_access_token'] ) );
+    }
+
+    if ( isset( $_POST['apf_faepa_access_request'] ) ) {
+        if ( ! isset( $_POST['apf_faepa_access_request_nonce'] )
+            || ! wp_verify_nonce( wp_unslash( $_POST['apf_faepa_access_request_nonce'] ), 'apf_faepa_access_request' ) ) {
+            $access_notice      = 'Falha de segurança. Recarregue a página e tente novamente.';
+            $access_notice_type = 'error';
+        } else {
+            $name  = isset( $_POST['apf_faepa_request_name'] ) ? sanitize_text_field( wp_unslash( $_POST['apf_faepa_request_name'] ) ) : '';
+            $email = isset( $_POST['apf_faepa_request_email'] ) ? sanitize_email( wp_unslash( $_POST['apf_faepa_request_email'] ) ) : '';
+
+            if ( $is_logged ) {
+                if ( '' === $name ) {
+                    $name = $user_name;
+                }
+                if ( '' === $email ) {
+                    $email = $user_email;
+                }
+            }
+
+            $name  = trim( (string) $name );
+            $email = trim( (string) $email );
+
+            if ( '' === $name || '' === $email ) {
+                $access_notice      = 'Informe nome completo e e-mail para solicitar o acesso.';
+                $access_notice_type = 'error';
+            } elseif ( ! is_email( $email ) ) {
+                $access_notice      = 'Informe um e-mail válido para solicitar o acesso.';
+                $access_notice_type = 'error';
+            } else {
+                $lookup_user  = $is_logged ? $user : null;
+                $lookup_email = '';
+                $lookup_id    = 0;
+
+                if ( ! $lookup_user ) {
+                    $lookup_user = get_user_by( 'email', $email );
+                }
+
+                if ( $lookup_user ) {
+                    $lookup_id    = (int) $lookup_user->ID;
+                    $lookup_email = ! empty( $lookup_user->user_email ) ? sanitize_email( (string) $lookup_user->user_email ) : '';
+                }
+
+                $email_value = $lookup_email ? $lookup_email : $email;
+                $login_key   = strtolower( $email_value );
+                if ( function_exists( 'apf_find_faepa_access_request' ) ) {
+                    list( $access_index, $access_entry ) = apf_find_faepa_access_request(
+                        $access_requests,
+                        $lookup_id ? $lookup_id : $user_id,
+                        $login_key,
+                        $email_value
+                    );
+                }
+
+                if ( $access_entry && isset( $access_entry['status'] ) && 'approved' === $access_entry['status'] ) {
+                    $access_notice      = 'Sua conta já possui acesso aprovado.';
+                    $access_notice_type = 'success';
+                } else {
+                    $timestamp = time();
+                    $payload = array(
+                        'id'           => isset( $access_entry['id'] ) ? $access_entry['id'] : uniqid( 'faepa_access_' ),
+                        'name'         => $name,
+                        'login'        => $login_key,
+                        'email'        => strtolower( $email_value ),
+                        'user_id'      => $lookup_id ? $lookup_id : $user_id,
+                        'status'       => 'pending',
+                        'requested_at' => isset( $access_entry['requested_at'] ) ? (int) $access_entry['requested_at'] : $timestamp,
+                        'updated_at'   => $timestamp,
+                        'source'       => $is_logged ? 'portal' : 'portal_guest',
+                    );
+
+                    if ( null !== $access_index && isset( $access_requests[ $access_index ] ) ) {
+                        $access_requests[ $access_index ] = array_merge( $access_requests[ $access_index ], $payload );
+                    } else {
+                        $access_requests[] = $payload;
+                    }
+
+                    if ( function_exists( 'apf_store_faepa_access_requests' ) ) {
+                        apf_store_faepa_access_requests( $access_requests );
+                    }
+
+                    $access_notice      = 'Solicitação enviada. Aguarde a liberação do financeiro.';
+                    $access_notice_type = 'success';
+                    $access_notice_token = uniqid( 'faepa_', true );
+                }
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_faepa_access_notice', 'apf_faepa_access_status' ), $target );
+        $target_args = array(
+            'apf_faepa_access_notice' => $access_notice,
+            'apf_faepa_access_status' => ( 'error' === $access_notice_type ) ? 'error' : 'success',
+        );
+        if ( '' !== $access_notice_token ) {
+            $target_args['apf_faepa_access_token'] = $access_notice_token;
+        }
+        $target = add_query_arg( $target_args, $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
+    $has_access = false;
+    if ( $is_logged && function_exists( 'apf_user_has_faepa_access' ) ) {
+        $has_access = apf_user_has_faepa_access( $user_id, $user_login, $user_email );
+    }
+
+    if ( ! $has_access ) {
+        $status_message = 'Informe seus dados para solicitar acesso ao Portal FAEPA.';
+        $status_class   = 'info';
+        $blocked_message = '';
+        $show_form = true;
+
+        if ( $is_logged && $access_entry && isset( $access_entry['status'] ) ) {
+            $current_status = strtolower( (string) $access_entry['status'] );
+            switch ( $current_status ) {
+                case 'approved':
+                    $status_class   = 'approved';
+                    $status_message = 'Seu acesso já foi liberado. Recarregue a página para entrar.';
+                    $show_form      = false;
+                    break;
+                case 'pending':
+                    $status_class   = 'pending';
+                    $status_message = 'Solicitação enviada. Aguarde a aprovação do financeiro.';
+                    $blocked_message = 'Assim que o financeiro liberar sua conta, o portal ficará disponível automaticamente.';
+                    $show_form      = false;
+                    break;
+                case 'rejected':
+                    $status_class   = 'rejected';
+                    $status_message = 'Solicitação recusada. Revise os dados e envie novamente.';
+                    break;
+                default:
+                    $status_class   = 'info';
+                    $status_message = 'Informe seus dados para solicitar acesso ao Portal FAEPA.';
+                    break;
+            }
+        } elseif ( ! $is_logged ) {
+            $status_message = 'Solicite o acesso com seu nome completo e e-mail.';
+            $status_class   = 'info';
+        }
+
+        $prefill_name  = $is_logged ? $user_name : '';
+        $prefill_email = $is_logged ? $user_email : '';
+        $access_notice_autohide = ( 'Solicitação enviada. Aguarde a liberação do financeiro.' === $access_notice );
+        $access_notice_token_attr = $access_notice_autohide ? $access_notice_token : '';
+        if ( $access_notice_autohide && '' === $access_notice_token_attr && $access_entry && isset( $access_entry['requested_at'] ) ) {
+            $access_notice_token_attr = (string) (int) $access_entry['requested_at'];
+        }
+        $status_autohide = ( 'Solicitação recusada. Revise os dados e envie novamente.' === $status_message );
+        $status_autohide_token = '';
+        if ( $status_autohide && $access_entry ) {
+            if ( ! empty( $access_entry['status_updated_at'] ) ) {
+                $status_autohide_token = (string) (int) $access_entry['status_updated_at'];
+            } elseif ( ! empty( $access_entry['updated_at'] ) ) {
+                $status_autohide_token = (string) (int) $access_entry['updated_at'];
+            } elseif ( ! empty( $access_entry['requested_at'] ) ) {
+                $status_autohide_token = (string) (int) $access_entry['requested_at'];
+            }
+        }
         $redirect = isset( $_SERVER['REQUEST_URI'] ) ? esc_url( $_SERVER['REQUEST_URI'] ) : home_url();
-        return apf_render_login_card( array(
-            'redirect'    => $redirect,
-            'title'       => 'Portal FAEPA',
-            'description' => 'Faça login para ver todos os avisos programados para colaboradores e coordenadores.',
-        ) );
+        $should_poll_access = false;
+        if ( $is_logged && $access_entry && isset( $access_entry['status'] ) ) {
+            $should_poll_access = ( 'pending' === strtolower( (string) $access_entry['status'] ) );
+        }
+
+        ob_start();
+        ?>
+        <div class="apf-faepa-access">
+          <div class="apf-faepa-access__grid">
+            <div class="apf-faepa-access__card">
+              <span class="apf-faepa-access__badge">Portal FAEPA</span>
+              <h2>Solicitar acesso</h2>
+              <p>O portal é restrito e precisa de aprovação do financeiro.</p>
+
+              <?php if ( $access_notice ) : ?>
+                <div class="apf-faepa-access__notice apf-faepa-access__notice--<?php echo esc_attr( $access_notice_type ); ?>" <?php echo $access_notice_autohide ? 'data-autohide="1"' : ''; ?><?php echo ( $access_notice_autohide && '' !== $access_notice_token_attr ) ? ' data-autohide-token="' . esc_attr( $access_notice_token_attr ) . '"' : ''; ?>>
+                  <?php echo esc_html( $access_notice ); ?>
+                </div>
+              <?php endif; ?>
+
+              <?php if ( $status_message ) : ?>
+                <div class="apf-faepa-access__status apf-faepa-access__status--<?php echo esc_attr( $status_class ); ?>" <?php echo $status_autohide ? 'data-autohide="1"' : ''; ?><?php echo ( $status_autohide && '' !== $status_autohide_token ) ? ' data-autohide-token="' . esc_attr( $status_autohide_token ) . '"' : ''; ?>>
+                  <?php echo esc_html( $status_message ); ?>
+                </div>
+              <?php endif; ?>
+
+              <?php if ( $blocked_message ) : ?>
+                <p class="apf-faepa-access__blocked"><?php echo esc_html( $blocked_message ); ?></p>
+              <?php endif; ?>
+
+              <?php if ( $show_form ) : ?>
+                <form method="post" class="apf-faepa-access__form">
+                  <?php wp_nonce_field( 'apf_faepa_access_request', 'apf_faepa_access_request_nonce' ); ?>
+                  <input type="hidden" name="apf_faepa_access_request" value="1">
+                  <label>Nome completo
+                    <input type="text" name="apf_faepa_request_name" required value="<?php echo esc_attr( $prefill_name ); ?>" placeholder="Seu nome completo">
+                  </label>
+                  <label>E-mail
+                    <input type="email" name="apf_faepa_request_email" required value="<?php echo esc_attr( $prefill_email ); ?>" placeholder="seu@email.com">
+                  </label>
+                  <button type="submit" class="apf-faepa-access__submit">Enviar solicitação</button>
+                </form>
+              <?php endif; ?>
+            </div>
+
+            <?php if ( ! $is_logged ) : ?>
+              <div class="apf-faepa-access__login">
+                <?php echo apf_render_login_card( array(
+                    'redirect'    => $redirect,
+                    'title'       => 'Acesse sua conta',
+                    'description' => 'Entre com seu usuário WordPress para acompanhar a aprovação.',
+                ) ); ?>
+              </div>
+            <?php endif; ?>
+          </div>
+        </div>
+        <style>
+          .apf-faepa-access{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:980px;margin:36px auto;padding:0 16px;color:#0f172a;box-sizing:border-box}
+          .apf-faepa-access__grid{display:flex;flex-direction:column;gap:20px;align-items:center;justify-content:center}
+          .apf-faepa-access__card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:24px;box-shadow:0 18px 36px rgba(15,23,42,.08);width:100%;max-width:520px}
+          .apf-faepa-access__badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:rgba(14,165,233,.12);color:#075985;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+          .apf-faepa-access__card h2{margin:10px 0 6px;font-size:22px;text-align:center}
+          .apf-faepa-access__card p{margin:0 0 10px;font-size:13px;color:#475467}
+          .apf-faepa-access__notice{margin:12px 0;padding:10px 12px;border-radius:12px;border:1px solid #bae6fd;background:#f0f9ff;font-size:13px}
+          .apf-faepa-access__notice--error{border-color:#fecaca;background:#fef2f2;color:#991b1b}
+          .apf-faepa-access__notice--success{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
+          .apf-faepa-access__status{margin-top:10px;padding:10px 12px;border-radius:12px;font-size:13px;border:1px solid #e2e8f0;background:#f8fafc}
+          .apf-faepa-access__status--approved{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
+          .apf-faepa-access__status--pending{border-color:#fde68a;background:#fef9c3;color:#92400e}
+          .apf-faepa-access__status--rejected{border-color:#fecaca;background:#fef2f2;color:#991b1b}
+          .apf-faepa-access__status--info{border-color:#bfdbfe;background:#eff6ff;color:#1d4ed8}
+          .apf-faepa-access__blocked{margin:10px 0 0;font-size:13px;color:#475467}
+          .apf-faepa-access__form{margin-top:14px;display:grid;gap:12px}
+          .apf-faepa-access__form label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:#1f2937}
+          .apf-faepa-access__form input{border:1px solid #d0d5dd;border-radius:12px;padding:10px 12px;font-size:14px;transition:border-color .15s ease, box-shadow .15s ease}
+          .apf-faepa-access__form input:focus{border-color:#0ea5e9;box-shadow:0 0 0 3px rgba(14,165,233,.18);outline:none}
+          .apf-faepa-access__submit{border:none;border-radius:12px;padding:12px 16px;font-size:14px;font-weight:700;background:#0ea5e9;color:#fff;cursor:pointer;transition:background .15s ease, box-shadow .15s ease}
+          .apf-faepa-access__submit:hover{background:#0284c7;box-shadow:0 12px 24px rgba(2,132,199,.2)}
+          .apf-faepa-access__login{width:100%;max-width:420px}
+          .apf-faepa-access__login .apf-login-card{margin:0;box-shadow:0 18px 36px rgba(15,23,42,.12)}
+          @media(min-width:980px){
+            .apf-faepa-access__grid{flex-direction:row;align-items:flex-start;justify-content:center}
+          }
+          @media(max-width:640px){
+            .apf-faepa-access__card{padding:20px}
+          }
+        </style>
+        <script>
+          (function(){
+            var nodes = document.querySelectorAll('.apf-faepa-access [data-autohide="1"]');
+            if(!nodes.length){ return; }
+            function cleanUrl(){
+              if(!window.history || !window.history.replaceState){ return; }
+              try{
+                var url = new URL(window.location.href);
+                var dirty = false;
+                ['apf_faepa_access_notice','apf_faepa_access_status','apf_faepa_access_token'].forEach(function(param){
+                  if(url.searchParams.has(param)){
+                    url.searchParams.delete(param);
+                    dirty = true;
+                  }
+                });
+                if(dirty){
+                  var cleanUrl = url.pathname + (url.search ? url.search : '') + url.hash;
+                  window.history.replaceState({}, document.title, cleanUrl);
+                }
+              }catch(_err){}
+            }
+            function storageAvailable(){
+              try{
+                var key = '__apf_test__';
+                localStorage.setItem(key, '1');
+                localStorage.removeItem(key);
+                return true;
+              }catch(_err){
+                return false;
+              }
+            }
+            var canStore = storageAvailable();
+            nodes.forEach(function(node){
+              if(!node){ return; }
+              var token = node.getAttribute('data-autohide-token') || (node.textContent || '').trim();
+              var storageKey = token ? ('apf_faepa_autohide_' + encodeURIComponent(token)) : '';
+              if(canStore && storageKey && localStorage.getItem(storageKey)){
+                node.style.display = 'none';
+                cleanUrl();
+                return;
+              }
+              setTimeout(function(){
+                node.style.display = 'none';
+                if(canStore && storageKey){
+                  localStorage.setItem(storageKey, '1');
+                }
+                cleanUrl();
+              }, 5000);
+            });
+          })();
+          (function(){
+            var shouldPoll = <?php echo wp_json_encode( $should_poll_access ); ?>;
+            if(!shouldPoll || !window.fetch){ return; }
+            var ajaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
+            var nonce = <?php echo wp_json_encode( wp_create_nonce( 'apf_faepa_access_status' ) ); ?>;
+            var inFlight = false;
+            function pollAccess(){
+              if(inFlight){ return; }
+              inFlight = true;
+              var formData = new FormData();
+              formData.append('action', 'apf_faepa_access_status');
+              formData.append('nonce', nonce);
+              fetch(ajaxUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: formData
+              })
+                .then(function(res){ return res.json(); })
+                .then(function(payload){
+                  if(payload && payload.success && payload.data && payload.data.has_access){
+                    window.location.reload();
+                  }
+                })
+                .catch(function(){})
+                .finally(function(){
+                  inFlight = false;
+                });
+            }
+            pollAccess();
+            setInterval(pollAccess, 8000);
+          })();
+        </script>
+        <?php
+        return ob_get_clean();
     }
 
     if ( class_exists( 'Faepa_Chatbox' ) && function_exists( 'wp_add_inline_script' ) ) {

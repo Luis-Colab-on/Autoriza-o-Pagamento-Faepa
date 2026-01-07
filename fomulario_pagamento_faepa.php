@@ -743,6 +743,268 @@ if ( ! function_exists( 'apf_add_coordinator_requests' ) ) {
     }
 }
 
+if ( ! function_exists( 'apf_get_faepa_access_requests' ) ) {
+    /**
+     * Recupera as solicitações de acesso ao portal FAEPA.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    function apf_get_faepa_access_requests() {
+        $requests = get_option( 'apf_faepa_access_requests', array() );
+        return is_array( $requests ) ? $requests : array();
+    }
+}
+
+if ( ! function_exists( 'apf_store_faepa_access_requests' ) ) {
+    /**
+     * Salva a lista completa de acessos FAEPA.
+     *
+     * @param array $requests
+     */
+    function apf_store_faepa_access_requests( $requests ) {
+        if ( ! is_array( $requests ) ) {
+            $requests = array();
+        }
+        update_option( 'apf_faepa_access_requests', array_values( $requests ), false );
+    }
+}
+
+if ( ! function_exists( 'apf_normalize_faepa_access_list' ) ) {
+    /**
+     * Normaliza lista de acessos FAEPA para conter status e chaves consistentes.
+     *
+     * @param array $requests
+     * @return array<int,array<string,mixed>>
+     */
+    function apf_normalize_faepa_access_list( $requests ) {
+        if ( ! is_array( $requests ) ) {
+            return array();
+        }
+
+        $normalized = array();
+        foreach ( $requests as $entry ) {
+            if ( ! is_array( $entry ) ) {
+                continue;
+            }
+
+            $status = isset( $entry['status'] ) ? strtolower( trim( (string) $entry['status'] ) ) : '';
+            if ( ! in_array( $status, array( 'approved', 'pending', 'rejected' ), true ) ) {
+                $status = 'pending';
+            }
+
+            $entry['id']     = isset( $entry['id'] ) ? sanitize_text_field( (string) $entry['id'] ) : '';
+            $entry['name']   = isset( $entry['name'] ) ? sanitize_text_field( (string) $entry['name'] ) : '';
+            $entry['login']  = isset( $entry['login'] ) ? strtolower( trim( (string) $entry['login'] ) ) : '';
+            $entry['email']  = isset( $entry['email'] ) ? strtolower( trim( sanitize_email( (string) $entry['email'] ) ) ) : '';
+            $entry['user_id']= isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0;
+            $entry['status']= $status;
+
+            if ( '' === $entry['id'] ) {
+                $entry['id'] = uniqid( 'faepa_access_' );
+            }
+
+            $normalized[] = $entry;
+        }
+
+        return $normalized;
+    }
+}
+
+if ( ! function_exists( 'apf_find_faepa_access_request' ) ) {
+    /**
+     * Localiza uma solicitacao de acesso por user_id, login ou email.
+     *
+     * @param array  $requests
+     * @param int    $user_id
+     * @param string $login
+     * @param string $email
+     * @return array{0:int|null,1:array<string,mixed>|null}
+     */
+    function apf_find_faepa_access_request( $requests, $user_id = 0, $login = '', $email = '' ) {
+        $requests = apf_normalize_faepa_access_list( $requests );
+        $user_id  = (int) $user_id;
+        $login    = strtolower( trim( (string) $login ) );
+        $email    = strtolower( trim( (string) $email ) );
+
+        foreach ( $requests as $idx => $entry ) {
+            $entry_user_id = isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0;
+            $entry_login   = isset( $entry['login'] ) ? strtolower( trim( (string) $entry['login'] ) ) : '';
+            $entry_email   = isset( $entry['email'] ) ? strtolower( trim( (string) $entry['email'] ) ) : '';
+
+            if ( $user_id > 0 && $entry_user_id === $user_id ) {
+                return array( $idx, $entry );
+            }
+            if ( '' !== $login && '' !== $entry_login && $login === $entry_login ) {
+                return array( $idx, $entry );
+            }
+            if ( '' !== $email && '' !== $entry_email && $email === $entry_email ) {
+                return array( $idx, $entry );
+            }
+        }
+
+        return array( null, null );
+    }
+}
+
+if ( ! function_exists( 'apf_user_has_faepa_access' ) ) {
+    /**
+     * Verifica se o usuário possui acesso aprovado ao portal FAEPA.
+     *
+     * @param int    $user_id
+     * @param string $login
+     * @param string $email
+     * @return bool
+     */
+    function apf_user_has_faepa_access( $user_id = 0, $login = '', $email = '' ) {
+        if ( function_exists( 'apf_user_is_finance' ) && apf_user_is_finance( $user_id ) ) {
+            return true;
+        }
+
+        $user_id = (int) $user_id;
+        if ( $user_id <= 0 ) {
+            $user = wp_get_current_user();
+            if ( $user && ! empty( $user->ID ) ) {
+                $user_id = (int) $user->ID;
+                if ( '' === $login && ! empty( $user->user_login ) ) {
+                    $login = $user->user_login;
+                }
+                if ( '' === $email && ! empty( $user->user_email ) ) {
+                    $email = $user->user_email;
+                }
+            }
+        }
+
+        if ( $user_id <= 0 && '' === trim( (string) $login ) && '' === trim( (string) $email ) ) {
+            return false;
+        }
+
+        $requests = apf_get_faepa_access_requests();
+        $requests = apf_normalize_faepa_access_list( $requests );
+        foreach ( $requests as $entry ) {
+            $status = isset( $entry['status'] ) ? strtolower( (string) $entry['status'] ) : '';
+            if ( 'approved' !== $status ) {
+                continue;
+            }
+            $entry_user_id = isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0;
+            $entry_login   = isset( $entry['login'] ) ? strtolower( trim( (string) $entry['login'] ) ) : '';
+            $entry_email   = isset( $entry['email'] ) ? strtolower( trim( (string) $entry['email'] ) ) : '';
+
+            if ( $user_id > 0 && $entry_user_id === $user_id ) {
+                return true;
+            }
+            if ( '' !== $login && '' !== $entry_login && strtolower( $login ) === $entry_login ) {
+                return true;
+            }
+            if ( '' !== $email && '' !== $entry_email && strtolower( $email ) === $entry_email ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+if ( ! function_exists( 'apf_ajax_faepa_access_list' ) ) {
+    /**
+     * Retorna lista de solicitações FAEPA para atualização em tempo real no portal financeiro.
+     */
+    function apf_ajax_faepa_access_list() {
+        if ( ! function_exists( 'apf_user_is_finance' ) || ! apf_user_is_finance() ) {
+            wp_send_json_error( array( 'message' => 'Acesso negado.' ), 403 );
+        }
+
+        check_ajax_referer( 'apf_faepa_access_poll', 'nonce' );
+
+        $requests = function_exists( 'apf_get_faepa_access_requests' )
+            ? apf_get_faepa_access_requests()
+            : array();
+        if ( function_exists( 'apf_normalize_faepa_access_list' ) ) {
+            $requests = apf_normalize_faepa_access_list( $requests );
+        }
+        if ( function_exists( 'apf_sort_faepa_access_list' ) ) {
+            $requests = apf_sort_faepa_access_list( $requests );
+        }
+
+        $pending_count = 0;
+        if ( ! empty( $requests ) ) {
+            foreach ( $requests as $entry ) {
+                $status = isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'pending';
+                if ( 'pending' === $status ) {
+                    $pending_count++;
+                }
+            }
+        }
+
+        $encoded = wp_json_encode( $requests );
+        $hash    = is_string( $encoded ) ? md5( $encoded ) : md5( serialize( $requests ) );
+        $client_hash = isset( $_POST['hash'] ) ? sanitize_text_field( wp_unslash( $_POST['hash'] ) ) : '';
+        if ( '' !== $client_hash && $client_hash === $hash ) {
+            wp_send_json_success( array(
+                'hash'          => $hash,
+                'unchanged'     => true,
+                'pending_count' => $pending_count,
+            ) );
+        }
+
+        $html = function_exists( 'apf_render_faepa_access_cards' )
+            ? apf_render_faepa_access_cards( $requests )
+            : '';
+        wp_send_json_success( array(
+            'hash'          => $hash,
+            'html'          => $html,
+            'pending_count' => $pending_count,
+        ) );
+    }
+}
+
+if ( ! function_exists( 'apf_ajax_faepa_access_status' ) ) {
+    /**
+     * Verifica status de acesso FAEPA para liberar o portal sem recarregar manualmente.
+     */
+    function apf_ajax_faepa_access_status() {
+        check_ajax_referer( 'apf_faepa_access_status', 'nonce' );
+
+        $user_id = get_current_user_id();
+        if ( $user_id <= 0 ) {
+            wp_send_json_error( array( 'message' => 'Usuário não autenticado.' ), 401 );
+        }
+
+        $user = wp_get_current_user();
+        $user_login = ( $user && ! empty( $user->user_login ) ) ? $user->user_login : '';
+        $user_email = ( $user && ! empty( $user->user_email ) ) ? $user->user_email : '';
+
+        $has_access = function_exists( 'apf_user_has_faepa_access' )
+            ? apf_user_has_faepa_access( $user_id, $user_login, $user_email )
+            : false;
+
+        $status = '';
+        $updated_at = 0;
+        if ( function_exists( 'apf_find_faepa_access_request' ) ) {
+            $requests = function_exists( 'apf_get_faepa_access_requests' )
+                ? apf_get_faepa_access_requests()
+                : array();
+            list( $idx, $entry ) = apf_find_faepa_access_request( $requests, $user_id, $user_login, $user_email );
+            if ( $entry ) {
+                $status = isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : '';
+                if ( ! empty( $entry['status_updated_at'] ) ) {
+                    $updated_at = (int) $entry['status_updated_at'];
+                } elseif ( ! empty( $entry['updated_at'] ) ) {
+                    $updated_at = (int) $entry['updated_at'];
+                }
+            }
+        }
+
+        wp_send_json_success( array(
+            'has_access' => $has_access,
+            'status'     => $status,
+            'updated_at' => $updated_at,
+        ) );
+    }
+}
+
+add_action( 'wp_ajax_apf_faepa_access_list', 'apf_ajax_faepa_access_list' );
+add_action( 'wp_ajax_apf_faepa_access_status', 'apf_ajax_faepa_access_status' );
+
 if ( ! function_exists( 'apf_set_coordinator_request_status' ) ) {
     /**
      * Atualiza o status de uma solicitação específica.
