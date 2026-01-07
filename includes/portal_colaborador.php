@@ -6,10 +6,17 @@ if ( ! defined('ABSPATH') ) { exit; }
  * – Portal do prestador com EDIÇÃO via POST (sem AJAX, sem modal)
  * – Puxa dados do Admin (CPT apf_submission) e atualiza os mesmos metadados
  */
-add_shortcode('apf_portal', function($atts){
-    $a = shortcode_atts([
-        'form_url' => '',
-    ], $atts, 'apf_portal');
+if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
+    function apf_render_portal_colaborador( $atts = array() ) {
+        $a = shortcode_atts([
+            'form_url' => '',
+        ], $atts, 'apf_portal');
+        if ( '' === $a['form_url'] ) {
+            $form_page_id = (int) get_option( 'apf_form_page_id' );
+            if ( $form_page_id > 0 ) {
+                $a['form_url'] = get_permalink( $form_page_id );
+            }
+        }
 
     if ( ! is_user_logged_in() ) {
         $redirect = isset($_SERVER['REQUEST_URI']) ? esc_url( $_SERVER['REQUEST_URI'] ) : home_url();
@@ -323,7 +330,9 @@ add_shortcode('apf_portal', function($atts){
       </div>
 
       <div class="apf-panel apf-panel--calendar" style="margin-top:16px">
-        <div class="apf-portal-calendar__label">Agenda financeira</div>
+      <div class="apf-portal-calendar__label">
+          <span>Agenda financeira</span>
+        </div>
         <div class="apf-portal-calendar" id="apfPortalCalendar" data-events="<?php echo $portal_calendar_attr; ?>">
           <div class="apf-portal-calendar__body"></div>
         </div>
@@ -519,7 +528,18 @@ add_shortcode('apf_portal', function($atts){
         --apf-ink:#0f172a;
         --apf-focus:0 0 0 3px rgba(18,87,145,.18),0 0 0 6px var(--apf-accent-soft);
         color:var(--apf-ink);
-        background:rgba(18,87,145,.05);
+        background:#fff;
+        padding:clamp(14px,2vw,26px);
+        box-sizing:border-box;
+        max-width:none !important;
+        width:100%;
+      }
+      .apf-portal > :not(.apf-portal-modal){
+        max-width:1280px;
+        margin-left:auto;
+        margin-right:auto;
+        width:100%;
+        box-sizing:border-box;
       }
       .apf-notice{margin:10px 0;padding:12px 14px;border-radius:12px;font-weight:600}
       .apf-notice-success{background:rgba(18,87,145,.12);border:1px solid rgba(18,87,145,.45);color:#0f2e4d}
@@ -550,7 +570,7 @@ add_shortcode('apf_portal', function($atts){
       .apf-panel{background:#fff;border:1px solid var(--apf-border);border-radius:14px;padding:16px 18px;box-shadow:0 10px 30px rgba(15,23,42,.08)}
       .apf-panel h3{margin:0 0 12px;font-size:18px;color:var(--apf-ink)}
       .apf-panel--calendar{display:flex;flex-direction:column;align-items:center}
-      #apf-edit{position:relative;overflow:hidden;padding:22px 22px 18px;max-width:1040px;margin-left:auto;margin-right:auto}
+      #apf-edit{position:relative;overflow:hidden;padding:22px 22px 18px;max-width:1280px;margin-left:auto;margin-right:auto}
       #apf-edit::before,
       #apf-edit::after{content:"";position:absolute;border-radius:999px;filter:blur(12px);opacity:.18;pointer-events:none}
       #apf-edit::before{width:200px;height:200px;background:radial-gradient(circle,rgba(18,87,145,.35),transparent 65%);top:-60px;right:-40px}
@@ -562,7 +582,7 @@ add_shortcode('apf_portal', function($atts){
       #apf-edit .apf-tabs button.is-active{background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));color:#fff;border-color:rgba(18,87,145,.6);box-shadow:0 12px 22px rgba(18,87,145,.2)}
       #apf-edit .apf-pane{display:none;border:1px solid rgba(18,87,145,.14);background:#fff;border-radius:14px;padding:18px 16px;box-shadow:0 12px 28px rgba(15,23,42,.08)}
       #apf-edit .apf-pane.is-active{display:block;animation:apfFadeUp .2s ease}
-      #apf-edit .apf-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+      #apf-edit .apf-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
       #apf-edit .apf-grid label{border-color:rgba(18,87,145,.18);background:linear-gradient(135deg,#fff,rgba(18,87,145,.02));box-shadow:inset 0 1px 0 #fff,0 10px 18px rgba(15,23,42,.06);min-width:0}
       #apf-edit .apf-grid input,
       #apf-edit .apf-grid textarea,
@@ -654,10 +674,10 @@ add_shortcode('apf_portal', function($atts){
       .apf-panel .apf-actions .apf-prev:hover{background:#f5f5f5;box-shadow:none;transform:none}
       .apf-field-note{display:block;font-size:12px;color:#b42318;margin-top:6px}
 
-      .apf-portal-calendar{border:1px solid var(--apf-border);border-radius:14px;background:#fff;padding:18px;margin:12px auto 0;box-shadow:0 8px 20px rgba(15,23,42,.08);overflow:visible;width:100%;max-width:960px;box-sizing:border-box}
+      .apf-portal-calendar{border:1px solid var(--apf-border);border-radius:14px;background:#fff;padding:18px;margin:12px auto 0;box-shadow:0 8px 20px rgba(15,23,42,.08);overflow:visible;width:100%;max-width:1200px;box-sizing:border-box}
       .apf-portal-calendar__body{display:flex;flex-direction:column;gap:12px;overflow:visible}
       .apf-portal-calendar__inner{display:flex;flex-direction:column;gap:12px;width:100%}
-      .apf-portal-calendar__label{text-align:center;font-weight:800;letter-spacing:.02em;color:var(--apf-ink);margin: 10px 0 10px;font-size:15px}
+      .apf-portal-calendar__label{display:flex;align-items:center;justify-content:flex-start;gap:8px;text-align:left;font-weight:800;letter-spacing:.02em;color:var(--apf-ink);margin:10px 0 10px;font-size:15px}
       .apf-portal-calendar__header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
       .apf-portal-calendar__header h4{margin:0;font-size:16px;font-weight:700;color:var(--apf-ink)}
       .apf-portal-calendar__nav{display:flex;align-items:center;gap:8px}
@@ -677,7 +697,7 @@ add_shortcode('apf_portal', function($atts){
       .apf-portal-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;transition:opacity .18s ease}
       .apf-portal-modal[aria-hidden="false"]{opacity:1;pointer-events:auto}
       .apf-portal-modal__overlay{position:absolute;inset:0;background:rgba(15,23,42,.45)}
-      .apf-portal-modal__dialog{position:relative;background:#fff;border-radius:18px;box-shadow:0 24px 48px rgba(0,0,0,.32);padding:20px 22px;max-width:500px;width:92%;max-height:82vh;overflow:auto;border:1px solid rgba(18,87,145,.15)}
+      .apf-portal-modal__dialog{position:relative;background:#fff;border-radius:18px;box-shadow:0 24px 48px rgba(0,0,0,.32);padding:20px 22px;max-width:420px;width:min(92%,420px);max-height:82vh;overflow:auto;border:1px solid rgba(18,87,145,.15)}
       .apf-portal-modal__head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
       .apf-portal-modal__eyebrow{margin:0;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--apf-primary)}
       .apf-portal-modal__head h4{margin:2px 0 4px;font-size:18px;color:var(--apf-ink)}
@@ -699,6 +719,9 @@ add_shortcode('apf_portal', function($atts){
       @media(max-width:900px){
         .apf-hero{flex-direction:column;align-items:center;text-align:center}
         .apf-hero .apf-actions{width:100%;justify-content:center}
+      }
+      @media(max-width:1024px){
+        #apf-edit .apf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
       }
       @media(max-width:1140px){
         .apf-portal-calendar{max-width:100%;padding:14px;box-sizing:border-box}
@@ -728,6 +751,7 @@ add_shortcode('apf_portal', function($atts){
         .apf-table tbody td:nth-child(5)::before{content:'Curso'}
       }
       @media(max-width:640px){
+        .apf-portal-modal__dialog{max-width:75%;width:75%;padding:18px 16px}
         .apf-panel .apf-actions{flex-direction:column;align-items:stretch}
         .apf-panel .apf-actions button{width:269px;max-width:100%;min-height:42px;height:42px;padding:0 16px;font-size:14px;border-radius:10px}
         #apf-edit{padding:18px 16px}
@@ -750,6 +774,9 @@ add_shortcode('apf_portal', function($atts){
         .apf-portal-calendar__day{height:32px;font-size:10px}
         .apf-portal-calendar__header h4{font-size:14px}
         .apf-portal-calendar__btn{width:28px;height:28px;border-radius:8px}
+      }
+      @media(max-width:425px){
+        .apf-portal-modal__dialog{max-width:75% !important;width:75% !important}
       }
       @media(max-width:480px){
         #apf-edit{padding:14px 12px}
@@ -1105,5 +1132,8 @@ add_shortcode('apf_portal', function($atts){
     })();
     </script>
     <?php
-    return ob_get_clean();
-});
+        return ob_get_clean();
+    }
+}
+
+add_shortcode( 'apf_portal', 'apf_render_portal_colaborador' );

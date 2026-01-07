@@ -69,7 +69,23 @@ class Faepa_Chatbox {
         if ( empty( $post ) || ! isset( $post->post_content ) ) {
             return false;
         }
-        return (bool) has_shortcode( $post->post_content, 'apf_inbox' );
+        if ( (bool) has_shortcode( $post->post_content, 'apf_inbox' ) ) {
+            return true;
+        }
+        $target_id = (int) get_option( 'apf_portal_financeiro_page_id' );
+        return ( $target_id > 0 && (int) $post->ID === $target_id );
+    }
+
+    /**
+     * Verifica se a página atual corresponde a um portal por ID salvo.
+     */
+    private static function is_portal_page_by_option( $option_key ) {
+        global $post;
+        if ( empty( $post ) || ! isset( $post->ID ) ) {
+            return false;
+        }
+        $target_id = (int) get_option( $option_key );
+        return ( $target_id > 0 && (int) $post->ID === $target_id );
     }
 
     /**
@@ -110,6 +126,29 @@ class Faepa_Chatbox {
             }
         }
 
+        if ( self::is_portal_page_by_option( 'apf_portal_financeiro_page_id' ) ) {
+            return true;
+        }
+        if ( self::is_portal_page_by_option( 'apf_portal_colaborador_page_id' ) ) {
+            return true;
+        }
+        if ( self::is_portal_page_by_option( 'apf_portal_faepa_page_id' ) ) {
+            return true;
+        }
+        if ( self::is_portal_page_by_option( 'apf_portal_email_page_id' ) ) {
+            return true;
+        }
+        if ( self::is_portal_page_by_option( 'apf_portal_coordenador_page_id' ) ) {
+            if ( function_exists( 'apf_coordinator_has_portal_access' ) ) {
+                $user_id = get_current_user_id();
+                $role    = self::get_user_role( $user_id );
+                if ( ! in_array( $role, array( 'financeiro', 'administrator' ), true ) && ! apf_coordinator_has_portal_access( $user_id ) ) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         return false;
     }
 
@@ -144,6 +183,18 @@ class Faepa_Chatbox {
                         $context = 'colaborador';
                     } elseif ( has_shortcode( $post->post_content, 'apf_portal_faepa' ) || has_shortcode( $post->post_content, 'portal_faepa' ) ) {
                         $context = 'faepa';
+                    } else {
+                        if ( self::is_portal_page_by_option( 'apf_portal_coordenador_page_id' ) ) {
+                            $context = 'coordenador';
+                        } elseif ( self::is_portal_page_by_option( 'apf_portal_colaborador_page_id' ) ) {
+                            $context = 'colaborador';
+                        } elseif ( self::is_portal_page_by_option( 'apf_portal_faepa_page_id' ) ) {
+                            $context = 'faepa';
+                        } elseif ( self::is_portal_page_by_option( 'apf_portal_financeiro_page_id' ) ) {
+                            $context = 'financeiro';
+                        } elseif ( self::is_portal_page_by_option( 'apf_portal_email_page_id' ) ) {
+                            $context = 'financeiro';
+                        }
                     }
                 }
             }

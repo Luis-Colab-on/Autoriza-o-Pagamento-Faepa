@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Autorização Pagamento FAEPA – Form 3 Abas
- * Description: Formulário em 3 passos (shortcode [apf_form]) + portal do prestador + dashboard [apf_inbox].
+ * Description: Formulário em 3 passos + portal do prestador + dashboard [apf_inbox].
  * Version: 0.4.0
  * Author: Você
  * License: GPLv2 or later
@@ -208,6 +208,146 @@ if ( ! function_exists( 'apf_user_is_finance' ) ) {
     }
 }
 
+if ( ! function_exists( 'apf_create_form_page' ) ) {
+    function apf_create_form_page() {
+        $title = 'Formulario Pagamento FAEPA';
+        $page_id = (int) get_option( 'apf_form_page_id' );
+
+        if ( $page_id > 0 ) {
+            $page = get_post( $page_id );
+            if ( $page && 'page' === $page->post_type ) {
+                return;
+            }
+        }
+
+        $existing = get_page_by_title( $title );
+        if ( $existing && 'page' === $existing->post_type ) {
+            update_option( 'apf_form_page_id', (int) $existing->ID );
+            return;
+        }
+
+        $created_id = wp_insert_post( array(
+            'post_title'  => $title,
+            'post_status' => 'publish',
+            'post_type'   => 'page',
+            'post_content'=> '',
+        ) );
+
+        if ( ! is_wp_error( $created_id ) ) {
+            update_option( 'apf_form_page_id', (int) $created_id );
+        }
+    }
+}
+
+register_activation_hook( __FILE__, 'apf_create_form_page' );
+
+if ( ! function_exists( 'apf_create_page_if_missing' ) ) {
+    function apf_create_page_if_missing( $title, $option_key, $content = '' ) {
+        $page_id = (int) get_option( $option_key );
+        if ( $page_id > 0 ) {
+            $page = get_post( $page_id );
+            if ( $page && 'page' === $page->post_type ) {
+                $updates = array( 'ID' => $page_id );
+                if ( '' !== $content && '' === trim( (string) $page->post_content ) ) {
+                    $updates['post_content'] = $content;
+                }
+                if ( 'publish' !== $page->post_status ) {
+                    $updates['post_status'] = 'publish';
+                }
+                if ( count( $updates ) > 1 ) {
+                    wp_update_post( $updates );
+                }
+                return $page_id;
+            }
+        }
+
+        $existing = get_page_by_title( $title );
+        if ( $existing && 'page' === $existing->post_type ) {
+            $existing_id = (int) $existing->ID;
+            $updates = array( 'ID' => $existing_id );
+            if ( '' !== $content && '' === trim( (string) $existing->post_content ) ) {
+                $updates['post_content'] = $content;
+            }
+            if ( 'publish' !== $existing->post_status ) {
+                $updates['post_status'] = 'publish';
+            }
+            if ( count( $updates ) > 1 ) {
+                wp_update_post( $updates );
+            }
+            update_option( $option_key, $existing_id );
+            return $existing_id;
+        }
+
+        $created_id = wp_insert_post( array(
+            'post_title'   => $title,
+            'post_status'  => 'publish',
+            'post_type'    => 'page',
+            'post_content' => $content,
+        ) );
+
+        if ( ! is_wp_error( $created_id ) ) {
+            update_option( $option_key, (int) $created_id );
+        }
+
+        return $created_id;
+    }
+}
+
+if ( ! function_exists( 'apf_clear_shortcode_content' ) ) {
+    function apf_clear_shortcode_content( $page_id, $shortcodes ) {
+        $page_id = (int) $page_id;
+        if ( $page_id <= 0 || ! function_exists( 'has_shortcode' ) ) {
+            return;
+        }
+        $post = get_post( $page_id );
+        if ( ! $post || 'page' !== $post->post_type ) {
+            return;
+        }
+        foreach ( (array) $shortcodes as $shortcode ) {
+            if ( has_shortcode( $post->post_content, $shortcode ) ) {
+                wp_update_post( array(
+                    'ID'           => $page_id,
+                    'post_content' => '',
+                ) );
+                break;
+            }
+        }
+    }
+}
+
+if ( ! function_exists( 'apf_create_portal_pages' ) ) {
+    function apf_create_portal_pages() {
+        if ( function_exists( 'apf_create_form_page' ) ) {
+            apf_create_form_page();
+        }
+
+        $portal_colab_id = apf_create_page_if_missing( 'Portal Colaborador', 'apf_portal_colaborador_page_id', '' );
+        $portal_fin_id   = apf_create_page_if_missing( 'Portal Finaiceiro-Colab', 'apf_portal_financeiro_page_id', '' );
+        $portal_coord_id = apf_create_page_if_missing( 'Portal Coordenador', 'apf_portal_coordenador_page_id', '' );
+        $portal_faepa_id = apf_create_page_if_missing( 'Portal FAEPA', 'apf_portal_faepa_page_id', '' );
+        $portal_mail_id  = apf_create_page_if_missing( 'Central Emails', 'apf_portal_email_page_id', '' );
+
+        apf_clear_shortcode_content( $portal_colab_id, array( 'apf_portal' ) );
+        apf_clear_shortcode_content( $portal_fin_id, array( 'apf_inbox' ) );
+        apf_clear_shortcode_content( $portal_coord_id, array( 'apf_portal_coordenador' ) );
+        apf_clear_shortcode_content( $portal_faepa_id, array( 'apf_portal_faepa', 'portal_faepa' ) );
+        apf_clear_shortcode_content( $portal_mail_id, array( 'apf_portal_financeiro_email' ) );
+    }
+}
+
+register_activation_hook( __FILE__, 'apf_create_portal_pages' );
+
+if ( ! function_exists( 'apf_ensure_portal_pages' ) ) {
+    function apf_ensure_portal_pages() {
+        if ( ! is_admin() ) {
+            return;
+        }
+        apf_create_portal_pages();
+    }
+}
+
+add_action( 'admin_init', 'apf_ensure_portal_pages' );
+
 if ( ! function_exists( 'apf_get_mail_sender_email' ) ) {
     /**
      * Retorna o e-mail configurado como remetente (pode ser vazio).
@@ -263,6 +403,37 @@ if ( ! function_exists( 'apf_get_form_confirmation_template' ) ) {
         $template = is_string( $template ) ? trim( $template ) : '';
         if ( '' === $template ) {
             return apf_get_form_confirmation_default_template();
+        }
+        return $template;
+    }
+}
+
+if ( ! function_exists( 'apf_get_faepa_payment_default_template' ) ) {
+    /**
+     * Template padrao do e-mail de notificacao de pagamento (FAEPA).
+     *
+     * @return string
+     */
+    function apf_get_faepa_payment_default_template() {
+        return "Curso: [curso]\n\n"
+            . "A FAEPA aprovou e solicitou o pagamento para:\n\n"
+            . "[lista]\n\n"
+            . "O pagamento deve cair nos proximos dias. Em caso de duvidas, entre em contato com o financeiro.\n\n"
+            . "[observacao]";
+    }
+}
+
+if ( ! function_exists( 'apf_get_faepa_payment_template' ) ) {
+    /**
+     * Retorna o template configurado ou o padrao (FAEPA).
+     *
+     * @return string
+     */
+    function apf_get_faepa_payment_template() {
+        $template = get_option( 'apf_faepa_payment_email_template', '' );
+        $template = is_string( $template ) ? trim( $template ) : '';
+        if ( '' === $template ) {
+            return apf_get_faepa_payment_default_template();
         }
         return $template;
     }
@@ -408,6 +579,21 @@ if ( ! function_exists( 'apf_store_mail_capture' ) ) {
             return false;
         }
         return (bool) update_option( 'apf_mail_capture_last', $entry, false );
+    }
+}
+
+if ( ! function_exists( 'apf_store_mail_capture_faepa' ) ) {
+    /**
+     * Persiste o ultimo e-mail capturado do portal FAEPA.
+     *
+     * @param array $entry
+     * @return bool
+     */
+    function apf_store_mail_capture_faepa( $entry ) {
+        if ( ! is_array( $entry ) || empty( $entry ) ) {
+            return false;
+        }
+        return (bool) update_option( 'apf_mail_capture_faepa_last', $entry, false );
     }
 }
 
@@ -1366,8 +1552,9 @@ if ( ! function_exists( 'apf_render_login_card' ) ) {
     }
 }
 
-/* ====== Shortcode do formulário (3 abas) ====== */
-add_shortcode('apf_form', function () {
+if ( ! function_exists( 'apf_render_payment_form' ) ) {
+    /* ====== Formulário (3 abas) ====== */
+    function apf_render_payment_form() {
     if ( ! is_user_logged_in() ) {
         return apf_render_login_card();
     }
@@ -2171,7 +2358,85 @@ add_shortcode('apf_form', function () {
     <?php
     $out .= ob_get_clean();
     return $out;
-});
+    }
+}
+
+if ( ! function_exists( 'apf_render_form_page_content' ) ) {
+    function apf_render_form_page_content( $content ) {
+        $page_id = (int) get_option( 'apf_form_page_id' );
+        if ( $page_id > 0 && is_singular( 'page' ) && in_the_loop() && is_main_query() ) {
+            if ( $page_id === (int) get_the_ID() ) {
+                return apf_render_payment_form();
+            }
+        }
+
+        return $content;
+    }
+}
+
+add_filter( 'the_content', 'apf_render_form_page_content', 99 );
+
+if ( ! function_exists( 'apf_render_portal_pages_content' ) ) {
+    function apf_render_portal_pages_content( $content ) {
+        if ( ! is_singular( 'page' ) || ! in_the_loop() || ! is_main_query() ) {
+            return $content;
+        }
+
+        $page_id = (int) get_the_ID();
+        $map = array(
+            'apf_portal_colaborador_page_id' => 'apf_render_portal_colaborador',
+            'apf_portal_financeiro_page_id'  => 'apf_render_inbox_dashboard',
+            'apf_portal_coordenador_page_id' => 'apf_render_portal_coordenador',
+            'apf_portal_faepa_page_id'       => 'apf_render_portal_faepa',
+            'apf_portal_email_page_id'       => 'apf_render_portal_financeiro_email',
+        );
+
+        foreach ( $map as $option_key => $callback ) {
+            $target_id = (int) get_option( $option_key );
+            if ( $target_id > 0 && $target_id === $page_id ) {
+                if ( function_exists( $callback ) ) {
+                    return call_user_func( $callback );
+                }
+                break;
+            }
+        }
+
+        return $content;
+    }
+}
+
+add_filter( 'the_content', 'apf_render_portal_pages_content', 99 );
+
+if ( ! function_exists( 'apf_hide_portal_block_titles' ) ) {
+    function apf_hide_portal_block_titles() {
+        if ( is_admin() || ! is_singular( 'page' ) ) {
+            return;
+        }
+
+        $page_id = (int) get_queried_object_id();
+        if ( $page_id <= 0 ) {
+            return;
+        }
+
+        $option_keys = array(
+            'apf_form_page_id',
+            'apf_portal_colaborador_page_id',
+            'apf_portal_financeiro_page_id',
+            'apf_portal_coordenador_page_id',
+            'apf_portal_faepa_page_id',
+        );
+
+        foreach ( $option_keys as $option_key ) {
+            $target_id = (int) get_option( $option_key );
+            if ( $target_id > 0 && $target_id === $page_id ) {
+                echo '<style>.wp-block-post-title{display:none !important;}</style>';
+                break;
+            }
+        }
+    }
+}
+
+add_action( 'wp_head', 'apf_hide_portal_block_titles' );
 
 /* ====== includes ====== */
 require_once __DIR__ . '/includes/financeiro.php';

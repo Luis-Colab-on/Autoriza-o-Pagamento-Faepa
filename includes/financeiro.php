@@ -443,7 +443,8 @@ if ( ! function_exists( 'apf_scheduler_build_recipient_payload' ) ) {
 }
 
 /* ====== DASHBOARD FINANCEIRO: shortcode [apf_inbox] ====== */
-add_shortcode('apf_inbox', function () {
+if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
+    function apf_render_inbox_dashboard() {
 
     if ( ! is_user_logged_in() || ! current_user_can('edit_posts') ) {
         return '<p>Faça login com um usuário autorizado para ver as submissões.</p>';
@@ -2006,6 +2007,12 @@ add_shortcode('apf_inbox', function () {
               <h2 id="apfSchedulerHeading">Agenda financeira</h2>
               <p>Programe avisos para coordenadores e colaboradores diretamente no calendário.</p>
             </div>
+            <?php $central_emails_id = (int) get_option( 'apf_portal_email_page_id' ); ?>
+            <?php if ( $central_emails_id > 0 ) : ?>
+              <a class="apf-scheduler__head-link" href="<?php echo esc_url( get_permalink( $central_emails_id ) ); ?>" target="_blank" rel="noopener noreferrer" aria-label="Central Emails">
+                <img class="apf-scheduler__head-icon" src="<?php echo esc_url( plugin_dir_url( __FILE__ ) . '../imgs/email-svgrepo-com.svg' ); ?>" alt="" aria-hidden="true">
+              </a>
+            <?php endif; ?>
           </div>
 
           <div class="apf-scheduler__grid">
@@ -2522,6 +2529,10 @@ add_shortcode('apf_inbox', function () {
         --apf-focus:0 0 0 3px rgba(31,111,235,.2); --apf-shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
         --apf-radius:12px; --apf-radius-sm:10px; --apf-row:#fcfdff; --apf-row-hover:#f3f7ff; --apf-highlight:#fff1a8;
         --apf-modal-overlay: rgba(2,6,23,.55);
+        padding:clamp(14px,2vw,26px);
+        box-sizing:border-box;
+        max-width:none !important;
+        width:100%;
       }
       @media (prefers-color-scheme: dark){
         .apf-inbox-theme{
@@ -2535,6 +2546,10 @@ add_shortcode('apf_inbox', function () {
         font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;
         color:var(--apf-text);
         padding:8px 0 24px;
+        max-width:1280px;
+        margin-left:auto;
+        margin-right:auto;
+        width:100%;
       }
 
       /* ===== Busca */
@@ -3266,22 +3281,64 @@ add_shortcode('apf_inbox', function () {
         font-size:13px;
         color:var(--apf-muted);
       }
+      .apf-scheduler__head{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:16px;
+        flex-wrap:wrap;
+      }
+      .apf-scheduler__head-link{
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        background:var(--apf-bg);
+        border:1px solid var(--apf-border);
+        border-radius:999px;
+        padding:6px 12px;
+        text-decoration:none;
+        color:var(--apf-text);
+        font-size:12px;
+        font-weight:700;
+        letter-spacing:.02em;
+        box-shadow:0 6px 16px rgba(15,23,42,.08);
+      }
+      .apf-scheduler__head-link:hover{
+        border-color:var(--apf-primary);
+        color:var(--apf-primary);
+        box-shadow:0 8px 20px rgba(15,23,42,.12);
+      }
+      .apf-scheduler__head-icon{
+        width:16px;
+        height:16px;
+        flex:0 0 auto;
+        display:inline-block;
+      }
       .apf-scheduler__grid{
         display:grid;
         grid-template-columns:2fr 1fr;
         gap:20px;
         align-items:flex-start;
+        min-width:0;
       }
       .apf-scheduler__calendar{
         border:1px solid var(--apf-border);
         border-radius:var(--apf-radius-sm);
         background:var(--apf-soft);
         padding:16px;
+        width:100%;
+        max-width:100%;
+        min-width:0;
+        box-sizing:border-box;
+        overflow:hidden;
       }
       .apf-scheduler__calendar-inner{
         display:flex;
         flex-direction:column;
         gap:12px;
+        width:100%;
+        max-width:100%;
+        box-sizing:border-box;
       }
       .apf-scheduler__calendar-loading{
         text-align:center;
@@ -3328,6 +3385,9 @@ add_shortcode('apf_inbox', function () {
         display:grid;
         grid-template-columns:repeat(7,1fr);
         gap:6px;
+        width:100%;
+        max-width:100%;
+        box-sizing:border-box;
       }
       .apf-scheduler__weekday{
         text-align:center;
@@ -3388,6 +3448,10 @@ add_shortcode('apf_inbox', function () {
         display:flex;
         flex-direction:column;
         gap:14px;
+        width:100%;
+        max-width:100%;
+        min-width:0;
+        box-sizing:border-box;
       }
       .apf-scheduler__selected{
         display:flex;
@@ -4459,12 +4523,16 @@ add_shortcode('apf_inbox', function () {
         display:flex;
         flex-direction:column;
         gap:16px;
+        align-items:stretch;
+        text-align:left;
       }
       .apf-coord-return__head{
         display:flex;
         align-items:center;
         justify-content:space-between;
         gap:16px;
+        flex-direction:row;
+        text-align:left;
       }
       .apf-coord-return__head h2{
         margin:0;
@@ -4500,6 +4568,7 @@ add_shortcode('apf_inbox', function () {
         min-width:210px;
         font-size:12px;
         color:var(--apf-muted);
+        align-items:flex-start;
       }
       .apf-coord-return__filter select{
         height:38px;
@@ -4508,6 +4577,7 @@ add_shortcode('apf_inbox', function () {
         padding:0 12px;
         background:var(--apf-bg);
         color:var(--apf-text);
+        text-align:left;
       }
       .apf-coord-return__filter select:focus{
         border-color:var(--apf-primary);
@@ -4520,6 +4590,7 @@ add_shortcode('apf_inbox', function () {
         gap:8px;
         font-size:13px;
         color:var(--apf-muted);
+        justify-content:flex-start;
       }
       .apf-coord-return__pager-btn{
         min-width:36px;
@@ -4530,6 +4601,7 @@ add_shortcode('apf_inbox', function () {
         display:grid;
         grid-template-columns:1fr;
         gap:16px;
+        width:100%;
       }
       .apf-coord-return__card{
         border:1px solid var(--apf-border);
@@ -4539,12 +4611,16 @@ add_shortcode('apf_inbox', function () {
         display:flex;
         flex-direction:column;
         gap:12px;
+        align-items:stretch;
+        text-align:left;
       }
       .apf-coord-return__card header{
         display:flex;
         align-items:flex-start;
         justify-content:space-between;
         gap:12px;
+        flex-direction:row;
+        text-align:left;
       }
       .apf-coord-return__card h3{
         margin:0;
@@ -4573,6 +4649,7 @@ add_shortcode('apf_inbox', function () {
         padding:0;
         display:flex;
         gap:12px;
+        justify-content:flex-start;
       }
       .apf-coord-return__stats li{
         flex:1;
@@ -4591,6 +4668,7 @@ add_shortcode('apf_inbox', function () {
         display:flex;
         align-items:center;
         gap:6px;
+        justify-content:flex-start;
       }
       .apf-coord-return__archive-icon-btn{
         border:none;
@@ -5150,6 +5228,7 @@ add_shortcode('apf_inbox', function () {
         .apf-coord-return__archive-icon-btn{ margin-right:0; }
         .apf-coord-return__grid{ grid-template-columns:1fr; }
         .apf-coord-return__controls{ flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:10px; }
+        .apf-coord-return__controls{ align-content:center; }
         .apf-coord-return__filter{ width:100%; align-items:center; text-align:center; }
         .apf-coord-return__filter select{ text-align:center; }
         .apf-coord-return__pager{ justify-content:center; width:100%; text-align:center; }
@@ -5390,6 +5469,32 @@ add_shortcode('apf_inbox', function () {
         .apf-filter select{ height:44px; }
         .apf-search input{ height:44px; }
       }
+      @media(max-width:425px){
+        .apf-scheduler__calendar{
+          padding:8px;
+          box-sizing:border-box;
+          overflow:hidden;
+        }
+        .apf-scheduler__calendar-inner,
+        .apf-scheduler__weekdays,
+        .apf-scheduler__days{
+          width:100%;
+          box-sizing:border-box;
+        }
+        .apf-scheduler__weekdays,
+        .apf-scheduler__days{
+          grid-template-columns:repeat(7,minmax(0,1fr));
+          gap:2px;
+        }
+        .apf-scheduler__weekday,
+        .apf-scheduler__day{
+          min-width:0;
+        }
+        .apf-scheduler__day{
+          height:30px;
+          font-size:10.5px;
+        }
+      }
       @media(max-width:540px){
         .apf-assign-inline-desktop{
           font-size:12px;
@@ -5424,6 +5529,59 @@ add_shortcode('apf_inbox', function () {
         }
         .apf-scheduler__weekday{
           font-size:11px;
+        }
+      }
+      @media(max-width:350px){
+        .apf-scheduler__calendar{
+          padding:8px;
+        }
+        .apf-scheduler__calendar-header{
+          gap:6px;
+        }
+        .apf-scheduler__calendar-nav{
+          gap:4px;
+        }
+        .apf-scheduler__nav-btn{
+          width:26px;
+          height:26px;
+          font-size:12px;
+        }
+        .apf-scheduler__weekdays,
+        .apf-scheduler__days{
+          grid-template-columns:repeat(7,minmax(0,1fr));
+          gap:2px;
+        }
+        .apf-scheduler__weekday{
+          font-size:9px;
+        }
+        .apf-scheduler__day{
+          height:26px;
+          font-size:10px;
+          border-radius:8px;
+        }
+        .apf-scheduler__day-marker{
+          width:8px;
+          height:8px;
+          inset:4px 4px auto auto;
+        }
+        .apf-scheduler__tabs{
+          gap:4px;
+          padding:3px;
+        }
+        .apf-scheduler__tab{
+          padding:4px 8px;
+          font-size:11px;
+        }
+        .apf-scheduler__selected,
+        .apf-scheduler__audience{
+          font-size:11px;
+        }
+        .apf-scheduler__field{
+          font-size:11px;
+        }
+        .apf-scheduler__field input{
+          padding:8px 10px;
+          font-size:12px;
         }
       }
     </style>
@@ -6000,7 +6158,7 @@ add_shortcode('apf_inbox', function () {
       const editProvidersBox = schedulerModal ? schedulerModal.querySelector('.apf-scheduler-edit__providers') : null;
       const editTabs = $$('.apf-scheduler-edit__tab', schedulerModal);
       const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-      const WEEKDAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+      const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
       const groupLabels = {
         providers: 'Colaboradores',
         coordinators: 'Coordenadores',
@@ -6385,7 +6543,7 @@ add_shortcode('apf_inbox', function () {
           const daysGrid = document.createElement('div');
           daysGrid.className = 'apf-scheduler__days';
 
-          const firstWeekday = (state.month.getDay() + 6) % 7;
+          const firstWeekday = state.month.getDay();
           const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
           const totalCells = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
 
@@ -7735,5 +7893,8 @@ add_shortcode('apf_inbox', function () {
     })();
     </script>
     <?php
-    return ob_get_clean();
-});
+        return ob_get_clean();
+    }
+}
+
+add_shortcode( 'apf_inbox', 'apf_render_inbox_dashboard' );

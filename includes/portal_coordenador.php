@@ -64,7 +64,8 @@ if ( ! function_exists( 'apf_coordinator_has_portal_access' ) ) {
  * Shortcode: [apf_portal_coordenador]
  * Área simplificada para coordenadores sugerirem/atualizarem seu vínculo com um curso.
  */
-add_shortcode( 'apf_portal_coordenador', function () {
+if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
+    function apf_render_portal_coordenador() {
     if ( ! is_user_logged_in() ) {
         $redirect = isset( $_SERVER['REQUEST_URI'] ) ? esc_url( $_SERVER['REQUEST_URI'] ) : home_url();
         return apf_render_login_card( array(
@@ -1534,7 +1535,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
                   <input type="hidden" name="apf_coord_alert_event" id="apfCoordComposeEvent" value="">
                   <input type="hidden" name="apf_coord_alert_date" id="apfCoordComposeDate" value="<?php echo esc_attr( $coord_alert_default_date ); ?>">
                   <div class="apf-coord-calendar__form-grid">
-                    <div class="apf-coord-calendar__field">
+                    <div class="apf-coord-calendar__field apf-coord-calendar__field--date">
                       <span>Dia selecionado</span>
                       <strong id="apfCoordComposeDateLabel"><?php echo esc_html( date_i18n( 'd/m/Y', strtotime( $coord_alert_default_date ) ) ); ?></strong>
                       <p class="apf-coord-calendar__form-hint">Clique em um dia na agenda dos colaboradores para alterar.</p>
@@ -1618,6 +1619,11 @@ add_shortcode( 'apf_portal_coordenador', function () {
       </div>
     </div>
     <style>
+      .is-layout-constrained > .apf-coord-portal,
+      .is-layout-constrained > :where(:not(.alignleft):not(.alignright):not(.alignfull)):has(.apf-coord-portal){
+        max-width:none;
+        width:100%;
+      }
       .apf-coord-card{
         margin:24px auto;
         background:#fff;
@@ -1840,7 +1846,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
       }
       .apf-coord-requests__cards{
         display:grid;
-        grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        grid-template-columns:repeat(3,minmax(0,1fr));
         gap:10px;
       }
       .apf-coord-request-card{
@@ -3051,7 +3057,8 @@ add_shortcode( 'apf_portal_coordenador', function () {
       @media(max-width:420px){
         .apf-coord-calendar{
           padding:8px 6px;
-          max-width:236px;
+          max-width:100%;
+          width:auto;
           margin:0 auto;
         }
         .apf-coord-calendar__header{
@@ -3075,26 +3082,26 @@ add_shortcode( 'apf_portal_coordenador', function () {
         .apf-coord-calendar__inner,
         .apf-coord-calendar__body{
           gap:8px;
-          max-width:236px;
+          max-width:100%;
           width:100%;
-          margin:0 auto;
+          margin:0;
         }
         .apf-coord-calendar__weekdays,
         .apf-coord-calendar__days{
           grid-template-columns:repeat(7,30.28px);
           gap:2px;
           justify-content:center;
-          max-width:236px;
+          max-width:100%;
           width:100%;
-          margin:0 auto;
+          margin:0;
         }
         .apf-coord-calendar__weekday{
           font-size:9px;
         }
         .apf-coord-calendar__day{
-          width:30.28px;
-          max-width:30.28px;
-          min-width:30.28px;
+          width:auto;
+          max-width:100%;
+          min-width:0;
           min-height:36px;
           height:36px;
           font-size:10px;
@@ -3103,8 +3110,8 @@ add_shortcode( 'apf_portal_coordenador', function () {
         .apf-coord-calendar__legend{
           gap:4px;
           justify-content:center;
-          max-width:236px;
-          margin:0 auto;
+          max-width:100%;
+          margin:0;
         }
         .apf-coord-calendar__legend span{
           font-size:9px;
@@ -3139,7 +3146,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
         }
         .apf-coord-calendar__compose{
           width:100%;
-          max-width:236px;
+          max-width:100%;
         }
       }
       @media(max-width:375px){
@@ -3158,7 +3165,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
           font-size:8.5px;
         }
         .apf-coord-calendar__compose{
-          max-width:236px;
+          max-width:100%;
           width:100%;
           margin:0 auto;
           border:1px solid #e4e7ec;
@@ -3169,7 +3176,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
           gap:8px;
         }
         .apf-coord-calendar__wrap{
-          max-width:236px;
+          max-width:100%;
           width:100%;
           margin:0 auto;
         }
@@ -3230,17 +3237,18 @@ add_shortcode( 'apf_portal_coordenador', function () {
         --apf-muted:#5f6b7a;
         --apf-ink:#0f172a;
         --apf-focus:0 0 0 3px rgba(18,87,145,.18),0 0 0 6px rgba(18,87,145,.12);
-        background:radial-gradient(circle at 0 0,rgba(18,87,145,.08),transparent 32%),radial-gradient(circle at 100% 16%,rgba(18,87,145,.06),transparent 30%),#f3f6fb;
+        background:#fff;
         color:var(--apf-ink);
-        padding:clamp(12px,2vw,26px);
+        padding:16px 12px;
         box-sizing:border-box;
         overflow-x:hidden;
+        width:100%;
       }
       .apf-coord-card{
-        max-width:1100px;
+        max-width:1280px;
         padding:clamp(18px,2.5vw,28px);
-        margin:0 auto;
-        background:linear-gradient(135deg,#fff,rgba(18,87,145,.03));
+        margin:0 auto 16px;
+        background:#fff;
         border:1px solid var(--apf-border);
         box-shadow:0 12px 28px rgba(15,23,42,.12);
         box-sizing:border-box;
@@ -3337,7 +3345,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
         align-items:flex-start;
       }
       .apf-coord-requests__cards{
-        grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+        grid-template-columns:repeat(3,minmax(0,1fr));
       }
       .apf-coord-request-card{
         box-shadow:0 10px 20px rgba(15,23,42,.08);
@@ -3433,6 +3441,11 @@ add_shortcode( 'apf_portal_coordenador', function () {
       .apf-coord-collab__section dl{
         background:var(--apf-soft);
         border-color:var(--apf-border);
+      }
+      @media(min-width:1000px){
+        .apf-coord-btn:not(.apf-coord-requests__pager-btn){
+          width:15rem;
+        }
       }
       @media(max-width:980px){
         .apf-coord-card{
@@ -3583,6 +3596,10 @@ add_shortcode( 'apf_portal_coordenador', function () {
         .apf-coord-calendar__field select{
           text-align:left;
         }
+        .apf-coord-calendar__field--date{
+          align-items:center;
+          text-align:center;
+        }
         .apf-coord-calendar__form-actions{
           flex-direction:column;
           align-items:stretch;
@@ -3666,6 +3683,118 @@ add_shortcode( 'apf_portal_coordenador', function () {
         .apf-coord-archive-modal__dialog,
         .apf-coord-alert-edit__dialog{
           width:calc(100vw - 18px);
+        }
+      }
+      @media(max-width:720px){
+        .apf-coord-calendar{
+          padding:12px;
+        }
+        .apf-coord-calendar__weekdays,
+        .apf-coord-calendar__days{
+          gap:4px;
+        }
+        .apf-coord-calendar__day{
+          height:42px;
+          font-size:13px;
+        }
+      }
+      @media(max-width:640px){
+        .apf-coord-calendar{
+          padding:10px;
+        }
+        .apf-coord-calendar__header h4{
+          font-size:14px;
+        }
+        .apf-coord-calendar__weekdays,
+        .apf-coord-calendar__days{
+          gap:3px;
+        }
+        .apf-coord-calendar__weekday{
+          font-size:11px;
+        }
+        .apf-coord-calendar__day{
+          height:38px;
+          font-size:12px;
+        }
+      }
+      @media(max-width:540px){
+        .apf-coord-calendar__weekdays,
+        .apf-coord-calendar__days{
+          grid-template-columns:repeat(7,minmax(30px,1fr));
+        }
+        .apf-coord-calendar__day{
+          height:36px;
+          font-size:11.5px;
+        }
+        .apf-coord-calendar__weekday{
+          font-size:10.5px;
+        }
+      }
+      @media(max-width:480px){
+        .apf-coord-calendar{
+          padding:9px;
+        }
+        .apf-coord-calendar__day{
+          height:34px;
+          font-size:11px;
+        }
+        .apf-coord-calendar__weekday{
+          font-size:10px;
+        }
+      }
+      @media(max-width:375px){
+        .apf-coord-calendar{
+          padding:8px;
+        }
+        .apf-coord-calendar__header h4{
+          font-size:13px;
+        }
+        .apf-coord-calendar__weekdays,
+        .apf-coord-calendar__days{
+          grid-template-columns:repeat(7,minmax(24px,1fr));
+          gap:2px;
+        }
+        .apf-coord-calendar__weekday{
+          font-size:10px;
+        }
+        .apf-coord-calendar__day{
+          height:32px;
+          font-size:11px;
+        }
+      }
+      @media(max-width:330px){
+        .apf-coord-calendar__weekdays,
+        .apf-coord-calendar__days{
+          grid-template-columns:repeat(7,minmax(22px,1fr));
+          justify-items:stretch;
+        }
+        .apf-coord-calendar__day{
+          width:100%;
+          height:30px;
+          font-size:10.5px;
+        }
+      }
+      @media(max-width:425px){
+        .apf-coord-calendar__wrap.has-compose .apf-coord-calendar__weekdays,
+        .apf-coord-calendar__wrap.has-compose .apf-coord-calendar__days{
+          grid-template-columns:repeat(7,minmax(22px,1fr));
+          gap:2px;
+        }
+        .apf-coord-calendar__wrap.has-compose .apf-coord-calendar__weekday{
+          font-size:9px;
+        }
+        .apf-coord-calendar__wrap.has-compose .apf-coord-calendar__day{
+          height:30px;
+          font-size:10px;
+        }
+        .apf-coord-calendar__legend{
+          flex-wrap:wrap;
+          gap:4px;
+        }
+        .apf-coord-calendar__legend span{
+          white-space:normal;
+          font-size:9px;
+          text-align:center;
         }
       }
     </style>
@@ -4491,7 +4620,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
 
       if(calendarNode){
         const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-        const WEEKDAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+        const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
         let monthDate = new Date();
         monthDate.setDate(1);
         let activeFilter = 'coordinators';
@@ -4865,7 +4994,7 @@ add_shortcode( 'apf_portal_coordenador', function () {
 
           const daysGrid = document.createElement('div');
           daysGrid.className = 'apf-coord-calendar__days';
-          const firstWeekday = (monthDate.getDay() + 6) % 7;
+          const firstWeekday = monthDate.getDay();
           const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
           const totalCells = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
 
@@ -5009,5 +5138,8 @@ add_shortcode( 'apf_portal_coordenador', function () {
     })();
     </script>
     <?php
-    return ob_get_clean();
-} );
+        return ob_get_clean();
+    }
+}
+
+add_shortcode( 'apf_portal_coordenador', 'apf_render_portal_coordenador' );

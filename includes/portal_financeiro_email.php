@@ -5,7 +5,8 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
  * Shortcode: [apf_portal_financeiro_email]
  * Portal para configurar o remetente e visualizar o ultimo e-mail capturado.
  */
-add_shortcode( 'apf_portal_financeiro_email', function () {
+if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
+    function apf_render_portal_financeiro_email() {
     if ( ! is_user_logged_in() ) {
         $redirect = isset( $_SERVER['REQUEST_URI'] ) ? esc_url( $_SERVER['REQUEST_URI'] ) : home_url();
         return apf_render_login_card( array(
@@ -133,6 +134,74 @@ add_shortcode( 'apf_portal_financeiro_email', function () {
         exit;
     }
 
+    if ( isset( $_POST['apf_fin_mail_faepa_template_action'] ) ) {
+        if ( ! isset( $_POST['apf_fin_mail_faepa_template_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_faepa_template_nonce'] ), 'apf_fin_mail_faepa_template' ) ) {
+            $notice      = 'Não foi possível salvar a mensagem da FAEPA. Recarregue a página e tente novamente.';
+            $notice_type = 'error';
+        } else {
+            $template_raw = isset( $_POST['apf_fin_mail_faepa_template'] ) ? wp_unslash( $_POST['apf_fin_mail_faepa_template'] ) : '';
+            $template_raw = is_string( $template_raw ) ? $template_raw : '';
+            $template     = sanitize_textarea_field( $template_raw );
+            $template     = trim( $template );
+
+            if ( '' === $template ) {
+                delete_option( 'apf_faepa_payment_email_template' );
+                $notice = 'Mensagem padrão da FAEPA restaurada.';
+            } else {
+                update_option( 'apf_faepa_payment_email_template', $template, false );
+                $notice = 'Mensagem da FAEPA atualizada.';
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_fin_mail_notice', 'apf_fin_mail_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_fin_mail_notice' => $notice,
+            'apf_fin_mail_status' => ( 'success' === $notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
+    if ( isset( $_POST['apf_fin_mail_faepa_capture_action'] ) ) {
+        if ( ! isset( $_POST['apf_fin_mail_faepa_capture_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_faepa_capture_nonce'] ), 'apf_fin_mail_faepa_capture' ) ) {
+            $notice      = 'Não foi possível salvar a captura do portal FAEPA. Recarregue a página e tente novamente.';
+            $notice_type = 'error';
+        } else {
+            $capture_enabled = ! empty( $_POST['apf_fin_mail_faepa_capture'] );
+            if ( $capture_enabled ) {
+                update_option( 'apf_mail_capture_faepa_force', '1', false );
+                $notice = 'Captura do portal FAEPA ativada.';
+            } else {
+                delete_option( 'apf_mail_capture_faepa_force' );
+                $notice = 'Captura do portal FAEPA desativada.';
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_fin_mail_notice', 'apf_fin_mail_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_fin_mail_notice' => $notice,
+            'apf_fin_mail_status' => ( 'success' === $notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
     if ( isset( $_POST['apf_fin_mail_action'] ) ) {
         if ( ! isset( $_POST['apf_fin_mail_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_nonce'] ), 'apf_fin_mail_save' ) ) {
             $notice      = 'Não foi possível salvar o e-mail. Recarregue a página e tente novamente.';
@@ -187,6 +256,13 @@ add_shortcode( 'apf_portal_financeiro_email', function () {
     $template_saved = get_option( 'apf_form_confirmation_template', '' );
     $template_saved = is_string( $template_saved ) ? $template_saved : '';
     $template_value = trim( $template_saved ) !== '' ? $template_saved : $template_default;
+    $faepa_template_default = function_exists( 'apf_get_faepa_payment_default_template' )
+        ? apf_get_faepa_payment_default_template()
+        : '';
+    $faepa_template_saved = get_option( 'apf_faepa_payment_email_template', '' );
+    $faepa_template_saved = is_string( $faepa_template_saved ) ? $faepa_template_saved : '';
+    $faepa_template_value = trim( $faepa_template_saved ) !== '' ? $faepa_template_saved : $faepa_template_default;
+    $faepa_capture_force = ! empty( get_option( 'apf_mail_capture_faepa_force', '' ) );
 
     $capture = get_option( 'apf_mail_capture_last', array() );
     if ( ! is_array( $capture ) ) {
@@ -299,8 +375,8 @@ add_shortcode( 'apf_portal_financeiro_email', function () {
       </div>
 
       <div class="apf-fin-mail__card apf-fin-mail__card--capture">
-        <h2>Captura de e-mail (localhost)</h2>
-        <p>Quando um e-mail for disparado, o conteúdo aparece aqui para teste.</p>
+        <h2>Forms FAEPA</h2>
+        <p>Captura do forms</p>
 
         <form method="post" class="apf-fin-mail__test">
           <?php wp_nonce_field( 'apf_fin_mail_test', 'apf_fin_mail_test_nonce' ); ?>
@@ -344,6 +420,75 @@ add_shortcode( 'apf_portal_financeiro_email', function () {
           </div>
         <?php endif; ?>
       </div>
+
+      <div class="apf-fin-mail__card apf-fin-mail__card--template">
+        <h2>Mensagem para o Portal FAEPA</h2>
+        <p>Texto usado no e-mail de notificacao quando o pagamento e solicitado pela FAEPA.</p>
+        <form method="post" class="apf-fin-mail__form">
+          <?php wp_nonce_field( 'apf_fin_mail_faepa_template', 'apf_fin_mail_faepa_template_nonce' ); ?>
+          <input type="hidden" name="apf_fin_mail_faepa_template_action" value="1">
+
+          <label class="apf-fin-mail__label" for="apf-fin-mail-faepa-template">Texto da mensagem (FAEPA)</label>
+          <textarea
+            class="apf-fin-mail__textarea"
+            id="apf-fin-mail-faepa-template"
+            name="apf_fin_mail_faepa_template"
+            rows="8"
+          ><?php echo esc_textarea( $faepa_template_value ); ?></textarea>
+
+          <p style="margin:8px 0 12px;color:#475467;font-size:12px;">Placeholders: <code>[lista]</code>, <code>[curso]</code>, <code>[observacao]</code></p>
+          <button type="submit" class="apf-fin-mail__btn">Salvar mensagem FAEPA</button>
+        </form>
+      </div>
+
+      <?php
+        $faepa_capture = get_option( 'apf_mail_capture_faepa_last', array() );
+        $faepa_capture_time = isset( $faepa_capture['time'] ) ? (string) $faepa_capture['time'] : '';
+        $faepa_capture_to = isset( $faepa_capture['to'] ) ? (string) $faepa_capture['to'] : '';
+        $faepa_capture_subject = isset( $faepa_capture['subject'] ) ? (string) $faepa_capture['subject'] : '';
+        $faepa_capture_message = isset( $faepa_capture['message'] ) ? (string) $faepa_capture['message'] : '';
+        $faepa_capture_headers = isset( $faepa_capture['headers'] ) ? (string) $faepa_capture['headers'] : '';
+        $faepa_capture_from = isset( $faepa_capture['from_email'] ) ? (string) $faepa_capture['from_email'] : '';
+        $faepa_capture_from_name = isset( $faepa_capture['from_name'] ) ? (string) $faepa_capture['from_name'] : '';
+      ?>
+      <div class="apf-fin-mail__card apf-fin-mail__card--capture">
+        <h2>Portal FAEPA</h2>
+        <p>Captura portal faepa</p>
+
+        <form method="post" class="apf-fin-mail__form">
+          <?php wp_nonce_field( 'apf_fin_mail_faepa_capture', 'apf_fin_mail_faepa_capture_nonce' ); ?>
+          <input type="hidden" name="apf_fin_mail_faepa_capture_action" value="1">
+          <label class="apf-fin-mail__label" style="margin-top:0;">
+            <input type="checkbox" name="apf_fin_mail_faepa_capture" value="1" <?php echo $faepa_capture_force ? 'checked' : ''; ?>>
+            Ativar captura do portal FAEPA
+          </label>
+          <button type="submit" class="apf-fin-mail__btn">Salvar captura</button>
+        </form>
+
+        <?php if ( '' === $faepa_capture_subject && '' === $faepa_capture_message && '' === $faepa_capture_to ) : ?>
+          <div class="apf-fin-mail__empty">Nenhum e-mail capturado até o momento.</div>
+        <?php else : ?>
+          <div class="apf-fin-mail__grid">
+            <label class="apf-fin-mail__label">Data</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $faepa_capture_time ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">De</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( trim( $faepa_capture_from_name . ' <' . $faepa_capture_from . '>' ) ); ?>">
+
+            <label class="apf-fin-mail__label">Para</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $faepa_capture_to ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">Assunto</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $faepa_capture_subject ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">Headers</label>
+            <textarea class="apf-fin-mail__textarea" rows="4" readonly><?php echo esc_textarea( $faepa_capture_headers ); ?></textarea>
+
+            <label class="apf-fin-mail__label">Mensagem</label>
+            <textarea class="apf-fin-mail__textarea" rows="8" readonly><?php echo esc_textarea( $faepa_capture_message ); ?></textarea>
+          </div>
+        <?php endif; ?>
+      </div>
     </div>
 
     <?php
@@ -379,5 +524,8 @@ add_shortcode( 'apf_portal_financeiro_email', function () {
     <?php
     endif;
 
-    return ob_get_clean();
-} );
+        return ob_get_clean();
+    }
+}
+
+add_shortcode( 'apf_portal_financeiro_email', 'apf_render_portal_financeiro_email' );
