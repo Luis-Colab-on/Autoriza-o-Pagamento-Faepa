@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Autorização Pagamento FAEPA – Form 3 Abas
- * Description: Formulário em 3 passos + portal do prestador + dashboard [apf_inbox].
- * Version: 0.4.0
- * Author: Você
+ * Plugin Name: Autorização Pagamento FAEPA 
+ * Description: Sistema de autorização de pagamentos FAEPA.
+ * Version: 04.01.00
+ * Author: Luis Felipe Furtado
  * License: GPLv2 or later
  */
 
