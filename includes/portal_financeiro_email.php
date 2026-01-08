@@ -170,6 +170,278 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
         exit;
     }
 
+    if ( isset( $_POST['apf_fin_mail_access_template_action'] ) ) {
+        if ( ! isset( $_POST['apf_fin_mail_access_template_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_access_template_nonce'] ), 'apf_fin_mail_access_template' ) ) {
+            $notice      = 'Não foi possível salvar a mensagem de acesso. Recarregue a página e tente novamente.';
+            $notice_type = 'error';
+        } else {
+            $template_raw = isset( $_POST['apf_fin_mail_access_template'] ) ? wp_unslash( $_POST['apf_fin_mail_access_template'] ) : '';
+            $template_raw = is_string( $template_raw ) ? $template_raw : '';
+            $template     = sanitize_textarea_field( $template_raw );
+            $template     = trim( $template );
+
+            if ( '' === $template ) {
+                delete_option( 'apf_portal_access_email_template' );
+                $notice = 'Mensagem padrão de acesso restaurada.';
+            } else {
+                update_option( 'apf_portal_access_email_template', $template, false );
+                $notice = 'Mensagem de acesso atualizada.';
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_fin_mail_notice', 'apf_fin_mail_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_fin_mail_notice' => $notice,
+            'apf_fin_mail_status' => ( 'success' === $notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
+    if ( isset( $_POST['apf_fin_mail_access_capture_action'] ) ) {
+        if ( ! isset( $_POST['apf_fin_mail_access_capture_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_access_capture_nonce'] ), 'apf_fin_mail_access_capture' ) ) {
+            $notice      = 'Não foi possível salvar a captura de acesso. Recarregue a página e tente novamente.';
+            $notice_type = 'error';
+        } else {
+            $capture_enabled = ! empty( $_POST['apf_fin_mail_access_capture'] );
+            if ( $capture_enabled ) {
+                update_option( 'apf_mail_capture_access_force', '1', false );
+                $notice = 'Captura de acesso ativada.';
+            } else {
+                delete_option( 'apf_mail_capture_access_force' );
+                $notice = 'Captura de acesso desativada.';
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_fin_mail_notice', 'apf_fin_mail_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_fin_mail_notice' => $notice,
+            'apf_fin_mail_status' => ( 'success' === $notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
+    if ( isset( $_POST['apf_fin_mail_coord_template_action'] ) ) {
+        if ( ! isset( $_POST['apf_fin_mail_coord_template_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_coord_template_nonce'] ), 'apf_fin_mail_coord_template' ) ) {
+            $notice      = 'Não foi possível salvar a mensagem ao coordenador. Recarregue a página e tente novamente.';
+            $notice_type = 'error';
+        } else {
+            $template_raw = isset( $_POST['apf_fin_mail_coord_template'] ) ? wp_unslash( $_POST['apf_fin_mail_coord_template'] ) : '';
+            $template_raw = is_string( $template_raw ) ? $template_raw : '';
+            $template     = sanitize_textarea_field( $template_raw );
+            $template     = trim( $template );
+
+            if ( '' === $template ) {
+                delete_option( 'apf_coordinator_request_email_template' );
+                $notice = 'Mensagem padrão ao coordenador restaurada.';
+            } else {
+                update_option( 'apf_coordinator_request_email_template', $template, false );
+                $notice = 'Mensagem ao coordenador atualizada.';
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_fin_mail_notice', 'apf_fin_mail_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_fin_mail_notice' => $notice,
+            'apf_fin_mail_status' => ( 'success' === $notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
+    if ( isset( $_POST['apf_fin_mail_coord_capture_action'] ) ) {
+        if ( ! isset( $_POST['apf_fin_mail_coord_capture_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_coord_capture_nonce'] ), 'apf_fin_mail_coord_capture' ) ) {
+            $notice      = 'Não foi possível salvar a captura do coordenador. Recarregue a página e tente novamente.';
+            $notice_type = 'error';
+        } else {
+            $capture_enabled = ! empty( $_POST['apf_fin_mail_coord_capture'] );
+            if ( $capture_enabled ) {
+                update_option( 'apf_mail_capture_coordinator_request_force', '1', false );
+                $notice = 'Captura do coordenador ativada.';
+            } else {
+                delete_option( 'apf_mail_capture_coordinator_request_force' );
+                $notice = 'Captura do coordenador desativada.';
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_fin_mail_notice', 'apf_fin_mail_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_fin_mail_notice' => $notice,
+            'apf_fin_mail_status' => ( 'success' === $notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
+    if ( isset( $_POST['apf_fin_mail_faepa_forward_template_action'] ) ) {
+        if ( ! isset( $_POST['apf_fin_mail_faepa_forward_template_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_faepa_forward_template_nonce'] ), 'apf_fin_mail_faepa_forward_template' ) ) {
+            $notice      = 'Não foi possível salvar a mensagem à FAEPA. Recarregue a página e tente novamente.';
+            $notice_type = 'error';
+        } else {
+            $template_raw = isset( $_POST['apf_fin_mail_faepa_forward_template'] ) ? wp_unslash( $_POST['apf_fin_mail_faepa_forward_template'] ) : '';
+            $template_raw = is_string( $template_raw ) ? $template_raw : '';
+            $template     = sanitize_textarea_field( $template_raw );
+            $template     = trim( $template );
+
+            if ( '' === $template ) {
+                delete_option( 'apf_faepa_forward_email_template' );
+                $notice = 'Mensagem padrão à FAEPA restaurada.';
+            } else {
+                update_option( 'apf_faepa_forward_email_template', $template, false );
+                $notice = 'Mensagem à FAEPA atualizada.';
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_fin_mail_notice', 'apf_fin_mail_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_fin_mail_notice' => $notice,
+            'apf_fin_mail_status' => ( 'success' === $notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
+    if ( isset( $_POST['apf_fin_mail_faepa_forward_capture_action'] ) ) {
+        if ( ! isset( $_POST['apf_fin_mail_faepa_forward_capture_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_faepa_forward_capture_nonce'] ), 'apf_fin_mail_faepa_forward_capture' ) ) {
+            $notice      = 'Não foi possível salvar a captura da FAEPA. Recarregue a página e tente novamente.';
+            $notice_type = 'error';
+        } else {
+            $capture_enabled = ! empty( $_POST['apf_fin_mail_faepa_forward_capture'] );
+            if ( $capture_enabled ) {
+                update_option( 'apf_mail_capture_faepa_forward_force', '1', false );
+                $notice = 'Captura da FAEPA ativada.';
+            } else {
+                delete_option( 'apf_mail_capture_faepa_forward_force' );
+                $notice = 'Captura da FAEPA desativada.';
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_fin_mail_notice', 'apf_fin_mail_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_fin_mail_notice' => $notice,
+            'apf_fin_mail_status' => ( 'success' === $notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
+    if ( isset( $_POST['apf_fin_mail_scheduler_template_action'] ) ) {
+        if ( ! isset( $_POST['apf_fin_mail_scheduler_template_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_scheduler_template_nonce'] ), 'apf_fin_mail_scheduler_template' ) ) {
+            $notice      = 'Não foi possível salvar a mensagem de aviso. Recarregue a página e tente novamente.';
+            $notice_type = 'error';
+        } else {
+            $template_raw = isset( $_POST['apf_fin_mail_scheduler_template'] ) ? wp_unslash( $_POST['apf_fin_mail_scheduler_template'] ) : '';
+            $template_raw = is_string( $template_raw ) ? $template_raw : '';
+            $template     = sanitize_textarea_field( $template_raw );
+            $template     = trim( $template );
+
+            if ( '' === $template ) {
+                delete_option( 'apf_scheduler_notice_email_template' );
+                $notice = 'Mensagem padrão de aviso restaurada.';
+            } else {
+                update_option( 'apf_scheduler_notice_email_template', $template, false );
+                $notice = 'Mensagem de aviso atualizada.';
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_fin_mail_notice', 'apf_fin_mail_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_fin_mail_notice' => $notice,
+            'apf_fin_mail_status' => ( 'success' === $notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
+    if ( isset( $_POST['apf_fin_mail_scheduler_capture_action'] ) ) {
+        if ( ! isset( $_POST['apf_fin_mail_scheduler_capture_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_scheduler_capture_nonce'] ), 'apf_fin_mail_scheduler_capture' ) ) {
+            $notice      = 'Não foi possível salvar a captura de avisos. Recarregue a página e tente novamente.';
+            $notice_type = 'error';
+        } else {
+            $capture_enabled = ! empty( $_POST['apf_fin_mail_scheduler_capture'] );
+            if ( $capture_enabled ) {
+                update_option( 'apf_mail_capture_scheduler_force', '1', false );
+                $notice = 'Captura de avisos ativada.';
+            } else {
+                delete_option( 'apf_mail_capture_scheduler_force' );
+                $notice = 'Captura de avisos desativada.';
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_fin_mail_notice', 'apf_fin_mail_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_fin_mail_notice' => $notice,
+            'apf_fin_mail_status' => ( 'success' === $notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
     if ( isset( $_POST['apf_fin_mail_faepa_capture_action'] ) ) {
         if ( ! isset( $_POST['apf_fin_mail_faepa_capture_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_faepa_capture_nonce'] ), 'apf_fin_mail_faepa_capture' ) ) {
             $notice      = 'Não foi possível salvar a captura do portal FAEPA. Recarregue a página e tente novamente.';
@@ -262,6 +534,34 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
     $faepa_template_saved = get_option( 'apf_faepa_payment_email_template', '' );
     $faepa_template_saved = is_string( $faepa_template_saved ) ? $faepa_template_saved : '';
     $faepa_template_value = trim( $faepa_template_saved ) !== '' ? $faepa_template_saved : $faepa_template_default;
+    $access_template_default = function_exists( 'apf_get_portal_access_default_template' )
+        ? apf_get_portal_access_default_template()
+        : '';
+    $access_template_saved = get_option( 'apf_portal_access_email_template', '' );
+    $access_template_saved = is_string( $access_template_saved ) ? $access_template_saved : '';
+    $access_template_value = trim( $access_template_saved ) !== '' ? $access_template_saved : $access_template_default;
+    $access_capture_force = ! empty( get_option( 'apf_mail_capture_access_force', '' ) );
+    $coord_template_default = function_exists( 'apf_get_coordinator_request_default_template' )
+        ? apf_get_coordinator_request_default_template()
+        : '';
+    $coord_template_saved = get_option( 'apf_coordinator_request_email_template', '' );
+    $coord_template_saved = is_string( $coord_template_saved ) ? $coord_template_saved : '';
+    $coord_template_value = trim( $coord_template_saved ) !== '' ? $coord_template_saved : $coord_template_default;
+    $coord_capture_force = ! empty( get_option( 'apf_mail_capture_coordinator_request_force', '' ) );
+    $faepa_forward_template_default = function_exists( 'apf_get_faepa_forward_default_template' )
+        ? apf_get_faepa_forward_default_template()
+        : '';
+    $faepa_forward_template_saved = get_option( 'apf_faepa_forward_email_template', '' );
+    $faepa_forward_template_saved = is_string( $faepa_forward_template_saved ) ? $faepa_forward_template_saved : '';
+    $faepa_forward_template_value = trim( $faepa_forward_template_saved ) !== '' ? $faepa_forward_template_saved : $faepa_forward_template_default;
+    $faepa_forward_capture_force = ! empty( get_option( 'apf_mail_capture_faepa_forward_force', '' ) );
+    $scheduler_template_default = function_exists( 'apf_get_scheduler_notice_default_template' )
+        ? apf_get_scheduler_notice_default_template()
+        : '';
+    $scheduler_template_saved = get_option( 'apf_scheduler_notice_email_template', '' );
+    $scheduler_template_saved = is_string( $scheduler_template_saved ) ? $scheduler_template_saved : '';
+    $scheduler_template_value = trim( $scheduler_template_saved ) !== '' ? $scheduler_template_saved : $scheduler_template_default;
+    $scheduler_capture_force = ! empty( get_option( 'apf_mail_capture_scheduler_force', '' ) );
     $faepa_capture_force = ! empty( get_option( 'apf_mail_capture_faepa_force', '' ) );
 
     $capture = get_option( 'apf_mail_capture_last', array() );
@@ -281,6 +581,82 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
     $capture_from_name = $sender_name;
     if ( isset( $capture['from_name'] ) && is_string( $capture['from_name'] ) ) {
         $capture_from_name = sanitize_text_field( $capture['from_name'] );
+    }
+
+    $access_capture = get_option( 'apf_mail_capture_access_last', array() );
+    if ( ! is_array( $access_capture ) ) {
+        $access_capture = array();
+    }
+
+    $access_capture_time    = isset( $access_capture['time'] ) ? sanitize_text_field( $access_capture['time'] ) : '';
+    $access_capture_to      = isset( $access_capture['to'] ) ? sanitize_text_field( $access_capture['to'] ) : '';
+    $access_capture_subject = isset( $access_capture['subject'] ) ? sanitize_text_field( $access_capture['subject'] ) : '';
+    $access_capture_headers = isset( $access_capture['headers'] ) ? (string) $access_capture['headers'] : '';
+    $access_capture_message = isset( $access_capture['message'] ) ? (string) $access_capture['message'] : '';
+    $access_capture_from    = $effective_email;
+    if ( isset( $access_capture['from_email'] ) && sanitize_email( $access_capture['from_email'] ) ) {
+        $access_capture_from = sanitize_email( $access_capture['from_email'] );
+    }
+    $access_capture_from_name = $sender_name;
+    if ( isset( $access_capture['from_name'] ) && is_string( $access_capture['from_name'] ) ) {
+        $access_capture_from_name = sanitize_text_field( $access_capture['from_name'] );
+    }
+
+    $coord_capture = get_option( 'apf_mail_capture_coordinator_request_last', array() );
+    if ( ! is_array( $coord_capture ) ) {
+        $coord_capture = array();
+    }
+
+    $coord_capture_time    = isset( $coord_capture['time'] ) ? sanitize_text_field( $coord_capture['time'] ) : '';
+    $coord_capture_to      = isset( $coord_capture['to'] ) ? sanitize_text_field( $coord_capture['to'] ) : '';
+    $coord_capture_subject = isset( $coord_capture['subject'] ) ? sanitize_text_field( $coord_capture['subject'] ) : '';
+    $coord_capture_headers = isset( $coord_capture['headers'] ) ? (string) $coord_capture['headers'] : '';
+    $coord_capture_message = isset( $coord_capture['message'] ) ? (string) $coord_capture['message'] : '';
+    $coord_capture_from    = $effective_email;
+    if ( isset( $coord_capture['from_email'] ) && sanitize_email( $coord_capture['from_email'] ) ) {
+        $coord_capture_from = sanitize_email( $coord_capture['from_email'] );
+    }
+    $coord_capture_from_name = $sender_name;
+    if ( isset( $coord_capture['from_name'] ) && is_string( $coord_capture['from_name'] ) ) {
+        $coord_capture_from_name = sanitize_text_field( $coord_capture['from_name'] );
+    }
+
+    $faepa_forward_capture = get_option( 'apf_mail_capture_faepa_forward_last', array() );
+    if ( ! is_array( $faepa_forward_capture ) ) {
+        $faepa_forward_capture = array();
+    }
+
+    $faepa_forward_capture_time    = isset( $faepa_forward_capture['time'] ) ? sanitize_text_field( $faepa_forward_capture['time'] ) : '';
+    $faepa_forward_capture_to      = isset( $faepa_forward_capture['to'] ) ? sanitize_text_field( $faepa_forward_capture['to'] ) : '';
+    $faepa_forward_capture_subject = isset( $faepa_forward_capture['subject'] ) ? sanitize_text_field( $faepa_forward_capture['subject'] ) : '';
+    $faepa_forward_capture_headers = isset( $faepa_forward_capture['headers'] ) ? (string) $faepa_forward_capture['headers'] : '';
+    $faepa_forward_capture_message = isset( $faepa_forward_capture['message'] ) ? (string) $faepa_forward_capture['message'] : '';
+    $faepa_forward_capture_from    = $effective_email;
+    if ( isset( $faepa_forward_capture['from_email'] ) && sanitize_email( $faepa_forward_capture['from_email'] ) ) {
+        $faepa_forward_capture_from = sanitize_email( $faepa_forward_capture['from_email'] );
+    }
+    $faepa_forward_capture_from_name = $sender_name;
+    if ( isset( $faepa_forward_capture['from_name'] ) && is_string( $faepa_forward_capture['from_name'] ) ) {
+        $faepa_forward_capture_from_name = sanitize_text_field( $faepa_forward_capture['from_name'] );
+    }
+
+    $scheduler_capture = get_option( 'apf_mail_capture_scheduler_last', array() );
+    if ( ! is_array( $scheduler_capture ) ) {
+        $scheduler_capture = array();
+    }
+
+    $scheduler_capture_time    = isset( $scheduler_capture['time'] ) ? sanitize_text_field( $scheduler_capture['time'] ) : '';
+    $scheduler_capture_to      = isset( $scheduler_capture['to'] ) ? sanitize_text_field( $scheduler_capture['to'] ) : '';
+    $scheduler_capture_subject = isset( $scheduler_capture['subject'] ) ? sanitize_text_field( $scheduler_capture['subject'] ) : '';
+    $scheduler_capture_headers = isset( $scheduler_capture['headers'] ) ? (string) $scheduler_capture['headers'] : '';
+    $scheduler_capture_message = isset( $scheduler_capture['message'] ) ? (string) $scheduler_capture['message'] : '';
+    $scheduler_capture_from    = $effective_email;
+    if ( isset( $scheduler_capture['from_email'] ) && sanitize_email( $scheduler_capture['from_email'] ) ) {
+        $scheduler_capture_from = sanitize_email( $scheduler_capture['from_email'] );
+    }
+    $scheduler_capture_from_name = $sender_name;
+    if ( isset( $scheduler_capture['from_name'] ) && is_string( $scheduler_capture['from_name'] ) ) {
+        $scheduler_capture_from_name = sanitize_text_field( $scheduler_capture['from_name'] );
     }
 
     ob_start();
@@ -328,29 +704,90 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
         <p>Use os códigos abaixo no texto da mensagem.</p>
 
         <div class="apf-fin-mail__glossary">
-          <ul>
-            <li><code>[nome]</code> Nome do colaborador</li>
-            <li><code>[email]</code> E-mail informado</li>
-            <li><code>[telefone]</code> Telefone informado</li>
-            <li><code>[cpf]</code> CPF informado</li>
-            <li><code>[cnpj]</code> CNPJ informado</li>
-            <li><code>[tipo_pessoa]</code> PF ou PJ</li>
-            <li><code>[empresa]</code> Nome da empresa</li>
-            <li><code>[colaborador]</code> Nome do colaborador/profissional</li>
-            <li><code>[numero_controle]</code> Número de controle</li>
-            <li><code>[documento_fiscal]</code> Documento fiscal</li>
-            <li><code>[diretor]</code> Diretor selecionado</li>
-            <li><code>[curso]</code> Nome curto do curso</li>
-            <li><code>[valor]</code> Valor informado</li>
-            <li><code>[data_servico]</code> Data da prestação</li>
-            <li><code>[descricao]</code> Descrição do serviço/material</li>
-            <li><code>[classificacao]</code> Classificação</li>
-            <li><code>[carga_horaria]</code> Carga horária</li>
-            <li><code>[prestacao_contas]</code> Prestação de contas</li>
-            <li><code>[banco]</code> Banco</li>
-            <li><code>[agencia]</code> Agência</li>
-            <li><code>[conta]</code> Conta corrente</li>
-          </ul>
+          <div class="apf-fin-mail__glossary-group">
+            <h3>Placeholders geral</h3>
+            <ul>
+              <li><code>[nome]</code> Nome do destinatário</li>
+              <li><code>[curso]</code> Curso informado</li>
+            </ul>
+          </div>
+
+          <div class="apf-fin-mail__glossary-group">
+            <h3>Placeholders para Mensagem do formulário FAEPA</h3>
+            <ul>
+              <li><code>[nome]</code> Nome do colaborador</li>
+              <li><code>[email]</code> E-mail informado</li>
+              <li><code>[telefone]</code> Telefone informado</li>
+              <li><code>[cpf]</code> CPF informado</li>
+              <li><code>[cnpj]</code> CNPJ informado</li>
+              <li><code>[tipo_pessoa]</code> PF ou PJ</li>
+              <li><code>[empresa]</code> Nome da empresa</li>
+              <li><code>[colaborador]</code> Nome do colaborador/profissional</li>
+              <li><code>[numero_controle]</code> Número de controle</li>
+              <li><code>[documento_fiscal]</code> Documento fiscal</li>
+              <li><code>[diretor]</code> Diretor selecionado</li>
+              <li><code>[curso]</code> Nome curto do curso</li>
+              <li><code>[valor]</code> Valor informado</li>
+              <li><code>[data_servico]</code> Data da prestação</li>
+              <li><code>[descricao]</code> Descrição do serviço/material</li>
+              <li><code>[classificacao]</code> Classificação</li>
+              <li><code>[carga_horaria]</code> Carga horária</li>
+              <li><code>[prestacao_contas]</code> Prestação de contas</li>
+              <li><code>[banco]</code> Banco</li>
+              <li><code>[agencia]</code> Agência</li>
+              <li><code>[conta]</code> Conta corrente</li>
+            </ul>
+          </div>
+
+          <div class="apf-fin-mail__glossary-group">
+            <h3>Placeholders para Mensagem de aprovação de acesso</h3>
+            <ul>
+              <li><code>[nome]</code> Nome do destinatário</li>
+              <li><code>[status]</code> Aprovada ou recusada</li>
+              <li><code>[portal]</code> Portal do Coordenador ou FAEPA</li>
+            </ul>
+          </div>
+
+          <div class="apf-fin-mail__glossary-group">
+            <h3>Placeholders para Solicitações de colaboradores</h3>
+            <ul>
+              <li><code>[coordenador]</code> Nome do coordenador</li>
+              <li><code>[quantidade]</code> Quantidade de solicitações</li>
+              <li><code>[curso]</code> Curso(s) relacionado(s)</li>
+              <li><code>[titulo]</code> Assunto da solicitação</li>
+              <li><code>[mensagem]</code> Mensagem do financeiro</li>
+              <li><code>[portal_url]</code> Link do Portal do Coordenador</li>
+            </ul>
+          </div>
+
+          <div class="apf-fin-mail__glossary-group">
+            <h3>Placeholders para Dados validados pelo financeiro</h3>
+            <ul>
+              <li><code>[curso]</code> Curso(s) relacionado(s)</li>
+              <li><code>[coordenador]</code> Coordenador(es) do retorno</li>
+              <li><code>[quantidade]</code> Quantidade de colaboradores</li>
+              <li><code>[portal_url]</code> Link do Portal FAEPA</li>
+            </ul>
+          </div>
+
+          <div class="apf-fin-mail__glossary-group">
+            <h3>Placeholders para Mensagem de aviso na agenda</h3>
+            <ul>
+              <li><code>[nome]</code> Nome do destinatário</li>
+              <li><code>[origem]</code> Financeiro da Colab-on ou Coordenador</li>
+              <li><code>[titulo]</code> Título do aviso</li>
+              <li><code>[data]</code> Data do aviso</li>
+            </ul>
+          </div>
+
+          <div class="apf-fin-mail__glossary-group">
+            <h3>Placeholders para Mensagem para o Portal FAEPA</h3>
+            <ul>
+              <li><code>[lista]</code> Lista de colaboradores e valores</li>
+              <li><code>[curso]</code> Curso informado</li>
+              <li><code>[observacao]</code> Observação do envio</li>
+            </ul>
+          </div>
         </div>
       </div>
 
@@ -417,6 +854,250 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
 
             <label class="apf-fin-mail__label">Mensagem</label>
             <textarea class="apf-fin-mail__textarea" rows="8" readonly><?php echo esc_textarea( $capture_message ); ?></textarea>
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <div class="apf-fin-mail__divider" aria-hidden="true"></div>
+
+      <div class="apf-fin-mail__card apf-fin-mail__card--template">
+        <h2>Mensagem de aprovação de acesso</h2>
+        <p>Texto usado no e-mail enviado quando o financeiro aprova ou recusa acesso ao portal.</p>
+        <form method="post" class="apf-fin-mail__form">
+          <?php wp_nonce_field( 'apf_fin_mail_access_template', 'apf_fin_mail_access_template_nonce' ); ?>
+          <input type="hidden" name="apf_fin_mail_access_template_action" value="1">
+
+          <label class="apf-fin-mail__label" for="apf-fin-mail-access-template">Texto da mensagem</label>
+          <textarea
+            class="apf-fin-mail__textarea"
+            id="apf-fin-mail-access-template"
+            name="apf_fin_mail_access_template"
+            rows="8"
+          ><?php echo esc_textarea( $access_template_value ); ?></textarea>
+
+          <p style="margin:8px 0 12px;color:#475467;font-size:12px;">Placeholders: <code>[nome]</code>, <code>[status]</code>, <code>[portal]</code></p>
+          <button type="submit" class="apf-fin-mail__btn">Salvar mensagem de acesso</button>
+        </form>
+      </div>
+
+      <div class="apf-fin-mail__card apf-fin-mail__card--capture">
+        <h2>Acesso aos portais</h2>
+        <p>Captura do último e-mail de aprovação/recusa de acesso.</p>
+
+        <form method="post" class="apf-fin-mail__form">
+          <?php wp_nonce_field( 'apf_fin_mail_access_capture', 'apf_fin_mail_access_capture_nonce' ); ?>
+          <input type="hidden" name="apf_fin_mail_access_capture_action" value="1">
+          <label class="apf-fin-mail__label" style="margin-top:0;">
+            <input type="checkbox" name="apf_fin_mail_access_capture" value="1" <?php echo $access_capture_force ? 'checked' : ''; ?>>
+            Ativar captura de acesso
+          </label>
+          <button type="submit" class="apf-fin-mail__btn">Salvar captura</button>
+        </form>
+
+        <?php if ( '' === $access_capture_subject && '' === $access_capture_message && '' === $access_capture_to ) : ?>
+          <div class="apf-fin-mail__empty">Nenhum e-mail capturado até o momento.</div>
+        <?php else : ?>
+          <div class="apf-fin-mail__grid">
+            <label class="apf-fin-mail__label">Data</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $access_capture_time ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">De</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( trim( $access_capture_from_name . ' <' . $access_capture_from . '>' ) ); ?>">
+
+            <label class="apf-fin-mail__label">Para</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $access_capture_to ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">Assunto</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $access_capture_subject ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">Headers</label>
+            <textarea class="apf-fin-mail__textarea" rows="4" readonly><?php echo esc_textarea( $access_capture_headers ); ?></textarea>
+
+            <label class="apf-fin-mail__label">Mensagem</label>
+            <textarea class="apf-fin-mail__textarea" rows="8" readonly><?php echo esc_textarea( $access_capture_message ); ?></textarea>
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <div class="apf-fin-mail__divider" aria-hidden="true"></div>
+
+      <div class="apf-fin-mail__card apf-fin-mail__card--template">
+        <h2>Solicitações de colaboradores</h2>
+        <p>Texto usado no e-mail enviado quando o coordenador recebe novas solicitações.</p>
+        <form method="post" class="apf-fin-mail__form">
+          <?php wp_nonce_field( 'apf_fin_mail_coord_template', 'apf_fin_mail_coord_template_nonce' ); ?>
+          <input type="hidden" name="apf_fin_mail_coord_template_action" value="1">
+
+          <label class="apf-fin-mail__label" for="apf-fin-mail-coord-template">Texto da mensagem</label>
+          <textarea
+            class="apf-fin-mail__textarea"
+            id="apf-fin-mail-coord-template"
+            name="apf_fin_mail_coord_template"
+            rows="8"
+          ><?php echo esc_textarea( $coord_template_value ); ?></textarea>
+
+          <p style="margin:8px 0 12px;color:#475467;font-size:12px;">Placeholders: <code>[coordenador]</code>, <code>[quantidade]</code>, <code>[curso]</code>, <code>[titulo]</code>, <code>[mensagem]</code>, <code>[portal_url]</code></p>
+          <button type="submit" class="apf-fin-mail__btn">Salvar mensagem do coordenador</button>
+        </form>
+      </div>
+
+      <div class="apf-fin-mail__card apf-fin-mail__card--capture">
+        <h2>Solicitações enviadas</h2>
+        <p>Captura do último e-mail enviado ao coordenador.</p>
+
+        <form method="post" class="apf-fin-mail__form">
+          <?php wp_nonce_field( 'apf_fin_mail_coord_capture', 'apf_fin_mail_coord_capture_nonce' ); ?>
+          <input type="hidden" name="apf_fin_mail_coord_capture_action" value="1">
+          <label class="apf-fin-mail__label" style="margin-top:0;">
+            <input type="checkbox" name="apf_fin_mail_coord_capture" value="1" <?php echo $coord_capture_force ? 'checked' : ''; ?>>
+            Ativar captura do coordenador
+          </label>
+          <button type="submit" class="apf-fin-mail__btn">Salvar captura</button>
+        </form>
+
+        <?php if ( '' === $coord_capture_subject && '' === $coord_capture_message && '' === $coord_capture_to ) : ?>
+          <div class="apf-fin-mail__empty">Nenhum e-mail capturado até o momento.</div>
+        <?php else : ?>
+          <div class="apf-fin-mail__grid">
+            <label class="apf-fin-mail__label">Data</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $coord_capture_time ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">De</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( trim( $coord_capture_from_name . ' <' . $coord_capture_from . '>' ) ); ?>">
+
+            <label class="apf-fin-mail__label">Para</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $coord_capture_to ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">Assunto</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $coord_capture_subject ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">Headers</label>
+            <textarea class="apf-fin-mail__textarea" rows="4" readonly><?php echo esc_textarea( $coord_capture_headers ); ?></textarea>
+
+            <label class="apf-fin-mail__label">Mensagem</label>
+            <textarea class="apf-fin-mail__textarea" rows="8" readonly><?php echo esc_textarea( $coord_capture_message ); ?></textarea>
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <div class="apf-fin-mail__divider" aria-hidden="true"></div>
+
+      <div class="apf-fin-mail__card apf-fin-mail__card--template">
+        <h2>Dados validados pelo financeiro</h2>
+        <p>Texto usado no e-mail enviado à FAEPA quando os dados são validados.</p>
+        <form method="post" class="apf-fin-mail__form">
+          <?php wp_nonce_field( 'apf_fin_mail_faepa_forward_template', 'apf_fin_mail_faepa_forward_template_nonce' ); ?>
+          <input type="hidden" name="apf_fin_mail_faepa_forward_template_action" value="1">
+
+          <label class="apf-fin-mail__label" for="apf-fin-mail-faepa-forward-template">Texto da mensagem</label>
+          <textarea
+            class="apf-fin-mail__textarea"
+            id="apf-fin-mail-faepa-forward-template"
+            name="apf_fin_mail_faepa_forward_template"
+            rows="8"
+          ><?php echo esc_textarea( $faepa_forward_template_value ); ?></textarea>
+
+          <p style="margin:8px 0 12px;color:#475467;font-size:12px;">Placeholders: <code>[curso]</code>, <code>[coordenador]</code>, <code>[quantidade]</code>, <code>[portal_url]</code></p>
+          <button type="submit" class="apf-fin-mail__btn">Salvar mensagem para a FAEPA</button>
+        </form>
+      </div>
+
+      <div class="apf-fin-mail__card apf-fin-mail__card--capture">
+        <h2>Dados validados enviados</h2>
+        <p>Captura do último e-mail enviado à FAEPA.</p>
+
+        <form method="post" class="apf-fin-mail__form">
+          <?php wp_nonce_field( 'apf_fin_mail_faepa_forward_capture', 'apf_fin_mail_faepa_forward_capture_nonce' ); ?>
+          <input type="hidden" name="apf_fin_mail_faepa_forward_capture_action" value="1">
+          <label class="apf-fin-mail__label" style="margin-top:0;">
+            <input type="checkbox" name="apf_fin_mail_faepa_forward_capture" value="1" <?php echo $faepa_forward_capture_force ? 'checked' : ''; ?>>
+            Ativar captura da FAEPA
+          </label>
+          <button type="submit" class="apf-fin-mail__btn">Salvar captura</button>
+        </form>
+
+        <?php if ( '' === $faepa_forward_capture_subject && '' === $faepa_forward_capture_message && '' === $faepa_forward_capture_to ) : ?>
+          <div class="apf-fin-mail__empty">Nenhum e-mail capturado até o momento.</div>
+        <?php else : ?>
+          <div class="apf-fin-mail__grid">
+            <label class="apf-fin-mail__label">Data</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $faepa_forward_capture_time ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">De</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( trim( $faepa_forward_capture_from_name . ' <' . $faepa_forward_capture_from . '>' ) ); ?>">
+
+            <label class="apf-fin-mail__label">Para</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $faepa_forward_capture_to ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">Assunto</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $faepa_forward_capture_subject ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">Headers</label>
+            <textarea class="apf-fin-mail__textarea" rows="4" readonly><?php echo esc_textarea( $faepa_forward_capture_headers ); ?></textarea>
+
+            <label class="apf-fin-mail__label">Mensagem</label>
+            <textarea class="apf-fin-mail__textarea" rows="8" readonly><?php echo esc_textarea( $faepa_forward_capture_message ); ?></textarea>
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <div class="apf-fin-mail__divider" aria-hidden="true"></div>
+
+      <div class="apf-fin-mail__card apf-fin-mail__card--template">
+        <h2>Mensagem de aviso na agenda</h2>
+        <p>Texto usado no e-mail enviado quando um aviso e adicionado na agenda do colaborador.</p>
+        <form method="post" class="apf-fin-mail__form">
+          <?php wp_nonce_field( 'apf_fin_mail_scheduler_template', 'apf_fin_mail_scheduler_template_nonce' ); ?>
+          <input type="hidden" name="apf_fin_mail_scheduler_template_action" value="1">
+
+          <label class="apf-fin-mail__label" for="apf-fin-mail-scheduler-template">Texto da mensagem</label>
+          <textarea
+            class="apf-fin-mail__textarea"
+            id="apf-fin-mail-scheduler-template"
+            name="apf_fin_mail_scheduler_template"
+            rows="8"
+          ><?php echo esc_textarea( $scheduler_template_value ); ?></textarea>
+
+          <p style="margin:8px 0 12px;color:#475467;font-size:12px;">Placeholders: <code>[nome]</code>, <code>[origem]</code>, <code>[titulo]</code>, <code>[data]</code></p>
+          <button type="submit" class="apf-fin-mail__btn">Salvar mensagem de aviso</button>
+        </form>
+      </div>
+
+      <div class="apf-fin-mail__card apf-fin-mail__card--capture">
+        <h2>Avisos da agenda</h2>
+        <p>Captura do último e-mail de aviso enviado aos colaboradores.</p>
+
+        <form method="post" class="apf-fin-mail__form">
+          <?php wp_nonce_field( 'apf_fin_mail_scheduler_capture', 'apf_fin_mail_scheduler_capture_nonce' ); ?>
+          <input type="hidden" name="apf_fin_mail_scheduler_capture_action" value="1">
+          <label class="apf-fin-mail__label" style="margin-top:0;">
+            <input type="checkbox" name="apf_fin_mail_scheduler_capture" value="1" <?php echo $scheduler_capture_force ? 'checked' : ''; ?>>
+            Ativar captura de avisos
+          </label>
+          <button type="submit" class="apf-fin-mail__btn">Salvar captura</button>
+        </form>
+
+        <?php if ( '' === $scheduler_capture_subject && '' === $scheduler_capture_message && '' === $scheduler_capture_to ) : ?>
+          <div class="apf-fin-mail__empty">Nenhum e-mail capturado até o momento.</div>
+        <?php else : ?>
+          <div class="apf-fin-mail__grid">
+            <label class="apf-fin-mail__label">Data</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $scheduler_capture_time ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">De</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( trim( $scheduler_capture_from_name . ' <' . $scheduler_capture_from . '>' ) ); ?>">
+
+            <label class="apf-fin-mail__label">Para</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $scheduler_capture_to ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">Assunto</label>
+            <input class="apf-fin-mail__input" type="text" readonly value="<?php echo esc_attr( $scheduler_capture_subject ?: '—' ); ?>">
+
+            <label class="apf-fin-mail__label">Headers</label>
+            <textarea class="apf-fin-mail__textarea" rows="4" readonly><?php echo esc_textarea( $scheduler_capture_headers ); ?></textarea>
+
+            <label class="apf-fin-mail__label">Mensagem</label>
+            <textarea class="apf-fin-mail__textarea" rows="8" readonly><?php echo esc_textarea( $scheduler_capture_message ); ?></textarea>
           </div>
         <?php endif; ?>
       </div>
@@ -520,6 +1201,8 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
         .apf-fin-mail__restricted{max-width:720px;margin:24px auto;padding:12px 16px;border-radius:12px;border:1px solid #fecdd3;background:#fff1f2;color:#9f1239}
         .apf-fin-mail__empty{border:1px dashed #cbd5e1;border-radius:12px;padding:16px;color:#64748b;background:#f8fafc}
         .apf-fin-mail__glossary{padding:12px 14px;border-radius:12px;border:1px dashed #cbd5e1;background:#f8fafc}
+        .apf-fin-mail__glossary-group + .apf-fin-mail__glossary-group{margin-top:14px;padding-top:12px;border-top:1px dashed #cbd5e1}
+        .apf-fin-mail__glossary-group h3{margin:0 0 8px;font-size:14px;color:#0f172a}
         .apf-fin-mail__divider{height:4px;background:#000;border-radius:999px;margin:10px 0 18px}
         .apf-fin-mail__glossary ul{margin:0;padding-left:18px;color:#475467;font-size:13px;line-height:1.45}
         .apf-fin-mail__glossary code{background:#e2e8f0;border-radius:6px;padding:2px 6px;font-size:12px}

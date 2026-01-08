@@ -1166,6 +1166,12 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
                                 'created_at' => time(),
                             );
                             apf_scheduler_store_events( $scheduler_events );
+                            if ( function_exists( 'apf_send_scheduler_notice_emails' ) ) {
+                                apf_send_scheduler_notice_emails( $recipient_payload, 'coordenador', array(
+                                    'title' => $title,
+                                    'date'  => $date,
+                                ) );
+                            }
                             $alert_notice      = 'Aviso enviado aos colaboradores selecionados.';
                             $alert_notice_type = 'success';
                         }

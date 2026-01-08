@@ -684,10 +684,13 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
                 $id = isset($_POST['apf_dir_id']) ? preg_replace('/[^a-zA-Z0-9_\-\.]/', '', wp_unslash( $_POST['apf_dir_id'] )) : '';
                 $target_status = ( 'approve' === $action ) ? 'approved' : 'rejected';
                 $updated = false;
+                $should_notify = false;
+                $updated_entry = null;
 
                 foreach ( $directors as $idx => $item ) {
                     $item_id = isset($item['id']) ? preg_replace('/[^a-zA-Z0-9_\-\.]/', '', (string) $item['id']) : '';
                     if ( $item_id === $id ) {
+                        $previous_status = isset( $item['status'] ) ? sanitize_key( $item['status'] ) : '';
                         $directors[$idx]['status'] = $target_status;
                         $directors[$idx]['status_updated_at'] = time();
                         $directors[$idx]['status_updated_by'] = $user_id;
@@ -700,12 +703,31 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
                             $directors[$idx]['rejected_by'] = $user_id;
                         }
                         $updated = true;
+                        $should_notify = ( $previous_status !== $target_status );
+                        $updated_entry = $directors[$idx];
                         break;
                     }
                 }
 
                 if ( $updated ) {
                     update_option('apf_directors', $directors, false);
+                    if ( $should_notify && $updated_entry && function_exists( 'apf_send_portal_access_email' ) ) {
+                        $entry_user_id = isset( $updated_entry['user_id'] ) ? (int) $updated_entry['user_id'] : 0;
+                        $entry_name = isset( $updated_entry['director'] ) ? sanitize_text_field( (string) $updated_entry['director'] ) : '';
+                        $entry_email = isset( $updated_entry['email'] ) ? sanitize_email( $updated_entry['email'] ) : '';
+                        $recipient_email = function_exists( 'apf_resolve_channel_email' )
+                            ? apf_resolve_channel_email( $entry_user_id, 'coordinator', $entry_email )
+                            : $entry_email;
+
+                        if ( '' !== $recipient_email ) {
+                            apf_send_portal_access_email( array(
+                                'email'  => $recipient_email,
+                                'name'   => $entry_name,
+                                'status' => $target_status,
+                                'portal' => 'do Coordenador',
+                            ) );
+                        }
+                    }
                     $redirect_notice = ( 'approved' === $target_status )
                         ? 'Coordenador aprovado com sucesso.'
                         : 'Coordenador marcado como recusado.';
@@ -777,10 +799,13 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
                 $id = isset( $_POST['apf_faepa_access_id'] ) ? preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', wp_unslash( $_POST['apf_faepa_access_id'] ) ) : '';
                 $target_status = ( 'approve' === $action ) ? 'approved' : 'rejected';
                 $updated = false;
+                $should_notify = false;
+                $updated_entry = null;
 
                 foreach ( $faepa_access_requests as $idx => $entry ) {
                     $entry_id = isset( $entry['id'] ) ? preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', (string) $entry['id'] ) : '';
                     if ( '' !== $entry_id && $entry_id === $id ) {
+                        $previous_status = isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : '';
                         $timestamp = time();
                         $faepa_access_requests[ $idx ]['status'] = $target_status;
                         $faepa_access_requests[ $idx ]['status_updated_at'] = $timestamp;
@@ -794,6 +819,8 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
                             $faepa_access_requests[ $idx ]['rejected_by'] = $user_id;
                         }
                         $updated = true;
+                        $should_notify = ( $previous_status !== $target_status );
+                        $updated_entry = $faepa_access_requests[ $idx ];
                         break;
                     }
                 }
@@ -801,6 +828,29 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
                 if ( $updated ) {
                     if ( function_exists( 'apf_store_faepa_access_requests' ) ) {
                         apf_store_faepa_access_requests( $faepa_access_requests );
+                    }
+                    if ( $should_notify && $updated_entry && function_exists( 'apf_send_portal_access_email' ) ) {
+                        $entry_name = isset( $updated_entry['name'] ) ? sanitize_text_field( (string) $updated_entry['name'] ) : '';
+                        $entry_email = isset( $updated_entry['email'] ) ? sanitize_email( $updated_entry['email'] ) : '';
+                        $entry_login = isset( $updated_entry['login'] ) ? sanitize_email( $updated_entry['login'] ) : '';
+                        $entry_user_id = isset( $updated_entry['user_id'] ) ? (int) $updated_entry['user_id'] : 0;
+                        $recipient_email = $entry_email ? $entry_email : $entry_login;
+
+                        if ( '' === $recipient_email && $entry_user_id > 0 ) {
+                            $user = get_user_by( 'id', $entry_user_id );
+                            if ( $user && ! empty( $user->user_email ) ) {
+                                $recipient_email = sanitize_email( $user->user_email );
+                            }
+                        }
+
+                        if ( '' !== $recipient_email ) {
+                            apf_send_portal_access_email( array(
+                                'email'  => $recipient_email,
+                                'name'   => $entry_name,
+                                'status' => $target_status,
+                                'portal' => 'FAEPA',
+                            ) );
+                        }
                     }
                     $redirect_notice = ( 'approved' === $target_status )
                         ? 'Acesso aprovado com sucesso.'
@@ -1009,11 +1059,22 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
             if ( '' === $key ) {
                 continue;
             }
-            $label = ( '' !== $course_name ) ? $director_name . ' — ' . $course_name : $director_name;
+            $course_display = $course_name;
+            if ( '' !== $course_name ) {
+                if ( function_exists( 'apf_truncate_course_label' ) ) {
+                    $course_display = apf_truncate_course_label( $course_name );
+                } elseif ( strlen( $course_display ) > 42 ) {
+                    $course_display = rtrim( substr( $course_display, 0, 39 ) ) . '...';
+                }
+            }
+            $full_label = ( '' !== $course_name ) ? $director_name . ' — ' . $course_name : $director_name;
+            $display_label = ( '' !== $course_name ) ? $director_name . ' — ' . $course_display : $director_name;
             $director_filter_choices[ $key ] = array(
-                'label'    => $label,
+                'label'    => $full_label,
+                'display_label' => $display_label,
                 'director' => $director_name,
                 'course'   => $course_name,
+                'course_display' => $course_display,
                 'id'       => isset( $entry['id'] ) ? (string) $entry['id'] : '',
                 'email'    => isset( $entry['email'] ) ? sanitize_email( $entry['email'] ) : '',
                 'user_id'  => isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0,
@@ -1255,6 +1316,9 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
 
                 if ( $created > 0 ) {
                     apf_add_coordinator_requests( $records );
+                    if ( function_exists( 'apf_send_coordinator_request_emails' ) ) {
+                        apf_send_coordinator_request_emails( $records, $note_title, $note_body );
+                    }
                     $assign_notice = ( 1 === $created )
                         ? '1 solicitação enviada ao coordenador.'
                         : $created . ' solicitações enviadas ao coordenador.';
@@ -1339,6 +1403,9 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
                             'user_id' => get_current_user_id(),
                         ) );
                         if ( $updated || $already_forwarded ) {
+                            if ( $updated && function_exists( 'apf_send_faepa_forward_emails' ) ) {
+                                apf_send_faepa_forward_emails( $entries );
+                            }
                             $faepa_notice      = 'Dados confirmados e enviados para a FAEPA.';
                             $faepa_notice_type = 'success';
                         } else {
@@ -1810,6 +1877,12 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
                         'created_at'  => time(),
                     );
                     apf_scheduler_store_events( $scheduler_events );
+                    if ( function_exists( 'apf_send_scheduler_notice_emails' ) ) {
+                        apf_send_scheduler_notice_emails( $recipient_payload, 'financeiro', array(
+                            'title' => $title,
+                            'date'  => $date,
+                        ) );
+                    }
                     $redirect_notice = 'Aviso adicionado ao calendário.';
                 }
             } elseif ( 'update' === $action ) {
@@ -2481,9 +2554,23 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
                 <span>Coordenador/Curso</span>
                 <select id="apfAssignModalSelect">
                   <option value=""><?php echo esc_html( 'Selecione um coordenador' ); ?></option>
-                  <?php foreach ( $director_filter_choices as $option_key => $option_data ) : ?>
-                    <option value="<?php echo esc_attr( $option_key ); ?>">
-                      <?php echo esc_html( $option_data['label'] ); ?>
+                  <?php foreach ( $director_filter_choices as $option_key => $option_data ) :
+                      $display_label = isset( $option_data['display_label'] ) && '' !== $option_data['display_label']
+                          ? $option_data['display_label']
+                          : ( $option_data['label'] ?? '' );
+                      $full_label = isset( $option_data['label'] ) && '' !== $option_data['label'] ? $option_data['label'] : $display_label;
+                      $director_label = $option_data['director'] ?? '';
+                      $course_label = $option_data['course'] ?? '';
+                  ?>
+                    <option
+                      value="<?php echo esc_attr( $option_key ); ?>"
+                      data-course="<?php echo esc_attr( $course_label ); ?>"
+                      data-full-label="<?php echo esc_attr( $full_label ); ?>"
+                      data-display-label="<?php echo esc_attr( $display_label ); ?>"
+                      data-director-label="<?php echo esc_attr( $director_label ); ?>"
+                      title="<?php echo esc_attr( $full_label ); ?>"
+                    >
+                      <?php echo esc_html( $display_label ); ?>
                     </option>
                   <?php endforeach; ?>
                 </select>
@@ -2538,9 +2625,23 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
               <div class="apf-filter__row">
                 <select id="apfDirectorFilter">
                   <option value=""><?php echo esc_html( 'Todos os coordenadores' ); ?></option>
-                  <?php foreach ( $director_filter_choices as $option_key => $option_data ) : ?>
-                    <option value="<?php echo esc_attr( $option_key ); ?>">
-                      <?php echo esc_html( $option_data['label'] ); ?>
+                  <?php foreach ( $director_filter_choices as $option_key => $option_data ) :
+                      $display_label = isset( $option_data['display_label'] ) && '' !== $option_data['display_label']
+                          ? $option_data['display_label']
+                          : ( $option_data['label'] ?? '' );
+                      $full_label = isset( $option_data['label'] ) && '' !== $option_data['label'] ? $option_data['label'] : $display_label;
+                      $director_label = $option_data['director'] ?? '';
+                      $course_label = $option_data['course'] ?? '';
+                  ?>
+                    <option
+                      value="<?php echo esc_attr( $option_key ); ?>"
+                      data-course="<?php echo esc_attr( $course_label ); ?>"
+                      data-full-label="<?php echo esc_attr( $full_label ); ?>"
+                      data-display-label="<?php echo esc_attr( $display_label ); ?>"
+                      data-director-label="<?php echo esc_attr( $director_label ); ?>"
+                      title="<?php echo esc_attr( $full_label ); ?>"
+                    >
+                      <?php echo esc_html( $display_label ); ?>
                     </option>
                   <?php endforeach; ?>
                 </select>
@@ -2891,6 +2992,7 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         height:42px; border:1px solid var(--apf-border); border-radius:10px;
         background:var(--apf-bg); color:var(--apf-text);
         padding:0 14px; font-size:14px; min-width:0; width:100%; max-width:240px;
+        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
       }
       .apf-filter select:focus{ border-color:var(--apf-primary); box-shadow:var(--apf-focus); outline:none; }
       .apf-filter__row{ display:flex; gap:10px; align-items:stretch; flex-wrap:wrap; }
@@ -3189,6 +3291,12 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         border-radius:10px;
         padding:10px 12px;
         font-size:14px;
+        width:100%;
+        max-width:100%;
+        min-width:0;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
       }
       .apf-assign-modal__footer{
         padding:16px 20px;
@@ -5936,6 +6044,12 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
           max-width:none;
         }
       }
+      @media(max-width:550px){
+        .apf-filter select,
+        .apf-assign-modal__body select{
+          font-size:12px;
+        }
+      }
       @media(max-width:375px){
         .apf-assign-inline-desktop{
           font-size:11px;
@@ -6028,6 +6142,103 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
         return group + '::' + (provider.key || '');
       }
 
+      function truncateText(value, maxLength){
+        const text = (value || '').toString().trim();
+        if(!text){ return ''; }
+        if(!maxLength || maxLength <= 0 || text.length <= maxLength){
+          return text;
+        }
+        if(maxLength <= 3){
+          return text.slice(0, maxLength);
+        }
+        return text.slice(0, maxLength - 3).trim() + '...';
+      }
+
+      function getSelectFont(select){
+        if(!select || !window.getComputedStyle){ return ''; }
+        const style = window.getComputedStyle(select);
+        if(style.font){ return style.font; }
+        const fontSize = style.fontSize || '14px';
+        const fontFamily = style.fontFamily || 'sans-serif';
+        const fontStyle = style.fontStyle || 'normal';
+        const fontVariant = style.fontVariant || 'normal';
+        const fontWeight = style.fontWeight || '400';
+        const lineHeight = style.lineHeight || 'normal';
+        return `${fontStyle} ${fontVariant} ${fontWeight} ${fontSize}/${lineHeight} ${fontFamily}`;
+      }
+
+      function measureTextWidth(text, font){
+        if(typeof document === 'undefined'){ return 0; }
+        if(!measureTextWidth.canvas){
+          measureTextWidth.canvas = document.createElement('canvas');
+        }
+        const context = measureTextWidth.canvas.getContext('2d');
+        if(!context){ return 0; }
+        context.font = font || '14px sans-serif';
+        return context.measureText(text || '').width || 0;
+      }
+
+      function truncateTextByWidth(text, maxWidth, font){
+        const value = (text || '').toString();
+        if(!value){ return ''; }
+        if(!maxWidth || maxWidth <= 0){
+          return truncateText(value, 18);
+        }
+        if(measureTextWidth(value, font) <= maxWidth){
+          return value;
+        }
+        const ellipsis = '...';
+        const ellipsisWidth = measureTextWidth(ellipsis, font);
+        if(ellipsisWidth >= maxWidth){
+          return ellipsis;
+        }
+        let left = 0;
+        let right = value.length;
+        while(left < right){
+          const mid = Math.ceil((left + right) / 2);
+          const slice = value.slice(0, mid).trim() + ellipsis;
+          if(measureTextWidth(slice, font) <= maxWidth){
+            left = mid;
+          }else{
+            right = mid - 1;
+          }
+        }
+        const trimmed = value.slice(0, left).trim();
+        return trimmed ? trimmed + ellipsis : ellipsis;
+      }
+
+      function updateCoordinatorSelectLabels(){
+        if(!coordinatorSelects.length){ return; }
+        const isNarrow = window.matchMedia ? window.matchMedia('(max-width: 550px)').matches : false;
+        coordinatorSelects.forEach(select=>{
+          if(!select){ return; }
+          const style = window.getComputedStyle ? window.getComputedStyle(select) : null;
+          const paddingLeft = style ? parseFloat(style.paddingLeft) || 0 : 0;
+          const paddingRight = style ? parseFloat(style.paddingRight) || 0 : 0;
+          const selectWidth = select.clientWidth || select.offsetWidth || (select.parentElement ? select.parentElement.clientWidth : 0);
+          const arrowSpace = 32;
+          const maxWidth = Math.max(0, selectWidth - paddingLeft - paddingRight - arrowSpace);
+          const font = getSelectFont(select);
+
+          Array.from(select.options).forEach(option=>{
+            if(!option.getAttribute('data-original-label')){
+              option.setAttribute('data-original-label', option.textContent || '');
+            }
+            const fullLabel = option.getAttribute('data-full-label')
+              || option.getAttribute('data-original-label')
+              || option.textContent
+              || '';
+            const displayLabel = option.getAttribute('data-display-label') || fullLabel;
+            if(!isNarrow){
+              option.textContent = displayLabel;
+              return;
+            }
+            const label = truncateTextByWidth(fullLabel, maxWidth, font);
+            option.textContent = label || fullLabel;
+          });
+        });
+      }
+
       const input = $('#apfQuery');
       const btnSearch = $('#apfBtnSearch');
       const btnClear  = $('#apfBtnClear');
@@ -6059,6 +6270,7 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
       const assignModalConfirm = $('#apfAssignModalConfirm');
       const assignModalCancel = $('#apfAssignModalCancel');
       const assignModalCloseTriggers = assignModal ? $$('[data-assign-close]', assignModal) : [];
+      const coordinatorSelects = [directorSelect, assignModalSelect].filter(Boolean);
       const assignNoteModal = $('#apfAssignNoteModal');
       const assignNoteTitleInput = $('#apfAssignNoteTitleInput');
       const assignNoteBodyInput = $('#apfAssignNoteBodyInput');
@@ -6481,6 +6693,7 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
           assignModalSelect.value = directorSelect.value || '';
         }
         assignModal.setAttribute('aria-hidden','false');
+        updateCoordinatorSelectLabels();
         assignModalLastFocus = document.activeElement;
         const focusable = assignModal.querySelector('select') || assignModal;
         focusable.focus();
@@ -8549,6 +8762,25 @@ if ( ! function_exists( 'apf_render_inbox_dashboard' ) ) {
           }
         });
       }
+
+      if(window.matchMedia){
+        const coordinatorMedia = window.matchMedia('(max-width: 550px)');
+        if(coordinatorMedia.addEventListener){
+          coordinatorMedia.addEventListener('change', updateCoordinatorSelectLabels);
+        }else if(coordinatorMedia.addListener){
+          coordinatorMedia.addListener(updateCoordinatorSelectLabels);
+        }
+      }
+      if(window.addEventListener){
+        let coordinatorResizeTimer;
+        window.addEventListener('resize', ()=>{
+          if(coordinatorResizeTimer){
+            clearTimeout(coordinatorResizeTimer);
+          }
+          coordinatorResizeTimer = setTimeout(updateCoordinatorSelectLabels, 120);
+        });
+      }
+      updateCoordinatorSelectLabels();
 
       // contador inicial
       applyFilter();

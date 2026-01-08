@@ -483,6 +483,717 @@ if ( ! function_exists( 'apf_get_faepa_payment_template' ) ) {
     }
 }
 
+if ( ! function_exists( 'apf_get_portal_access_default_template' ) ) {
+    /**
+     * Template padrao do e-mail de aprovacao/recusa de acesso ao portal.
+     *
+     * @return string
+     */
+    function apf_get_portal_access_default_template() {
+        return "Olá [nome],\n\n"
+            . "Sua conta foi [status] para acesso ao portal [portal].\n\n"
+            . "Se tiver dúvidas, fale com o financeiro.";
+    }
+}
+
+if ( ! function_exists( 'apf_get_portal_access_template' ) ) {
+    /**
+     * Retorna o template configurado ou o padrao (acesso ao portal).
+     *
+     * @return string
+     */
+    function apf_get_portal_access_template() {
+        $template = get_option( 'apf_portal_access_email_template', '' );
+        $template = is_string( $template ) ? trim( $template ) : '';
+        if ( '' === $template ) {
+            return apf_get_portal_access_default_template();
+        }
+        return $template;
+    }
+}
+
+if ( ! function_exists( 'apf_replace_portal_access_placeholders' ) ) {
+    /**
+     * Substitui placeholders no template de acesso ao portal.
+     *
+     * @param string $template
+     * @param array $map
+     * @return string
+     */
+    function apf_replace_portal_access_placeholders( $template, $map ) {
+        if ( ! is_string( $template ) ) {
+            $template = '';
+        }
+        if ( ! is_array( $map ) ) {
+            $map = array();
+        }
+        $map = apply_filters( 'apf_portal_access_placeholders', $map );
+        if ( empty( $map ) ) {
+            return $template;
+        }
+        return str_replace( array_keys( $map ), array_values( $map ), $template );
+    }
+}
+
+if ( ! function_exists( 'apf_send_portal_access_email' ) ) {
+    /**
+     * Envia e-mail de aprovacao/recusa de acesso ao portal.
+     *
+     * @param array $args { email, name, status, portal }
+     * @return bool
+     */
+    function apf_send_portal_access_email( $args ) {
+        if ( ! is_array( $args ) ) {
+            return false;
+        }
+
+        $email = isset( $args['email'] ) ? sanitize_email( $args['email'] ) : '';
+        if ( '' === $email || ! is_email( $email ) ) {
+            return false;
+        }
+
+        $name = isset( $args['name'] ) ? sanitize_text_field( (string) $args['name'] ) : '';
+        if ( '' === $name ) {
+            $name = $email;
+        }
+
+        $status = isset( $args['status'] ) ? sanitize_key( $args['status'] ) : '';
+        if ( ! in_array( $status, array( 'approved', 'rejected' ), true ) ) {
+            return false;
+        }
+
+        $portal = isset( $args['portal'] ) ? sanitize_text_field( (string) $args['portal'] ) : '';
+        if ( '' === $portal ) {
+            $portal = 'FAEPA';
+        }
+
+        $status_label = ( 'approved' === $status ) ? 'aprovada' : 'recusada';
+        $subject = 'Portal ' . $portal . ' - Sua conta foi ' . $status_label;
+        $template = function_exists( 'apf_get_portal_access_template' )
+            ? apf_get_portal_access_template()
+            : '';
+        if ( '' === trim( (string) $template ) && function_exists( 'apf_get_portal_access_default_template' ) ) {
+            $template = apf_get_portal_access_default_template();
+        }
+        $body = function_exists( 'apf_replace_portal_access_placeholders' )
+            ? apf_replace_portal_access_placeholders( $template, array(
+                '[nome]'   => $name,
+                '[status]' => $status_label,
+                '[portal]' => $portal,
+            ) )
+            : $template;
+        $body = trim( (string) $body );
+        if ( '' === $body && function_exists( 'apf_get_portal_access_default_template' ) ) {
+            $body = apf_replace_portal_access_placeholders( apf_get_portal_access_default_template(), array(
+                '[nome]'   => $name,
+                '[status]' => $status_label,
+                '[portal]' => $portal,
+            ) );
+        }
+
+        $headers = array( 'Content-Type: text/plain; charset=UTF-8' );
+        $sent = wp_mail( $email, $subject, $body, $headers );
+
+        $capture_enabled = function_exists( 'apf_mail_capture_enabled' ) ? apf_mail_capture_enabled() : false;
+        if ( ! $capture_enabled ) {
+            $capture_enabled = ! empty( get_option( 'apf_mail_capture_access_force', '' ) );
+        }
+        if ( $capture_enabled && function_exists( 'apf_store_mail_capture_access' ) ) {
+            $from_email = function_exists( 'apf_get_mail_sender_email' ) ? apf_get_mail_sender_email() : '';
+            if ( '' === $from_email ) {
+                $from_email = sanitize_email( get_option( 'admin_email' ) );
+            }
+            $from_name = function_exists( 'apf_get_mail_sender_name' ) ? apf_get_mail_sender_name() : '';
+            apf_store_mail_capture_access( array(
+                'time'       => current_time( 'Y-m-d H:i:s' ),
+                'to'         => $email,
+                'subject'    => $subject,
+                'message'    => $body,
+                'headers'    => implode( "\n", $headers ),
+                'from_email' => $from_email,
+                'from_name'  => $from_name,
+            ) );
+        }
+
+        return $sent;
+    }
+}
+
+if ( ! function_exists( 'apf_get_scheduler_notice_default_template' ) ) {
+    /**
+     * Template padrao do e-mail de aviso na agenda.
+     *
+     * @return string
+     */
+    function apf_get_scheduler_notice_default_template() {
+        return "Olá [nome],\n\n"
+            . "Um aviso foi adicionado à sua agenda pelo [origem].\n\n"
+            . "Aviso: [titulo]\n"
+            . "Data: [data]";
+    }
+}
+
+if ( ! function_exists( 'apf_get_scheduler_notice_template' ) ) {
+    /**
+     * Retorna o template configurado ou o padrao (aviso na agenda).
+     *
+     * @return string
+     */
+    function apf_get_scheduler_notice_template() {
+        $template = get_option( 'apf_scheduler_notice_email_template', '' );
+        $template = is_string( $template ) ? trim( $template ) : '';
+        if ( '' === $template ) {
+            return apf_get_scheduler_notice_default_template();
+        }
+        return $template;
+    }
+}
+
+if ( ! function_exists( 'apf_replace_scheduler_notice_placeholders' ) ) {
+    /**
+     * Substitui placeholders no template de aviso na agenda.
+     *
+     * @param string $template
+     * @param array $map
+     * @return string
+     */
+    function apf_replace_scheduler_notice_placeholders( $template, $map ) {
+        if ( ! is_string( $template ) ) {
+            $template = '';
+        }
+        if ( ! is_array( $map ) ) {
+            $map = array();
+        }
+        $map = apply_filters( 'apf_scheduler_notice_placeholders', $map );
+        if ( empty( $map ) ) {
+            return $template;
+        }
+        return str_replace( array_keys( $map ), array_values( $map ), $template );
+    }
+}
+
+if ( ! function_exists( 'apf_send_scheduler_notice_emails' ) ) {
+    /**
+     * Envia e-mail de aviso quando um evento e adicionado na agenda do colaborador.
+     *
+     * @param array $recipients
+     * @param string $origin financeiro|coordenador
+     * @param array $event { title?:string, date?:string }
+     * @return int
+     */
+    function apf_send_scheduler_notice_emails( $recipients, $origin = 'financeiro', $event = array() ) {
+        if ( empty( $recipients ) || ! is_array( $recipients ) ) {
+            return 0;
+        }
+
+        $origin = ( 'coordenador' === $origin ) ? 'coordenador' : 'financeiro';
+        $origin_label = ( 'coordenador' === $origin ) ? 'Coordenador' : 'Financeiro da Colab-on';
+
+        $title = isset( $event['title'] ) ? sanitize_text_field( (string) $event['title'] ) : '';
+        $date  = isset( $event['date'] ) ? sanitize_text_field( (string) $event['date'] ) : '';
+        $date_label = '';
+        if ( $date !== '' ) {
+            $date_label = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date )
+                ? ( function_exists( 'date_i18n' ) ? date_i18n( 'd/m/Y', strtotime( $date ) ) : $date )
+                : $date;
+        }
+
+        $base_placeholders = array(
+            '[origem]' => $origin_label,
+            '[titulo]' => ( '' !== $title ) ? $title : '—',
+            '[data]'   => ( '' !== $date_label ) ? $date_label : '—',
+        );
+        $template = function_exists( 'apf_get_scheduler_notice_template' )
+            ? apf_get_scheduler_notice_template()
+            : '';
+        $default_template = function_exists( 'apf_get_scheduler_notice_default_template' )
+            ? apf_get_scheduler_notice_default_template()
+            : '';
+
+        $subject = 'Colab-on - Novo aviso na agenda';
+        $headers = array( 'Content-Type: text/plain; charset=UTF-8' );
+        $sent = 0;
+        $seen = array();
+        $capture_recipients = array();
+        $capture_message = '';
+
+        foreach ( $recipients as $recipient ) {
+            if ( ! is_array( $recipient ) ) {
+                continue;
+            }
+            $group = isset( $recipient['group'] ) ? sanitize_key( $recipient['group'] ) : 'providers';
+            if ( 'providers' !== $group ) {
+                continue;
+            }
+
+            $user_id = isset( $recipient['user_id'] ) ? (int) $recipient['user_id'] : 0;
+            $email = isset( $recipient['email'] ) ? sanitize_email( (string) $recipient['email'] ) : '';
+            if ( function_exists( 'apf_resolve_channel_email' ) ) {
+                $email = apf_resolve_channel_email( $user_id, 'collab', $email );
+            } elseif ( '' === $email && $user_id > 0 ) {
+                $user = get_user_by( 'id', $user_id );
+                if ( $user && ! empty( $user->user_email ) ) {
+                    $email = sanitize_email( $user->user_email );
+                }
+            }
+
+            if ( '' === $email || ! is_email( $email ) ) {
+                continue;
+            }
+
+            $email_key = strtolower( $email );
+            if ( isset( $seen[ $email_key ] ) ) {
+                continue;
+            }
+            $seen[ $email_key ] = true;
+
+            $name = isset( $recipient['name'] ) ? sanitize_text_field( (string) $recipient['name'] ) : '';
+            if ( '' === $name ) {
+                $name = $email;
+            }
+            $placeholders = array_merge( $base_placeholders, array(
+                '[nome]' => $name,
+            ) );
+            $body = function_exists( 'apf_replace_scheduler_notice_placeholders' )
+                ? apf_replace_scheduler_notice_placeholders( $template, $placeholders )
+                : $template;
+            $body = trim( (string) $body );
+            if ( '' === $body && '' !== $default_template ) {
+                $body = apf_replace_scheduler_notice_placeholders( $default_template, $placeholders );
+            }
+            if ( '' === $capture_message ) {
+                $capture_message = $body;
+            }
+            $capture_recipients[] = $email;
+
+            if ( wp_mail( $email, $subject, $body, $headers ) ) {
+                $sent++;
+            }
+        }
+
+        $capture_enabled = function_exists( 'apf_mail_capture_enabled' ) ? apf_mail_capture_enabled() : false;
+        if ( ! $capture_enabled ) {
+            $capture_enabled = ! empty( get_option( 'apf_mail_capture_scheduler_force', '' ) );
+        }
+        if ( $capture_enabled && ! empty( $capture_recipients ) && function_exists( 'apf_store_mail_capture_scheduler' ) ) {
+            $from_email = function_exists( 'apf_get_mail_sender_email' ) ? apf_get_mail_sender_email() : '';
+            if ( '' === $from_email ) {
+                $from_email = sanitize_email( get_option( 'admin_email' ) );
+            }
+            $from_name = function_exists( 'apf_get_mail_sender_name' ) ? apf_get_mail_sender_name() : '';
+            apf_store_mail_capture_scheduler( array(
+                'time'       => current_time( 'Y-m-d H:i:s' ),
+                'to'         => implode( ', ', $capture_recipients ),
+                'subject'    => $subject,
+                'message'    => $capture_message,
+                'headers'    => implode( "\n", $headers ),
+                'from_email' => $from_email,
+                'from_name'  => $from_name,
+            ) );
+        }
+
+        return $sent;
+    }
+}
+
+if ( ! function_exists( 'apf_get_coordinator_request_default_template' ) ) {
+    /**
+     * Template padrao do e-mail de solicitacoes para o coordenador.
+     *
+     * @return string
+     */
+    function apf_get_coordinator_request_default_template() {
+        return "Olá [coordenador],\n\n"
+            . "Você recebeu [quantidade] solicitação(ões) de colaboradores.\n"
+            . "Curso: [curso]\n"
+            . "Assunto: [titulo]\n"
+            . "Mensagem: [mensagem]\n\n"
+            . "Acesse o Portal do Coordenador: [portal_url]";
+    }
+}
+
+if ( ! function_exists( 'apf_get_coordinator_request_template' ) ) {
+    /**
+     * Retorna o template configurado ou o padrao (solicitacoes ao coordenador).
+     *
+     * @return string
+     */
+    function apf_get_coordinator_request_template() {
+        $template = get_option( 'apf_coordinator_request_email_template', '' );
+        $template = is_string( $template ) ? trim( $template ) : '';
+        if ( '' === $template ) {
+            return apf_get_coordinator_request_default_template();
+        }
+        return $template;
+    }
+}
+
+if ( ! function_exists( 'apf_replace_coordinator_request_placeholders' ) ) {
+    /**
+     * Substitui placeholders no template de solicitacoes ao coordenador.
+     *
+     * @param string $template
+     * @param array $map
+     * @return string
+     */
+    function apf_replace_coordinator_request_placeholders( $template, $map ) {
+        if ( ! is_string( $template ) ) {
+            $template = '';
+        }
+        if ( ! is_array( $map ) ) {
+            $map = array();
+        }
+        $map = apply_filters( 'apf_coordinator_request_placeholders', $map );
+        if ( empty( $map ) ) {
+            return $template;
+        }
+        return str_replace( array_keys( $map ), array_values( $map ), $template );
+    }
+}
+
+if ( ! function_exists( 'apf_send_coordinator_request_emails' ) ) {
+    /**
+     * Envia e-mail ao coordenador quando receber solicitacoes de colaboradores.
+     *
+     * @param array $records
+     * @param string $note_title
+     * @param string $note_body
+     * @return int
+     */
+    function apf_send_coordinator_request_emails( $records, $note_title = '', $note_body = '' ) {
+        if ( empty( $records ) || ! is_array( $records ) ) {
+            return 0;
+        }
+
+        $portal_url = '';
+        $portal_page_id = (int) get_option( 'apf_portal_coordenador_page_id' );
+        if ( $portal_page_id > 0 && function_exists( 'get_permalink' ) ) {
+            $portal_url = get_permalink( $portal_page_id );
+        }
+        if ( '' === $portal_url ) {
+            $portal_url = home_url( '/' );
+        }
+
+        $groups = array();
+        foreach ( $records as $record ) {
+            if ( ! is_array( $record ) ) {
+                continue;
+            }
+            $user_id = isset( $record['coordinator_user_id'] ) ? (int) $record['coordinator_user_id'] : 0;
+            $email   = isset( $record['coordinator_email'] ) ? sanitize_email( (string) $record['coordinator_email'] ) : '';
+            $name    = isset( $record['coordinator_name'] ) ? sanitize_text_field( (string) $record['coordinator_name'] ) : '';
+            $course  = isset( $record['course'] ) ? sanitize_text_field( (string) $record['course'] ) : '';
+
+            if ( function_exists( 'apf_resolve_channel_email' ) ) {
+                $email = apf_resolve_channel_email( $user_id, 'coordinator', $email );
+            } elseif ( '' === $email && $user_id > 0 ) {
+                $user = get_user_by( 'id', $user_id );
+                if ( $user && ! empty( $user->user_email ) ) {
+                    $email = sanitize_email( $user->user_email );
+                }
+            }
+
+            if ( '' === $email || ! is_email( $email ) ) {
+                continue;
+            }
+            if ( '' === $name ) {
+                $name = $email;
+            }
+
+            $key = strtolower( $email );
+            if ( ! isset( $groups[ $key ] ) ) {
+                $groups[ $key ] = array(
+                    'email'  => $email,
+                    'name'   => $name,
+                    'count'  => 0,
+                    'courses'=> array(),
+                );
+            }
+            $groups[ $key ]['count']++;
+            if ( '' !== $course && ! in_array( $course, $groups[ $key ]['courses'], true ) ) {
+                $groups[ $key ]['courses'][] = $course;
+            }
+        }
+
+        if ( empty( $groups ) ) {
+            return 0;
+        }
+
+        $subject = 'Colab-on - Solicitações de colaboradores';
+        $template = function_exists( 'apf_get_coordinator_request_template' )
+            ? apf_get_coordinator_request_template()
+            : '';
+        $default_template = function_exists( 'apf_get_coordinator_request_default_template' )
+            ? apf_get_coordinator_request_default_template()
+            : '';
+        $headers = array( 'Content-Type: text/plain; charset=UTF-8' );
+
+        $sent = 0;
+        $capture_recipients = array();
+        $capture_message = '';
+
+        foreach ( $groups as $group ) {
+            $courses_label = ! empty( $group['courses'] ) ? implode( ', ', $group['courses'] ) : '—';
+            $placeholders = array(
+                '[coordenador]' => $group['name'],
+                '[quantidade]'  => (string) $group['count'],
+                '[curso]'       => $courses_label,
+                '[titulo]'      => ( '' !== $note_title ) ? $note_title : '—',
+                '[mensagem]'    => ( '' !== $note_body ) ? $note_body : '—',
+                '[portal_url]'  => $portal_url,
+            );
+
+            $body = function_exists( 'apf_replace_coordinator_request_placeholders' )
+                ? apf_replace_coordinator_request_placeholders( $template, $placeholders )
+                : $template;
+            $body = trim( (string) $body );
+            if ( '' === $body && '' !== $default_template ) {
+                $body = apf_replace_coordinator_request_placeholders( $default_template, $placeholders );
+            }
+            if ( '' === $body ) {
+                continue;
+            }
+
+            if ( '' === $capture_message ) {
+                $capture_message = $body;
+            }
+            $capture_recipients[] = $group['email'];
+
+            if ( wp_mail( $group['email'], $subject, $body, $headers ) ) {
+                $sent++;
+            }
+        }
+
+        $capture_enabled = function_exists( 'apf_mail_capture_enabled' ) ? apf_mail_capture_enabled() : false;
+        if ( ! $capture_enabled ) {
+            $capture_enabled = ! empty( get_option( 'apf_mail_capture_coordinator_request_force', '' ) );
+        }
+        if ( $capture_enabled && ! empty( $capture_recipients ) && function_exists( 'apf_store_mail_capture_coordinator_request' ) ) {
+            $from_email = function_exists( 'apf_get_mail_sender_email' ) ? apf_get_mail_sender_email() : '';
+            if ( '' === $from_email ) {
+                $from_email = sanitize_email( get_option( 'admin_email' ) );
+            }
+            $from_name = function_exists( 'apf_get_mail_sender_name' ) ? apf_get_mail_sender_name() : '';
+            apf_store_mail_capture_coordinator_request( array(
+                'time'       => current_time( 'Y-m-d H:i:s' ),
+                'to'         => implode( ', ', array_unique( $capture_recipients ) ),
+                'subject'    => $subject,
+                'message'    => $capture_message,
+                'headers'    => implode( "\n", $headers ),
+                'from_email' => $from_email,
+                'from_name'  => $from_name,
+            ) );
+        }
+
+        return $sent;
+    }
+}
+
+if ( ! function_exists( 'apf_get_faepa_forward_default_template' ) ) {
+    /**
+     * Template padrao do e-mail de dados validados para a FAEPA.
+     *
+     * @return string
+     */
+    function apf_get_faepa_forward_default_template() {
+        return "Olá,\n\n"
+            . "Dados validados pelo financeiro estão disponíveis no Portal FAEPA.\n"
+            . "Curso: [curso]\n"
+            . "Coordenador: [coordenador]\n"
+            . "Quantidade de colaboradores: [quantidade]\n\n"
+            . "Acesse: [portal_url]";
+    }
+}
+
+if ( ! function_exists( 'apf_get_faepa_forward_template' ) ) {
+    /**
+     * Retorna o template configurado ou o padrao (dados validados FAEPA).
+     *
+     * @return string
+     */
+    function apf_get_faepa_forward_template() {
+        $template = get_option( 'apf_faepa_forward_email_template', '' );
+        $template = is_string( $template ) ? trim( $template ) : '';
+        if ( '' === $template ) {
+            return apf_get_faepa_forward_default_template();
+        }
+        return $template;
+    }
+}
+
+if ( ! function_exists( 'apf_replace_faepa_forward_placeholders' ) ) {
+    /**
+     * Substitui placeholders no template de dados validados FAEPA.
+     *
+     * @param string $template
+     * @param array $map
+     * @return string
+     */
+    function apf_replace_faepa_forward_placeholders( $template, $map ) {
+        if ( ! is_string( $template ) ) {
+            $template = '';
+        }
+        if ( ! is_array( $map ) ) {
+            $map = array();
+        }
+        $map = apply_filters( 'apf_faepa_forward_placeholders', $map );
+        if ( empty( $map ) ) {
+            return $template;
+        }
+        return str_replace( array_keys( $map ), array_values( $map ), $template );
+    }
+}
+
+if ( ! function_exists( 'apf_send_faepa_forward_emails' ) ) {
+    /**
+     * Envia e-mail a FAEPA quando os dados forem validados pelo financeiro.
+     *
+     * @param array $entries
+     * @return int
+     */
+    function apf_send_faepa_forward_emails( $entries ) {
+        if ( empty( $entries ) || ! is_array( $entries ) ) {
+            return 0;
+        }
+
+        $portal_url = '';
+        $portal_page_id = (int) get_option( 'apf_portal_faepa_page_id' );
+        if ( $portal_page_id > 0 && function_exists( 'get_permalink' ) ) {
+            $portal_url = get_permalink( $portal_page_id );
+        }
+        if ( '' === $portal_url ) {
+            $portal_url = home_url( '/' );
+        }
+
+        $courses = array();
+        $coordinators = array();
+        $approved_count = 0;
+        foreach ( $entries as $entry ) {
+            if ( ! is_array( $entry ) ) {
+                continue;
+            }
+            $status = isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : '';
+            if ( 'approved' === $status ) {
+                $approved_count++;
+            }
+            $course = isset( $entry['course'] ) ? sanitize_text_field( (string) $entry['course'] ) : '';
+            if ( '' !== $course && ! in_array( $course, $courses, true ) ) {
+                $courses[] = $course;
+            }
+            $coord = isset( $entry['coordinator_name'] ) ? sanitize_text_field( (string) $entry['coordinator_name'] ) : '';
+            if ( '' !== $coord && ! in_array( $coord, $coordinators, true ) ) {
+                $coordinators[] = $coord;
+            }
+        }
+        if ( $approved_count <= 0 ) {
+            $approved_count = count( $entries );
+        }
+
+        $access_requests = function_exists( 'apf_get_faepa_access_requests' )
+            ? apf_get_faepa_access_requests()
+            : array();
+        if ( function_exists( 'apf_normalize_faepa_access_list' ) ) {
+            $access_requests = apf_normalize_faepa_access_list( $access_requests );
+        }
+
+        $recipients = array();
+        if ( is_array( $access_requests ) ) {
+            foreach ( $access_requests as $access ) {
+                if ( ! is_array( $access ) ) {
+                    continue;
+                }
+                $status = isset( $access['status'] ) ? sanitize_key( $access['status'] ) : '';
+                if ( 'approved' !== $status ) {
+                    continue;
+                }
+                $email = isset( $access['email'] ) ? sanitize_email( (string) $access['email'] ) : '';
+                if ( '' === $email && isset( $access['login'] ) ) {
+                    $email = sanitize_email( (string) $access['login'] );
+                }
+                $user_id = isset( $access['user_id'] ) ? (int) $access['user_id'] : 0;
+                if ( '' === $email && $user_id > 0 ) {
+                    $user = get_user_by( 'id', $user_id );
+                    if ( $user && ! empty( $user->user_email ) ) {
+                        $email = sanitize_email( $user->user_email );
+                    }
+                }
+                if ( '' === $email || ! is_email( $email ) ) {
+                    continue;
+                }
+                $key = strtolower( $email );
+                if ( isset( $recipients[ $key ] ) ) {
+                    continue;
+                }
+                $recipients[ $key ] = $email;
+            }
+        }
+
+        if ( empty( $recipients ) ) {
+            return 0;
+        }
+
+        $subject = 'FAEPA - Dados validados pelo financeiro';
+        $template = function_exists( 'apf_get_faepa_forward_template' )
+            ? apf_get_faepa_forward_template()
+            : '';
+        $default_template = function_exists( 'apf_get_faepa_forward_default_template' )
+            ? apf_get_faepa_forward_default_template()
+            : '';
+        $headers = array( 'Content-Type: text/plain; charset=UTF-8' );
+
+        $sent = 0;
+        $capture_message = '';
+        $courses_label = ! empty( $courses ) ? implode( ', ', $courses ) : '—';
+        $coordinators_label = ! empty( $coordinators ) ? implode( ', ', $coordinators ) : '—';
+        $placeholders = array(
+            '[curso]'       => $courses_label,
+            '[coordenador]' => $coordinators_label,
+            '[quantidade]'  => (string) $approved_count,
+            '[portal_url]'  => $portal_url,
+        );
+        $body = function_exists( 'apf_replace_faepa_forward_placeholders' )
+            ? apf_replace_faepa_forward_placeholders( $template, $placeholders )
+            : $template;
+        $body = trim( (string) $body );
+        if ( '' === $body && '' !== $default_template ) {
+            $body = apf_replace_faepa_forward_placeholders( $default_template, $placeholders );
+        }
+        if ( '' === $body ) {
+            return 0;
+        }
+        $capture_message = $body;
+
+        foreach ( $recipients as $email ) {
+            if ( wp_mail( $email, $subject, $body, $headers ) ) {
+                $sent++;
+            }
+        }
+
+        $capture_enabled = function_exists( 'apf_mail_capture_enabled' ) ? apf_mail_capture_enabled() : false;
+        if ( ! $capture_enabled ) {
+            $capture_enabled = ! empty( get_option( 'apf_mail_capture_faepa_forward_force', '' ) );
+        }
+        if ( $capture_enabled && function_exists( 'apf_store_mail_capture_faepa_forward' ) ) {
+            $from_email = function_exists( 'apf_get_mail_sender_email' ) ? apf_get_mail_sender_email() : '';
+            if ( '' === $from_email ) {
+                $from_email = sanitize_email( get_option( 'admin_email' ) );
+            }
+            $from_name = function_exists( 'apf_get_mail_sender_name' ) ? apf_get_mail_sender_name() : '';
+            apf_store_mail_capture_faepa_forward( array(
+                'time'       => current_time( 'Y-m-d H:i:s' ),
+                'to'         => implode( ', ', array_values( $recipients ) ),
+                'subject'    => $subject,
+                'message'    => $capture_message,
+                'headers'    => implode( "\n", $headers ),
+                'from_email' => $from_email,
+                'from_name'  => $from_name,
+            ) );
+        }
+
+        return $sent;
+    }
+}
+
 if ( ! function_exists( 'apf_replace_placeholders' ) ) {
     /**
      * Substitui placeholders no template.
@@ -638,6 +1349,66 @@ if ( ! function_exists( 'apf_store_mail_capture_faepa' ) ) {
             return false;
         }
         return (bool) update_option( 'apf_mail_capture_faepa_last', $entry, false );
+    }
+}
+
+if ( ! function_exists( 'apf_store_mail_capture_access' ) ) {
+    /**
+     * Persiste o ultimo e-mail capturado de aprovacao/recusa de acesso.
+     *
+     * @param array $entry
+     * @return bool
+     */
+    function apf_store_mail_capture_access( $entry ) {
+        if ( ! is_array( $entry ) || empty( $entry ) ) {
+            return false;
+        }
+        return (bool) update_option( 'apf_mail_capture_access_last', $entry, false );
+    }
+}
+
+if ( ! function_exists( 'apf_store_mail_capture_scheduler' ) ) {
+    /**
+     * Persiste o ultimo e-mail capturado de avisos na agenda.
+     *
+     * @param array $entry
+     * @return bool
+     */
+    function apf_store_mail_capture_scheduler( $entry ) {
+        if ( ! is_array( $entry ) || empty( $entry ) ) {
+            return false;
+        }
+        return (bool) update_option( 'apf_mail_capture_scheduler_last', $entry, false );
+    }
+}
+
+if ( ! function_exists( 'apf_store_mail_capture_coordinator_request' ) ) {
+    /**
+     * Persiste o ultimo e-mail capturado de solicitacoes ao coordenador.
+     *
+     * @param array $entry
+     * @return bool
+     */
+    function apf_store_mail_capture_coordinator_request( $entry ) {
+        if ( ! is_array( $entry ) || empty( $entry ) ) {
+            return false;
+        }
+        return (bool) update_option( 'apf_mail_capture_coordinator_request_last', $entry, false );
+    }
+}
+
+if ( ! function_exists( 'apf_store_mail_capture_faepa_forward' ) ) {
+    /**
+     * Persiste o ultimo e-mail capturado de dados validados para a FAEPA.
+     *
+     * @param array $entry
+     * @return bool
+     */
+    function apf_store_mail_capture_faepa_forward( $entry ) {
+        if ( ! is_array( $entry ) || empty( $entry ) ) {
+            return false;
+        }
+        return (bool) update_option( 'apf_mail_capture_faepa_forward_last', $entry, false );
     }
 }
 
