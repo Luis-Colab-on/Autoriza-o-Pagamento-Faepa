@@ -385,16 +385,19 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
                         $dir_name = isset($dir_entry['director']) ? trim((string) $dir_entry['director']) : '';
                         if ( $dir_name === '' ) { continue; }
                         $dir_course = isset($dir_entry['course']) ? trim((string) $dir_entry['course']) : '';
-                        $label = $dir_course ? $dir_name . ' — ' . $dir_course : $dir_name;
+                        $course_display = apf_truncate_course_label( $dir_course );
+                        $full_label = $dir_course ? $dir_name . ' — ' . $dir_course : $dir_name;
+                        $label = $dir_course ? $dir_name . ' — ' . $course_display : $dir_name;
                         $selected = selected($current_dir, $dir_name, false);
                     ?>
-                      <option value="<?php echo esc_attr($dir_name); ?>" data-course="<?php echo esc_attr($dir_course); ?>" data-full-label="<?php echo esc_attr($label); ?>" data-coordinator-label="<?php echo esc_attr($dir_name); ?>" <?php echo $selected; ?>>
+                      <option value="<?php echo esc_attr($dir_name); ?>" data-course="<?php echo esc_attr($dir_course); ?>" data-full-label="<?php echo esc_attr($full_label); ?>" data-display-label="<?php echo esc_attr($label); ?>" data-coordinator-label="<?php echo esc_attr($dir_name); ?>" <?php echo $selected; ?>>
                         <?php echo esc_html($label); ?>
                       </option>
                     <?php endforeach; ?>
                     <?php if ( $current_dir !== '' && empty($apf_director_names[$current_dir]) ) : ?>
-                      <option value="<?php echo esc_attr($current_dir); ?>" data-course="" data-full-label="<?php echo esc_attr($current_dir . ' (manual)'); ?>" data-coordinator-label="<?php echo esc_attr($current_dir); ?>" selected>
-                        <?php echo esc_html($current_dir . ' (manual)'); ?>
+                      <?php $manual_label = $current_dir . ' (manual)'; ?>
+                      <option value="<?php echo esc_attr($current_dir); ?>" data-course="" data-full-label="<?php echo esc_attr($manual_label); ?>" data-display-label="<?php echo esc_attr($manual_label); ?>" data-coordinator-label="<?php echo esc_attr($current_dir); ?>" selected>
+                        <?php echo esc_html($manual_label); ?>
                       </option>
                     <?php endif; ?>
                   </select>
@@ -638,6 +641,9 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
         background-position:calc(100% - 12px) 50%;
         background-repeat:no-repeat;
         padding-right:36px;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
       }
       .apf-grid textarea{min-height:110px;resize:vertical}
       .apf-grid input:focus,
@@ -794,6 +800,8 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
         #apf-edit .apf-pane{padding:0}
         #apf-edit .apf-radio{font-size:16px}
         #apf-edit .apf-tabs button{font-size:12px}
+        .apf-grid label{font-size:12px}
+        .apf-grid select{font-size:12px}
       }
     </style>
 
@@ -1057,11 +1065,49 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
             courseInput.value = course;
           }
         };
+        const truncateText = (value, maxLength) => {
+          const text = (value || '').toString().trim();
+          if (!text) return '';
+          if (!maxLength || maxLength <= 0 || text.length <= maxLength) {
+            return text;
+          }
+          if (maxLength <= 3) {
+            return text.slice(0, maxLength);
+          }
+          return text.slice(0, maxLength - 3).trim() + '...';
+        };
+        const buildDisplayLabel = (option, maxCourseLength) => {
+          const course = option.getAttribute('data-course') || '';
+          const coordinatorLabel = option.getAttribute('data-coordinator-label') || option.value || '';
+          const fallbackLabel = option.getAttribute('data-full-label') || option.textContent || '';
+          if (!course) {
+            return fallbackLabel || coordinatorLabel;
+          }
+          const courseLabel = truncateText(course, maxCourseLength);
+          if (!coordinatorLabel) {
+            return fallbackLabel || courseLabel;
+          }
+          return coordinatorLabel + ' — ' + courseLabel;
+        };
+        const updateDisplayLabels = () => {
+          const isNarrow = window.matchMedia('(max-width: 425px)').matches;
+          const isCompact = window.matchMedia('(max-width: 620px)').matches;
+          const maxCourseLength = isNarrow ? 14 : (isCompact ? 20 : 42);
+          Array.from(coordinatorSelect.options).forEach(opt => {
+            const label = buildDisplayLabel(opt, maxCourseLength);
+            if (label) {
+              opt.setAttribute('data-display-label', label);
+              opt.textContent = label;
+            }
+          });
+        };
         const restoreFullLabels = () => {
           Array.from(coordinatorSelect.options).forEach(opt => {
+            const displayLabel = opt.getAttribute('data-display-label');
             const fullLabel = opt.getAttribute('data-full-label');
-            if (fullLabel !== null) {
-              opt.textContent = fullLabel;
+            const label = displayLabel !== null ? displayLabel : fullLabel;
+            if (label !== null) {
+              opt.textContent = label;
             }
           });
         };
@@ -1084,7 +1130,21 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
         if (!courseInput || !courseInput.value) {
           syncCourse();
         }
+        updateDisplayLabels();
         applyCoordinatorLabels();
+        const handleViewportChange = () => {
+          updateDisplayLabels();
+          applyCoordinatorLabels();
+        };
+        const mediaQueryCompact = window.matchMedia('(max-width: 620px)');
+        const mediaQueryNarrow = window.matchMedia('(max-width: 425px)');
+        if (mediaQueryCompact.addEventListener) {
+          mediaQueryCompact.addEventListener('change', handleViewportChange);
+          mediaQueryNarrow.addEventListener('change', handleViewportChange);
+        } else if (mediaQueryCompact.addListener) {
+          mediaQueryCompact.addListener(handleViewportChange);
+          mediaQueryNarrow.addListener(handleViewportChange);
+        }
       }
 
       // Máscaras

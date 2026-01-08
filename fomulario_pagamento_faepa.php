@@ -129,6 +129,50 @@ if ( ! function_exists( 'apf_filter_approved_directors' ) ) {
     }
 }
 
+if ( ! function_exists( 'apf_truncate_course_label' ) ) {
+    /**
+     * Trunca o nome do curso para caber no select do formulario.
+     *
+     * @param string $course
+     * @param int    $max_length
+     * @return string
+     */
+    function apf_truncate_course_label( $course, $max_length = 42 ) {
+        $course = trim( (string) $course );
+        if ( '' === $course ) {
+            return '';
+        }
+
+        $max_length = (int) $max_length;
+        if ( $max_length <= 0 ) {
+            return '';
+        }
+
+        $suffix = '...';
+        $suffix_len = strlen( $suffix );
+        if ( $max_length <= $suffix_len ) {
+            return function_exists( 'mb_substr' )
+                ? mb_substr( $course, 0, $max_length )
+                : substr( $course, 0, $max_length );
+        }
+
+        if ( function_exists( 'mb_strlen' ) ) {
+            if ( mb_strlen( $course ) <= $max_length ) {
+                return $course;
+            }
+            $cut = $max_length - $suffix_len;
+            return rtrim( mb_substr( $course, 0, $cut ) ) . $suffix;
+        }
+
+        if ( strlen( $course ) <= $max_length ) {
+            return $course;
+        }
+
+        $cut = $max_length - $suffix_len;
+        return rtrim( substr( $course, 0, $cut ) ) . $suffix;
+    }
+}
+
 if ( ! function_exists( 'apf_get_user_channel_email' ) ) {
     /**
      * Obtém o e-mail preferencial do usuário para um canal específico.
@@ -2036,6 +2080,13 @@ if ( ! function_exists( 'apf_render_payment_form' ) ) {
                     }
                 }
 
+                $portal_page_id = (int) get_option( 'apf_portal_colaborador_page_id' );
+                $portal_url = $portal_page_id > 0 ? get_permalink( $portal_page_id ) : '';
+                if ( $portal_url && ! headers_sent() ) {
+                    wp_safe_redirect( $portal_url );
+                    exit;
+                }
+
                 $out .= '<div style="padding:12px;border:1px solid #cde;border-radius:8px;background:#f7fbff;margin-bottom:16px">Formulário enviado com sucesso.</div>';
             } else {
                 $out .= '<div style="padding:12px;border:1px solid #f3c;border-radius:8px;background:#fff5f8;margin-bottom:16px;color:#b00020">Não foi possível enviar agora.</div>';
@@ -2069,16 +2120,19 @@ if ( ! function_exists( 'apf_render_payment_form' ) ) {
                       $dir_name = isset($dir_entry['director']) ? trim((string) $dir_entry['director']) : '';
                       if ( $dir_name === '' ) { continue; }
                       $dir_course = isset($dir_entry['course']) ? trim((string) $dir_entry['course']) : '';
-                      $label = $dir_course ? $dir_name . ' — ' . $dir_course : $dir_name;
+                      $course_display = apf_truncate_course_label( $dir_course );
+                      $full_label = $dir_course ? $dir_name . ' — ' . $dir_course : $dir_name;
+                      $label = $dir_course ? $dir_name . ' — ' . $course_display : $dir_name;
                       $selected = selected($nome_diretor, $dir_name, false);
                   ?>
-                    <option value="<?php echo esc_attr($dir_name); ?>" data-course="<?php echo esc_attr($dir_course); ?>" data-full-label="<?php echo esc_attr($label); ?>" data-director-label="<?php echo esc_attr($dir_name); ?>" title="<?php echo esc_attr($label); ?>" <?php echo $selected; ?>>
+                    <option value="<?php echo esc_attr($dir_name); ?>" data-course="<?php echo esc_attr($dir_course); ?>" data-full-label="<?php echo esc_attr($full_label); ?>" data-display-label="<?php echo esc_attr($label); ?>" data-director-label="<?php echo esc_attr($dir_name); ?>" title="<?php echo esc_attr($full_label); ?>" <?php echo $selected; ?>>
                       <?php echo esc_html($label); ?>
                     </option>
                   <?php endforeach; ?>
                   <?php if ( $nome_diretor !== '' && empty($apf_director_names[$nome_diretor]) ) : ?>
-                    <option value="<?php echo esc_attr($nome_diretor); ?>" data-course="" data-full-label="<?php echo esc_attr($nome_diretor . ' (manual)'); ?>" data-director-label="<?php echo esc_attr($nome_diretor); ?>" selected title="<?php echo esc_attr($nome_diretor); ?>">
-                      <?php echo esc_html($nome_diretor . ' (manual)'); ?>
+                    <?php $manual_label = $nome_diretor . ' (manual)'; ?>
+                    <option value="<?php echo esc_attr($nome_diretor); ?>" data-course="" data-full-label="<?php echo esc_attr($manual_label); ?>" data-display-label="<?php echo esc_attr($manual_label); ?>" data-director-label="<?php echo esc_attr($nome_diretor); ?>" selected title="<?php echo esc_attr($manual_label); ?>">
+                      <?php echo esc_html($manual_label); ?>
                     </option>
                   <?php endif; ?>
                 </select>
@@ -2371,6 +2425,15 @@ if ( ! function_exists( 'apf_render_payment_form' ) ) {
         background-size:5px 5px,5px 5px,40px 100%;
         background-repeat:no-repeat;
         padding-right:42px;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+      }
+      .apf-grid select option{
+        max-width:100%;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
       }
       .apf-row{
         display:grid;
@@ -2465,6 +2528,8 @@ if ( ! function_exists( 'apf_render_payment_form' ) ) {
         }
         .apf-step.is-active::before{align-self:center}
         .apf-radio{font-size:16px}
+        .apf-grid label{font-size:12px}
+        .apf-grid select{font-size:12px}
       }
       @media(min-width:640px){
         .apf-actions{flex-direction:row;justify-content:space-between;align-items:center}
@@ -2540,11 +2605,49 @@ if ( ! function_exists( 'apf_render_payment_form' ) ) {
             courseInput.value = course;
           }
         };
+        const truncateText = (value, maxLength) => {
+          const text = (value || '').toString().trim();
+          if (!text) return '';
+          if (!maxLength || maxLength <= 0 || text.length <= maxLength) {
+            return text;
+          }
+          if (maxLength <= 3) {
+            return text.slice(0, maxLength);
+          }
+          return text.slice(0, maxLength - 3).trim() + '...';
+        };
+        const buildDisplayLabel = (option, maxCourseLength) => {
+          const course = option.getAttribute('data-course') || '';
+          const directorLabel = option.getAttribute('data-director-label') || option.value || '';
+          const fallbackLabel = option.getAttribute('data-full-label') || option.textContent || '';
+          if (!course) {
+            return fallbackLabel || directorLabel;
+          }
+          const courseLabel = truncateText(course, maxCourseLength);
+          if (!directorLabel) {
+            return fallbackLabel || courseLabel;
+          }
+          return directorLabel + ' — ' + courseLabel;
+        };
+        const updateDisplayLabels = () => {
+          const isNarrow = window.matchMedia('(max-width: 425px)').matches;
+          const isCompact = window.matchMedia('(max-width: 620px)').matches;
+          const maxCourseLength = isNarrow ? 14 : (isCompact ? 20 : 42);
+          Array.from(directorSelect.options).forEach(opt => {
+            const label = buildDisplayLabel(opt, maxCourseLength);
+            if (label) {
+              opt.setAttribute('data-display-label', label);
+              opt.textContent = label;
+            }
+          });
+        };
         const restoreFullLabels = () => {
           Array.from(directorSelect.options).forEach(opt => {
+            const displayLabel = opt.getAttribute('data-display-label');
             const fullLabel = opt.getAttribute('data-full-label');
-            if (fullLabel !== null) {
-              opt.textContent = fullLabel;
+            const label = displayLabel !== null ? displayLabel : fullLabel;
+            if (label !== null) {
+              opt.textContent = label;
             }
           });
         };
@@ -2567,7 +2670,21 @@ if ( ! function_exists( 'apf_render_payment_form' ) ) {
         if (!courseInput || !courseInput.value) {
           syncCourse();
         }
+        updateDisplayLabels();
         applyDirectorLabels();
+        const handleViewportChange = () => {
+          updateDisplayLabels();
+          applyDirectorLabels();
+        };
+        const mediaQueryCompact = window.matchMedia('(max-width: 620px)');
+        const mediaQueryNarrow = window.matchMedia('(max-width: 425px)');
+        if (mediaQueryCompact.addEventListener) {
+          mediaQueryCompact.addEventListener('change', handleViewportChange);
+          mediaQueryNarrow.addEventListener('change', handleViewportChange);
+        } else if (mediaQueryCompact.addListener) {
+          mediaQueryCompact.addListener(handleViewportChange);
+          mediaQueryNarrow.addListener(handleViewportChange);
+        }
       }
 
       // Máscaras

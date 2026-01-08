@@ -421,6 +421,8 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
         <?php endif; ?>
       </div>
 
+      <div class="apf-fin-mail__divider" aria-hidden="true"></div>
+
       <div class="apf-fin-mail__card apf-fin-mail__card--template">
         <h2>Mensagem para o Portal FAEPA</h2>
         <p>Texto usado no e-mail de notificacao quando o pagamento e solicitado pela FAEPA.</p>
@@ -518,6 +520,7 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
         .apf-fin-mail__restricted{max-width:720px;margin:24px auto;padding:12px 16px;border-radius:12px;border:1px solid #fecdd3;background:#fff1f2;color:#9f1239}
         .apf-fin-mail__empty{border:1px dashed #cbd5e1;border-radius:12px;padding:16px;color:#64748b;background:#f8fafc}
         .apf-fin-mail__glossary{padding:12px 14px;border-radius:12px;border:1px dashed #cbd5e1;background:#f8fafc}
+        .apf-fin-mail__divider{height:4px;background:#000;border-radius:999px;margin:10px 0 18px}
         .apf-fin-mail__glossary ul{margin:0;padding-left:18px;color:#475467;font-size:13px;line-height:1.45}
         .apf-fin-mail__glossary code{background:#e2e8f0;border-radius:6px;padding:2px 6px;font-size:12px}
       </style>
