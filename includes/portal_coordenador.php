@@ -307,6 +307,17 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
         $current_status = empty( $existing_entry ) ? '' : 'pending';
     }
     $has_portal_access = ( 'approved' === $current_status && ! empty( $current_course ) );
+    $status_updated_at = 0;
+    if ( ! empty( $existing_entry ) ) {
+        if ( ! empty( $existing_entry['status_updated_at'] ) ) {
+            $status_updated_at = (int) $existing_entry['status_updated_at'];
+        } elseif ( ! empty( $existing_entry['updated_at'] ) ) {
+            $status_updated_at = (int) $existing_entry['updated_at'];
+        } elseif ( ! empty( $existing_entry['requested_at'] ) ) {
+            $status_updated_at = (int) $existing_entry['requested_at'];
+        }
+    }
+    $should_poll_status = ( 'pending' === $current_status );
     $coordinator_key = '';
     if ( ! empty( $existing_entry ) ) {
         $key_course = $existing_entry['course'] ?? '';
@@ -3809,6 +3820,13 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
       const $$ = (selector, ctx) => Array.from((ctx || document).querySelectorAll(selector));
       const select = document.getElementById('apfCoordCourseSelect');
       const manual = document.getElementById('apfCoordCourseManual');
+      const coordStatus = <?php echo wp_json_encode( $current_status ); ?>;
+      const coordStatusUpdatedAt = <?php echo (int) $status_updated_at; ?>;
+      const coordShouldPoll = <?php echo wp_json_encode( $should_poll_status ); ?>;
+      const coordStatusAjaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
+      const coordStatusNonce = <?php echo wp_json_encode( wp_create_nonce( 'apf_coord_access_status' ) ); ?>;
+      let coordStatusPollBusy = false;
+      let coordStatusPollTimer = null;
       const dismissCoordMessages = () => {
         document.querySelectorAll('.apf-coord-notice, .apf-coord-status').forEach(node=>{
           if(node && node.parentNode){
@@ -3844,6 +3862,42 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
         };
         select.addEventListener('change', toggleManual);
         toggleManual();
+      }
+
+      const pollCoordStatus = () => {
+        if(!coordShouldPoll || coordStatusPollBusy || !coordStatusAjaxUrl || !coordStatusNonce || !window.fetch){ return; }
+        coordStatusPollBusy = true;
+        const formData = new FormData();
+        formData.append('action', 'apf_coord_access_status');
+        formData.append('nonce', coordStatusNonce);
+        fetch(coordStatusAjaxUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: formData
+        })
+          .then(res=>res.json())
+          .then(payload=>{
+            if(!payload || !payload.success || !payload.data){ return; }
+            const data = payload.data;
+            const status = (data.status || '').toString();
+            const updatedAt = parseInt(data.updated_at || 0, 10) || 0;
+            if(status && status !== coordStatus){
+              window.location.reload();
+              return;
+            }
+            if(updatedAt && updatedAt > coordStatusUpdatedAt && status && status !== 'pending'){
+              window.location.reload();
+            }
+          })
+          .catch(()=>{})
+          .finally(()=>{
+            coordStatusPollBusy = false;
+          });
+      };
+
+      if(coordShouldPoll){
+        pollCoordStatus();
+        coordStatusPollTimer = setInterval(pollCoordStatus, 8000);
       }
 
       const editToggle = document.getElementById('apfCoordEditToggle');

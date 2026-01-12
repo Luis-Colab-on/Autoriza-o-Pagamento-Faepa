@@ -715,6 +715,17 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
         ?>
         <div class="apf-faepa-access">
           <div class="apf-faepa-access__grid">
+            <?php if ( ! $is_logged ) : ?>
+              <div class="apf-faepa-access__login">
+                <?php echo apf_render_login_card( array(
+                    'redirect'    => $redirect,
+                    'title'       => 'Acesse sua conta',
+                    'description' => 'Entre com seu usuário WordPress para acompanhar a aprovação.',
+                ) ); ?>
+              </div>
+            <?php endif; ?>
+
+            <?php if ( $is_logged ) : ?>
             <div class="apf-faepa-access__card">
               <span class="apf-faepa-access__badge">Portal FAEPA</span>
               <h2>Solicitar acesso</h2>
@@ -750,16 +761,8 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                 </form>
               <?php endif; ?>
             </div>
-
-            <?php if ( ! $is_logged ) : ?>
-              <div class="apf-faepa-access__login">
-                <?php echo apf_render_login_card( array(
-                    'redirect'    => $redirect,
-                    'title'       => 'Acesse sua conta',
-                    'description' => 'Entre com seu usuário WordPress para acompanhar a aprovação.',
-                ) ); ?>
-              </div>
             <?php endif; ?>
+
           </div>
         </div>
         <style>

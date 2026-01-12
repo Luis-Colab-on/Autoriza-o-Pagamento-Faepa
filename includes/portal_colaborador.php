@@ -288,11 +288,11 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
           <?php if ($a['form_url']): ?>
             <a class="apf-btn apf-primary" href="<?php echo esc_url($a['form_url']); ?>">Abrir formulário</a>
           <?php endif; ?>
-          <a class="apf-btn" href="#apf-edit">Editar meus dados</a>
+          <a class="apf-btn apf-btn--edit" href="#apf-edit">Editar meus dados</a>
         </div>
       </div>
 
-      <div class="apf-panel apf-panel--calendar" style="margin-top:16px">
+      <div class="apf-panel apf-panel--calendar apf-panel--last-submission" style="margin-top:16px">
         <h3 style="margin: 10px 0 10px">Meu último envio</h3>
         <div class="apf-table-wrap">
           <table class="apf-table">
@@ -561,24 +561,26 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
         box-shadow:0 12px 28px rgba(15,23,42,.12);
       }
       .apf-hero > div:first-child{flex:0 0 auto;min-width:0;width:100%}
-      .apf-hero h2{margin:0;font-size:22px;color:var(--apf-ink)}
+      .apf-hero h2{margin:0;font-size:22px;color:var(--apf-ink);font-weight:800}
       .apf-hero p{margin:6px 0 0;color:var(--apf-muted)}
       .apf-hero .apf-actions{flex:0 0 auto;justify-content:center;width:100%}
       .apf-actions{display:flex;gap:10px;flex-wrap:wrap}
       .apf-btn{background:#eef2f7;color:#344054;text-decoration:none;border:1px solid rgba(18,87,145,.12);border-radius:10px;padding:10px 14px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-weight:700;min-height:40px;transition:transform .15s ease,box-shadow .2s ease,border-color .2s ease,background .2s ease}
+      .apf-btn--edit{justify-content:center;text-align:center;font-weight:700}
       .apf-btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(15,23,42,.12);border-color:rgba(18,87,145,.35)}
       .apf-btn:focus{outline:none;box-shadow:var(--apf-focus)}
       .apf-btn.apf-primary{background:linear-gradient(120deg,var(--apf-primary),var(--apf-primary-strong));color:#fff;border-color:rgba(18,87,145,.35)}
       .apf-hero .apf-actions .apf-btn{min-width:0;padding:10px 13px;flex:1 1 200px;max-width:220px}
       .apf-panel{background:#fff;border:1px solid var(--apf-border);border-radius:14px;padding:16px 18px;box-shadow:0 10px 30px rgba(15,23,42,.08)}
       .apf-panel h3{margin:0 0 12px;font-size:18px;color:var(--apf-ink)}
+      .apf-panel--last-submission h3{font-weight:800;font-size:16px}
       .apf-panel--calendar{display:flex;flex-direction:column;align-items:center}
       #apf-edit{position:relative;overflow:hidden;padding:22px 22px 18px;max-width:1280px;margin-left:auto;margin-right:auto}
       #apf-edit::before,
       #apf-edit::after{content:"";position:absolute;border-radius:999px;filter:blur(12px);opacity:.18;pointer-events:none}
       #apf-edit::before{width:200px;height:200px;background:radial-gradient(circle,rgba(18,87,145,.35),transparent 65%);top:-60px;right:-40px}
       #apf-edit::after{width:180px;height:180px;background:rgba(18,87,145,.24);bottom:-80px;left:-60px}
-      #apf-edit h3{display:flex;align-items:center;gap:10px;letter-spacing:.01em}
+      #apf-edit h3{display:flex;align-items:center;justify-content:center;gap:10px;letter-spacing:.01em;text-align:center;width:100%;font-weight:800}
       #apf-edit form{position:relative;z-index:1;display:flex;flex-direction:column;gap:12px}
       #apf-edit .apf-tabs{background:var(--apf-soft);border:1px solid rgba(18,87,145,.18);border-radius:14px;padding:10px;box-shadow:inset 0 1px 0 #fff,0 12px 26px rgba(15,23,42,.08)}
       #apf-edit .apf-tabs button{min-height:46px;flex:1 1 0;border-color:rgba(18,87,145,.2);background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.06)}
@@ -683,7 +685,7 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
       .apf-portal-calendar{border:1px solid var(--apf-border);border-radius:14px;background:#fff;padding:18px;margin:12px auto 0;box-shadow:0 8px 20px rgba(15,23,42,.08);overflow:visible;width:100%;max-width:1200px;box-sizing:border-box}
       .apf-portal-calendar__body{display:flex;flex-direction:column;gap:12px;overflow:visible}
       .apf-portal-calendar__inner{display:flex;flex-direction:column;gap:12px;width:100%}
-      .apf-portal-calendar__label{display:flex;align-items:center;justify-content:flex-start;gap:8px;text-align:left;font-weight:800;letter-spacing:.02em;color:var(--apf-ink);margin:10px 0 10px;font-size:15px}
+      .apf-portal-calendar__label{display:flex;align-items:center;justify-content:flex-start;gap:8px;text-align:left;font-weight:800;letter-spacing:.02em;color:var(--apf-ink);margin:10px 0 10px;font-size:16px}
       .apf-portal-calendar__header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
       .apf-portal-calendar__header h4{margin:0;font-size:16px;font-weight:700;color:var(--apf-ink)}
       .apf-portal-calendar__nav{display:flex;align-items:center;gap:8px}
@@ -797,11 +799,24 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
       }
       @media(max-width:375px){
         #apf-edit .apf-tabs button{padding:0}
+        #apf-edit form{gap:0}
         #apf-edit .apf-pane{padding:0}
         #apf-edit .apf-radio{font-size:16px}
         #apf-edit .apf-tabs button{font-size:12px}
+        #apf-edit .apf-grid{gap:0}
+        #apf-edit .apf-grid label{border-radius:0}
+        #apf-edit .apf-grid label + label{border-top:0}
+        #apf-edit .apf-tabs{border-radius:0}
+        #apf-edit .apf-row{border-radius:0}
+        #apf-edit{padding:16px 0 0 0}
+        .apf-panel{padding:16px 0 0 0}
+        .apf-panel--calendar{padding:16px 0 0 0 !important}
         .apf-grid label{font-size:12px}
         .apf-grid select{font-size:12px}
+        .apf-portal-calendar{margin:0;border-radius:0;width:100%}
+        .apf-table-wrap{border-radius:0 0 14px 14px}
+        .apf-panel--last-submission{padding:16px 0 0 0 !important}
+        .apf-row{margin:12px 0 -1px}
       }
     </style>
 

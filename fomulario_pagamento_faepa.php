@@ -1772,6 +1772,294 @@ if ( ! function_exists( 'apf_ajax_faepa_access_list' ) ) {
     }
 }
 
+if ( ! function_exists( 'apf_ajax_directors_list' ) ) {
+    /**
+     * Retorna lista de coordenadores para atualização em tempo real no portal financeiro.
+     */
+    function apf_ajax_directors_list() {
+        if ( ! function_exists( 'apf_user_is_finance' ) || ! apf_user_is_finance() ) {
+            wp_send_json_error( array( 'message' => 'Acesso negado.' ), 403 );
+        }
+
+        check_ajax_referer( 'apf_directors_poll', 'nonce' );
+
+        if ( function_exists( 'apf_get_directors_list' ) ) {
+            $directors = apf_get_directors_list();
+        } else {
+            $directors = get_option( 'apf_directors', array() );
+        }
+        if ( ! is_array( $directors ) ) {
+            $directors = array();
+        }
+        if ( function_exists( 'apf_normalize_directors_list' ) ) {
+            $directors = apf_normalize_directors_list( $directors );
+        }
+
+        $pending_count = 0;
+        foreach ( $directors as $entry ) {
+            $status = isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'approved';
+            if ( 'pending' === $status ) {
+                $pending_count++;
+            }
+        }
+
+        if ( ! empty( $directors ) ) {
+            usort( $directors, function( $a, $b ){
+                $course_a = $a['course'] ?? '';
+                $course_b = $b['course'] ?? '';
+                $by_course = strcasecmp( $course_a, $course_b );
+                if ( $by_course !== 0 ) {
+                    return $by_course;
+                }
+                return strcasecmp( $a['director'] ?? '', $b['director'] ?? '' );
+            } );
+        }
+
+        $visible_directors = array_values( array_filter( $directors, function( $entry ) {
+            $status       = isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'approved';
+            $was_rejected = ( 'rejected' === $status );
+            if ( ! $was_rejected && ! empty( $entry['rejected_at'] ) ) {
+                $was_rejected = true;
+            }
+            return ! $was_rejected;
+        } ) );
+
+        $available_courses = function_exists( 'apf_inbox_get_available_courses' )
+            ? apf_inbox_get_available_courses()
+            : array();
+        $course_pool = array();
+        if ( is_array( $available_courses ) ) {
+            foreach ( $available_courses as $course_label ) {
+                $course_label = trim( (string) $course_label );
+                if ( '' === $course_label ) {
+                    continue;
+                }
+                $course_pool[ $course_label ] = true;
+            }
+        }
+        if ( ! empty( $directors ) ) {
+            foreach ( $directors as $entry ) {
+                $existing_course = isset( $entry['course'] ) ? trim( (string) $entry['course'] ) : '';
+                if ( '' === $existing_course ) {
+                    continue;
+                }
+                $course_pool[ $existing_course ] = true;
+            }
+        }
+        $course_choices = array_keys( $course_pool );
+        if ( ! empty( $course_choices ) ) {
+            natcasesort( $course_choices );
+            $course_choices = array_values( $course_choices );
+        } else {
+            $course_choices = array();
+        }
+        $course_select_available = ! empty( $course_choices );
+
+        $encoded = wp_json_encode( $visible_directors );
+        $hash    = is_string( $encoded ) ? md5( $encoded ) : md5( serialize( $visible_directors ) );
+        $client_hash = isset( $_POST['hash'] ) ? sanitize_text_field( wp_unslash( $_POST['hash'] ) ) : '';
+        if ( '' !== $client_hash && $client_hash === $hash ) {
+            wp_send_json_success( array(
+                'hash'          => $hash,
+                'unchanged'     => true,
+                'pending_count' => $pending_count,
+            ) );
+        }
+
+        $html = function_exists( 'apf_render_director_cards' )
+            ? apf_render_director_cards( $visible_directors, $course_choices, $course_select_available )
+            : '';
+        wp_send_json_success( array(
+            'hash'          => $hash,
+            'html'          => $html,
+            'pending_count' => $pending_count,
+        ) );
+    }
+}
+
+if ( ! function_exists( 'apf_ajax_directors_action' ) ) {
+    /**
+     * Aprova ou recusa coordenadores sem recarregar o portal financeiro.
+     */
+    function apf_ajax_directors_action() {
+        if ( ! function_exists( 'apf_user_is_finance' ) || ! apf_user_is_finance() ) {
+            wp_send_json_error( array( 'message' => 'Acesso negado.' ), 403 );
+        }
+
+        if ( ! isset( $_POST['apf_directors_nonce'] )
+            || ! wp_verify_nonce( wp_unslash( $_POST['apf_directors_nonce'] ), 'apf_directors_manage' ) ) {
+            wp_send_json_error( array( 'message' => 'Falha de segurança.' ), 403 );
+        }
+
+        $action = isset( $_POST['apf_directors_action'] ) ? sanitize_text_field( wp_unslash( $_POST['apf_directors_action'] ) ) : '';
+        if ( ! in_array( $action, array( 'approve', 'reject' ), true ) ) {
+            wp_send_json_error( array( 'message' => 'Ação inválida.' ), 400 );
+        }
+
+        $id = isset( $_POST['apf_dir_id'] ) ? preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', wp_unslash( $_POST['apf_dir_id'] ) ) : '';
+        if ( '' === $id ) {
+            wp_send_json_error( array( 'message' => 'Coordenador não informado.' ), 400 );
+        }
+
+        if ( function_exists( 'apf_get_directors_list' ) ) {
+            $directors = apf_get_directors_list();
+        } else {
+            $directors = get_option( 'apf_directors', array() );
+        }
+        if ( ! is_array( $directors ) ) {
+            $directors = array();
+        }
+        if ( function_exists( 'apf_normalize_directors_list' ) ) {
+            $directors = apf_normalize_directors_list( $directors );
+        }
+
+        $user_id = get_current_user_id();
+        $target_status = ( 'approve' === $action ) ? 'approved' : 'rejected';
+        $updated = false;
+        $should_notify = false;
+        $updated_entry = null;
+
+        foreach ( $directors as $idx => $item ) {
+            $item_id = isset( $item['id'] ) ? preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', (string) $item['id'] ) : '';
+            if ( $item_id === $id ) {
+                $previous_status = isset( $item['status'] ) ? sanitize_key( $item['status'] ) : '';
+                $directors[ $idx ]['status'] = $target_status;
+                $directors[ $idx ]['status_updated_at'] = time();
+                $directors[ $idx ]['status_updated_by'] = $user_id;
+                if ( 'approved' === $target_status ) {
+                    $directors[ $idx ]['approved_at'] = time();
+                    $directors[ $idx ]['approved_by'] = $user_id;
+                    unset( $directors[ $idx ]['rejected_at'], $directors[ $idx ]['rejected_by'] );
+                } else {
+                    $directors[ $idx ]['rejected_at'] = time();
+                    $directors[ $idx ]['rejected_by'] = $user_id;
+                }
+                $updated = true;
+                $should_notify = ( $previous_status !== $target_status );
+                $updated_entry = $directors[ $idx ];
+                break;
+            }
+        }
+
+        if ( ! $updated ) {
+            wp_send_json_error( array( 'message' => 'Coordenador não encontrado.' ), 404 );
+        }
+
+        update_option( 'apf_directors', $directors, false );
+
+        if ( $should_notify && $updated_entry && function_exists( 'apf_send_portal_access_email' ) ) {
+            $entry_user_id = isset( $updated_entry['user_id'] ) ? (int) $updated_entry['user_id'] : 0;
+            $entry_name    = isset( $updated_entry['director'] ) ? sanitize_text_field( (string) $updated_entry['director'] ) : '';
+            $entry_email   = isset( $updated_entry['email'] ) ? sanitize_email( $updated_entry['email'] ) : '';
+            $recipient_email = function_exists( 'apf_resolve_channel_email' )
+                ? apf_resolve_channel_email( $entry_user_id, 'coordinator', $entry_email )
+                : $entry_email;
+
+            if ( '' !== $recipient_email ) {
+                apf_send_portal_access_email( array(
+                    'email'  => $recipient_email,
+                    'name'   => $entry_name,
+                    'status' => $target_status,
+                    'portal' => 'do Coordenador',
+                ) );
+            }
+        }
+
+        $pending_count = 0;
+        foreach ( $directors as $entry ) {
+            $status = isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'approved';
+            if ( 'pending' === $status ) {
+                $pending_count++;
+            }
+        }
+
+        wp_send_json_success( array(
+            'status'        => $target_status,
+            'pending_count' => $pending_count,
+        ) );
+    }
+}
+
+if ( ! function_exists( 'apf_ajax_coord_access_status' ) ) {
+    /**
+     * Verifica o status do vínculo do coordenador sem recarregar manualmente.
+     */
+    function apf_ajax_coord_access_status() {
+        check_ajax_referer( 'apf_coord_access_status', 'nonce' );
+
+        $user_id = get_current_user_id();
+        if ( $user_id <= 0 ) {
+            wp_send_json_error( array( 'message' => 'Usuário não autenticado.' ), 401 );
+        }
+
+        $user = wp_get_current_user();
+        $user_email = ( $user && ! empty( $user->user_email ) ) ? sanitize_email( $user->user_email ) : '';
+        $alias_email = function_exists( 'apf_get_user_channel_email' )
+            ? apf_get_user_channel_email( $user_id, 'coordinator' )
+            : '';
+
+        if ( function_exists( 'apf_get_directors_list' ) ) {
+            $directors = apf_get_directors_list();
+        } else {
+            $directors = get_option( 'apf_directors', array() );
+        }
+        if ( ! is_array( $directors ) ) {
+            $directors = array();
+        }
+        if ( function_exists( 'apf_normalize_directors_list' ) ) {
+            $directors = apf_normalize_directors_list( $directors );
+        }
+
+        $status = '';
+        $updated_at = 0;
+        $course = '';
+        $has_access = false;
+        $emails = array_filter( array(
+            strtolower( trim( (string) $user_email ) ),
+            strtolower( trim( (string) $alias_email ) ),
+        ) );
+
+        foreach ( $directors as $entry ) {
+            if ( ! is_array( $entry ) ) {
+                continue;
+            }
+            $entry_user_id = isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0;
+            $entry_email = isset( $entry['email'] ) ? strtolower( trim( sanitize_email( $entry['email'] ) ) ) : '';
+            $matches = ( $entry_user_id > 0 && $entry_user_id === $user_id );
+            if ( ! $matches && $entry_email && ! empty( $emails ) ) {
+                $matches = in_array( $entry_email, $emails, true );
+            }
+            if ( ! $matches ) {
+                continue;
+            }
+
+            $status = isset( $entry['status'] ) ? strtolower( trim( (string) $entry['status'] ) ) : '';
+            if ( '' === $status ) {
+                $status = 'approved';
+            }
+            if ( ! in_array( $status, array( 'approved', 'pending', 'rejected' ), true ) ) {
+                $status = 'pending';
+            }
+            $course = isset( $entry['course'] ) ? trim( (string) $entry['course'] ) : '';
+            if ( ! empty( $entry['status_updated_at'] ) ) {
+                $updated_at = (int) $entry['status_updated_at'];
+            } elseif ( ! empty( $entry['updated_at'] ) ) {
+                $updated_at = (int) $entry['updated_at'];
+            } elseif ( ! empty( $entry['requested_at'] ) ) {
+                $updated_at = (int) $entry['requested_at'];
+            }
+            $has_access = ( 'approved' === $status && '' !== $course );
+            break;
+        }
+
+        wp_send_json_success( array(
+            'status'     => $status,
+            'updated_at' => $updated_at,
+            'has_access' => $has_access,
+        ) );
+    }
+}
+
 if ( ! function_exists( 'apf_ajax_faepa_access_status' ) ) {
     /**
      * Verifica status de acesso FAEPA para liberar o portal sem recarregar manualmente.
@@ -1819,6 +2107,9 @@ if ( ! function_exists( 'apf_ajax_faepa_access_status' ) ) {
 
 add_action( 'wp_ajax_apf_faepa_access_list', 'apf_ajax_faepa_access_list' );
 add_action( 'wp_ajax_apf_faepa_access_status', 'apf_ajax_faepa_access_status' );
+add_action( 'wp_ajax_apf_directors_list', 'apf_ajax_directors_list' );
+add_action( 'wp_ajax_apf_directors_action', 'apf_ajax_directors_action' );
+add_action( 'wp_ajax_apf_coord_access_status', 'apf_ajax_coord_access_status' );
 
 if ( ! function_exists( 'apf_set_coordinator_request_status' ) ) {
     /**
@@ -3141,7 +3432,7 @@ if ( ! function_exists( 'apf_render_payment_form' ) ) {
       @keyframes apfFade{from{opacity:.2;transform:translateY(6px);}to{opacity:1;transform:none;}}
       .apf-pane .apf-grid{
         display:grid;
-        grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        grid-template-columns:repeat(3,minmax(0,1fr));
         gap:14px;
       }
       .apf-grid label{
