@@ -654,6 +654,15 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
     }
 
     if ( ! $has_access ) {
+        if ( ! $is_logged ) {
+            $redirect = isset( $_SERVER['REQUEST_URI'] ) ? esc_url( $_SERVER['REQUEST_URI'] ) : home_url();
+            return apf_render_login_card( array(
+                'redirect'    => $redirect,
+                'title'       => 'Acesse sua conta',
+                'description' => 'Entre com seu usuário WordPress para acompanhar a aprovação.',
+            ) );
+        }
+
         $status_message = 'Informe seus dados para solicitar acesso ao Portal FAEPA.';
         $status_class   = 'info';
         $blocked_message = '';
@@ -682,13 +691,10 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                     $status_message = 'Informe seus dados para solicitar acesso ao Portal FAEPA.';
                     break;
             }
-        } elseif ( ! $is_logged ) {
-            $status_message = 'Solicite o acesso com seu nome completo e e-mail.';
-            $status_class   = 'info';
         }
 
-        $prefill_name  = $is_logged ? $user_name : '';
-        $prefill_email = $is_logged ? $user_email : '';
+        $prefill_name  = $user_name;
+        $prefill_email = $user_email;
         $access_notice_autohide = ( 'Solicitação enviada. Aguarde a liberação do financeiro.' === $access_notice );
         $access_notice_token_attr = $access_notice_autohide ? $access_notice_token : '';
         if ( $access_notice_autohide && '' === $access_notice_token_attr && $access_entry && isset( $access_entry['requested_at'] ) ) {
@@ -705,7 +711,6 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                 $status_autohide_token = (string) (int) $access_entry['requested_at'];
             }
         }
-        $redirect = isset( $_SERVER['REQUEST_URI'] ) ? esc_url( $_SERVER['REQUEST_URI'] ) : home_url();
         $should_poll_access = false;
         if ( $is_logged && $access_entry && isset( $access_entry['status'] ) ) {
             $should_poll_access = ( 'pending' === strtolower( (string) $access_entry['status'] ) );
@@ -715,17 +720,6 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
         ?>
         <div class="apf-faepa-access">
           <div class="apf-faepa-access__grid">
-            <?php if ( ! $is_logged ) : ?>
-              <div class="apf-faepa-access__login">
-                <?php echo apf_render_login_card( array(
-                    'redirect'    => $redirect,
-                    'title'       => 'Acesse sua conta',
-                    'description' => 'Entre com seu usuário WordPress para acompanhar a aprovação.',
-                ) ); ?>
-              </div>
-            <?php endif; ?>
-
-            <?php if ( $is_logged ) : ?>
             <div class="apf-faepa-access__card">
               <span class="apf-faepa-access__badge">Portal FAEPA</span>
               <h2>Solicitar acesso</h2>
@@ -761,7 +755,6 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                 </form>
               <?php endif; ?>
             </div>
-            <?php endif; ?>
 
           </div>
         </div>
@@ -787,8 +780,6 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
           .apf-faepa-access__form input:focus{border-color:#0ea5e9;box-shadow:0 0 0 3px rgba(14,165,233,.18);outline:none}
           .apf-faepa-access__submit{border:none;border-radius:12px;padding:12px 16px;font-size:14px;font-weight:700;background:#0ea5e9;color:#fff;cursor:pointer;transition:background .15s ease, box-shadow .15s ease}
           .apf-faepa-access__submit:hover{background:#0284c7;box-shadow:0 12px 24px rgba(2,132,199,.2)}
-          .apf-faepa-access__login{width:100%;max-width:420px}
-          .apf-faepa-access__login .apf-login-card{margin:0;box-shadow:0 18px 36px rgba(15,23,42,.12)}
           @media(min-width:980px){
             .apf-faepa-access__grid{flex-direction:row;align-items:flex-start;justify-content:center}
           }

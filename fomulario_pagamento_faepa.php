@@ -370,6 +370,7 @@ if ( ! function_exists( 'apf_create_portal_pages' ) ) {
         $portal_coord_id = apf_create_page_if_missing( 'Portal Coordenador', 'apf_portal_coordenador_page_id', '' );
         $portal_faepa_id = apf_create_page_if_missing( 'Portal FAEPA', 'apf_portal_faepa_page_id', '' );
         $portal_mail_id  = apf_create_page_if_missing( 'Central Emails', 'apf_portal_email_page_id', '' );
+        $register_page_id = apf_create_page_if_missing( 'Criar Conta', 'apf_register_page_id', '' );
 
         apf_clear_shortcode_content( $portal_colab_id, array( 'apf_portal' ) );
         apf_clear_shortcode_content( $portal_fin_id, array( 'apf_inbox' ) );
@@ -2840,6 +2841,82 @@ function apf_get_user_submission_id( $user_id, $email_prest = '' ){
     return 0;
 }
 
+if ( ! function_exists( 'apf_login_card_styles' ) ) {
+    function apf_login_card_styles() {
+        static $printed_css = false;
+        if ( $printed_css ) {
+            return '';
+        }
+        $printed_css = true;
+        return '
+            <style>
+              .apf-login-card{max-width:420px;margin:48px auto;border-radius:20px;background:#ffffff;border:1px solid #c3c4c7;box-shadow: 0 18px 35px rgb(0 0 0 / 65%);color:#0f172a;padding:36px;box-sizing:border-box;}
+              .apf-login-card__inner{padding:0;}
+              .apf-login-card__badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:rgba(25,118,210,.12);color:#0d47a1;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;}
+              .apf-login-card h2{margin:0;font-size:24px;color:#0f172a;}
+              .apf-login-card p{margin:8px 0 0;font-size:13.5px;color:#475467;}
+              .apf-login-card__notice{margin-top:14px;padding:10px 12px;border-radius:12px;font-size:13px;border:1px solid #e2e8f0;background:#f8fafc;color:#1f2937;}
+              .apf-login-card__notice--error{border-color:#fecaca;background:#fef2f2;color:#991b1b;}
+              .apf-login-card__notice--success{border-color:#bbf7d0;background:#f0fdf4;color:#166534;}
+              .login-remember {width: 13px; white-space: nowrap;}
+              #apf-login-form{margin-top:24px;display:grid;gap:18px;}
+              #apf-login-form p{margin:0;}
+              #apf-login-form label{display:flex;font-size:13px;font-weight:600;color:#1d2939;gap:6px;}
+              #apf-login-form input{box-sizing:border-box;}
+              #apf-login-form input[type="text"],#apf-login-form input[type="password"]{border:1px solid #d0d5dd;border-radius:12px;padding:12px 14px;font-size:14px;width:100%;transition:border-color .18s ease, box-shadow .18s ease;}
+              #apf-login-form input[type="text"]:focus,#apf-login-form input[type="password"]:focus{border-color:#1976d2;box-shadow:0 0 0 4px rgba(25,118,210,.18);outline:none;}
+              #apf-login-form .forgetmenot{display:flex;align-items:center;gap:8px;font-size:13px;color:#475467;margin-top:4px;}
+              #apf-login-form .forgetmenot label{flex-direction:row;align-items:center;font-size:13px;font-weight:500;gap:8px;margin:0;}
+              #apf-login-form .forgetmenot input{margin:0;}
+              #apf-login-form .submit{margin:0;}
+              #apf-login-form .submit input{width:100%;border:none;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:600;background:#1976d2;color:#fff;cursor:pointer;transition:background .2s ease, box-shadow .2s ease;}
+              #apf-login-form .submit input:hover{background:#0d47a1;box-shadow:0 12px 24px rgba(13,71,161,.28);}
+              #apf-register-form{margin-top:24px;display:grid;gap:18px;}
+              #apf-register-form label{display:flex;flex-direction:column;font-size:13px;font-weight:600;color:#1d2939;gap:6px;}
+              #apf-register-form input{box-sizing:border-box;}
+              #apf-register-form input[type="text"],#apf-register-form input[type="email"],#apf-register-form input[type="password"]{border:1px solid #d0d5dd;border-radius:12px;padding:12px 14px;font-size:14px;width:100%;transition:border-color .18s ease, box-shadow .18s ease;}
+              #apf-register-form input[type="text"]:focus,#apf-register-form input[type="email"]:focus,#apf-register-form input[type="password"]:focus{border-color:#1976d2;box-shadow:0 0 0 4px rgba(25,118,210,.18);outline:none;}
+              #apf-register-form .submit{margin:0;}
+              #apf-register-form .submit button{width:100%;border:none;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:600;background:#1976d2;color:#fff;cursor:pointer;transition:background .2s ease, box-shadow .2s ease;}
+              #apf-register-form .submit button:hover{background:#0d47a1;box-shadow:0 12px 24px rgba(13,71,161,.28);}
+              .apf-login-card__footer{margin-top:16px;display:flex;justify-content:space-between;gap:12px;font-size:13px;}
+              .apf-login-card__footer a{color:#1976d2;text-decoration:none;font-weight:600;}
+              .apf-login-card__footer a:hover{text-decoration:underline;}
+              @media(max-width:540px){
+                .apf-login-card{margin:32px 16px;padding:30px 26px;}
+                .apf-login-card__inner{padding:28px 22px;}
+                .apf-login-card__footer{flex-direction:column;align-items:flex-start;}
+              }
+              @media(max-width:425px){
+                .apf-login-card{padding:20px;}
+                .apf-login-card__inner{padding:0;}
+              }
+            </style>';
+    }
+}
+
+if ( ! function_exists( 'apf_get_register_page_url' ) ) {
+    function apf_get_register_page_url( $redirect = '' ) {
+        $page_id = (int) get_option( 'apf_register_page_id' );
+        if ( $page_id > 0 ) {
+            $page = get_post( $page_id );
+            if ( ! $page || 'page' !== $page->post_type ) {
+                $page_id = 0;
+            }
+        }
+        if ( $page_id <= 0 && function_exists( 'apf_create_page_if_missing' ) ) {
+            $page_id = (int) apf_create_page_if_missing( 'Criar Conta', 'apf_register_page_id', '' );
+        }
+
+        $url = $page_id > 0 ? get_permalink( $page_id ) : wp_registration_url();
+        $safe_redirect = $redirect ? wp_validate_redirect( $redirect, '' ) : '';
+        if ( $safe_redirect ) {
+            $url = add_query_arg( 'redirect_to', $safe_redirect, $url );
+        }
+        return esc_url( $url );
+    }
+}
+
 if ( ! function_exists( 'apf_render_login_card' ) ) {
     /**
      * Renderiza um cartão de login elegante reutilizado pelo formulário público e portal.
@@ -2867,42 +2944,9 @@ if ( ! function_exists( 'apf_render_login_card' ) ) {
             'form_id'        => 'apf-login-form',
         ) );
 
-        static $printed_css = false;
-        $css = '';
-        if ( ! $printed_css ) {
-            $printed_css = true;
-            $css = '
-            <style>
-              .apf-login-card{max-width:420px;margin:48px auto;border-radius:20px;background:#ffffff;box-shadow: 0 18px 35px rgb(0 0 0 / 65%);;color:#0f172a;padding:36px;}
-              .apf-login-card__inner{padding:0;}
-              .apf-login-card__badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:rgba(25,118,210,.12);color:#0d47a1;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;}
-              .apf-login-card h2{margin:0;font-size:24px;color:#0f172a;}
-              .apf-login-card p{margin:8px 0 0;font-size:13.5px;color:#475467;}
-              .login-remember {width: 13px; white-space: nowrap;}
-              #apf-login-form{margin-top:24px;display:grid;gap:18px;}
-              #apf-login-form p{margin:0;}
-              #apf-login-form label{display:flex;font-size:13px;font-weight:600;color:#1d2939;gap:6px;}
-              #apf-login-form input[type="text"],#apf-login-form input[type="password"]{border:1px solid #d0d5dd;border-radius:12px;padding:12px 14px;font-size:14px;width:100%;transition:border-color .18s ease, box-shadow .18s ease;}
-              #apf-login-form input[type="text"]:focus,#apf-login-form input[type="password"]:focus{border-color:#1976d2;box-shadow:0 0 0 4px rgba(25,118,210,.18);outline:none;}
-              #apf-login-form .forgetmenot{display:flex;align-items:center;gap:8px;font-size:13px;color:#475467;margin-top:4px;}
-              #apf-login-form .forgetmenot label{flex-direction:row;align-items:center;font-size:13px;font-weight:500;gap:8px;margin:0;}
-              #apf-login-form .forgetmenot input{margin:0;}
-              #apf-login-form .submit{margin:0;}
-              #apf-login-form .submit input{width:100%;border:none;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:600;background:#1976d2;color:#fff;cursor:pointer;transition:background .2s ease, box-shadow .2s ease;}
-              #apf-login-form .submit input:hover{background:#0d47a1;box-shadow:0 12px 24px rgba(13,71,161,.28);}
-              .apf-login-card__footer{margin-top:16px;display:flex;justify-content:space-between;gap:12px;font-size:13px;}
-              .apf-login-card__footer a{color:#1976d2;text-decoration:none;font-weight:600;}
-              .apf-login-card__footer a:hover{text-decoration:underline;}
-              @media(max-width:540px){
-                .apf-login-card{margin:32px 16px;padding:30px 26px;}
-                .apf-login-card__inner{padding:28px 22px;}
-                .apf-login-card__footer{flex-direction:column;align-items:flex-start;}
-              }
-            </style>';
-        }
-
-        $register_url = esc_url( wp_registration_url() );
-        $lost_url     = esc_url( wp_lostpassword_url() );
+        $css = apf_login_card_styles();
+        $register_url = apf_get_register_page_url( $args['redirect'] );
+        $lost_url = esc_url( home_url( '/wp-login.php?action=lostpassword' ) );
 
         return $css . '
         <div class="apf-login-card" aria-live="polite">
@@ -2913,6 +2957,149 @@ if ( ! function_exists( 'apf_render_login_card' ) ) {
             ' . $form . '
             <div class="apf-login-card__footer">
               <a href="' . $register_url . '">Criar uma conta</a>
+              <a href="' . $lost_url . '">Esqueci minha senha</a>
+            </div>
+          </div>
+        </div>';
+    }
+}
+
+if ( ! function_exists( 'apf_render_register_page' ) ) {
+    function apf_render_register_page() {
+        $notice = '';
+        $notice_type = 'error';
+        $register_name = '';
+        $register_email = '';
+        $register_password = '';
+        $success = false;
+        $redirect = '';
+
+        if ( ! empty( $_POST['apf_register_redirect'] ) ) {
+            $redirect = esc_url_raw( wp_unslash( $_POST['apf_register_redirect'] ) );
+        } elseif ( isset( $_GET['redirect_to'] ) ) {
+            $redirect = esc_url_raw( wp_unslash( $_GET['redirect_to'] ) );
+        }
+
+        $redirect = $redirect ? wp_validate_redirect( $redirect, '' ) : '';
+        $back_url = $redirect ? $redirect : home_url();
+
+        if ( is_user_logged_in() ) {
+            $css = apf_login_card_styles();
+            return $css . '
+            <div class="apf-login-card" aria-live="polite">
+              <div class="apf-login-card__inner">
+                <span class="apf-login-card__badge">Área Restrita</span>
+                <h2>Cadastro</h2>
+                <p>Você já está conectado. Use o portal para continuar.</p>
+                <div class="apf-login-card__footer">
+                  <a href="' . esc_url( $back_url ) . '">Voltar</a>
+                </div>
+              </div>
+            </div>';
+        }
+
+        if ( ! empty( $_POST['apf_register_submit'] ) ) {
+            $register_name = sanitize_text_field( wp_unslash( $_POST['apf_register_name'] ?? '' ) );
+            $register_email = sanitize_email( wp_unslash( $_POST['apf_register_email'] ?? '' ) );
+            $register_password = (string) wp_unslash( $_POST['apf_register_password'] ?? '' );
+
+            if ( ! isset( $_POST['apf_register_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['apf_register_nonce'] ) ), 'apf_register_user' ) ) {
+                $notice = 'Falha de segurança. Recarregue a página e tente novamente.';
+            } elseif ( '' === $register_name ) {
+                $notice = 'Informe seu nome completo.';
+            } elseif ( '' === $register_email || ! is_email( $register_email ) ) {
+                $notice = 'Informe um e-mail válido.';
+            } elseif ( '' === trim( $register_password ) ) {
+                $notice = 'Informe uma senha.';
+            } elseif ( email_exists( $register_email ) ) {
+                $notice = 'Este e-mail já está cadastrado. Use "Esqueci minha senha".';
+            } else {
+                $login_base = '';
+                if ( $register_email ) {
+                    $email_prefix = strstr( $register_email, '@', true );
+                    $login_base = sanitize_user( $email_prefix ? $email_prefix : $register_email, true );
+                }
+                if ( '' === $login_base ) {
+                    $login_base = sanitize_user( $register_name, true );
+                }
+                if ( '' === $login_base ) {
+                    $login_base = 'usuario';
+                }
+                $user_login = $login_base;
+                if ( function_exists( 'username_exists' ) ) {
+                    $suffix = 1;
+                    while ( username_exists( $user_login ) && $suffix <= 100 ) {
+                        $user_login = $login_base . $suffix;
+                        $suffix++;
+                    }
+                    if ( username_exists( $user_login ) ) {
+                        $notice = 'Não foi possível gerar um usuário. Tente novamente.';
+                    }
+                }
+
+                if ( '' === $notice ) {
+                    $role = get_role( 'colaborador' ) ? 'colaborador' : get_option( 'default_role', 'subscriber' );
+                    $user_id = wp_insert_user( array(
+                        'user_login'   => $user_login,
+                        'user_pass'    => $register_password,
+                        'user_email'   => $register_email,
+                        'display_name' => $register_name ?: $user_login,
+                        'role'         => $role,
+                    ) );
+                    if ( is_wp_error( $user_id ) ) {
+                        $notice = 'Não foi possível criar sua conta. Tente novamente.';
+                    } else {
+                        if ( function_exists( 'wp_new_user_notification' ) ) {
+                            wp_new_user_notification( $user_id, null, 'user' );
+                        }
+                        $notice_type = 'success';
+                        $notice = 'Conta criada. Verifique seu e-mail para definir a senha.';
+                        $success = true;
+                    }
+                }
+            }
+        }
+
+        $css = apf_login_card_styles();
+        $notice_html = '';
+        if ( '' !== $notice ) {
+            $notice_html = '<div class="apf-login-card__notice apf-login-card__notice--' . esc_attr( $notice_type ) . '">' . esc_html( $notice ) . '</div>';
+        }
+
+        $form_html = '';
+        if ( ! $success ) {
+            $form_html = '
+            <form id="apf-register-form" method="post">
+              ' . wp_nonce_field( 'apf_register_user', 'apf_register_nonce', true, false ) . '
+              <input type="hidden" name="apf_register_redirect" value="' . esc_attr( $redirect ) . '">
+              <label>Nome completo
+                <input type="text" name="apf_register_name" required value="' . esc_attr( $register_name ) . '" placeholder="Seu nome completo">
+              </label>
+              <label>E-mail
+                <input type="email" name="apf_register_email" required value="' . esc_attr( $register_email ) . '" placeholder="seu@email.com">
+              </label>
+              <label>Senha
+                <input type="password" name="apf_register_password" required placeholder="Sua senha">
+              </label>
+              <div class="submit">
+                <button type="submit" name="apf_register_submit" value="1">Criar conta</button>
+              </div>
+            </form>';
+        }
+
+        $primary_label = $success ? 'Ir para login' : 'Já tenho conta';
+        $lost_url = esc_url( home_url( '/wp-login.php?action=lostpassword' ) );
+
+        return $css . '
+        <div class="apf-login-card" aria-live="polite">
+          <div class="apf-login-card__inner">
+            <span class="apf-login-card__badge">Área Restrita</span>
+            <h2>Criar conta</h2>
+            <p>Cadastre seu usuário para acessar os portais e acompanhar solicitações.</p>
+            ' . $notice_html . '
+            ' . $form_html . '
+            <div class="apf-login-card__footer">
+              <a href="' . esc_url( $back_url ) . '">' . esc_html( $primary_label ) . '</a>
               <a href="' . $lost_url . '">Esqueci minha senha</a>
             </div>
           </div>
@@ -3830,6 +4017,7 @@ if ( ! function_exists( 'apf_render_portal_pages_content' ) ) {
             'apf_portal_coordenador_page_id' => 'apf_render_portal_coordenador',
             'apf_portal_faepa_page_id'       => 'apf_render_portal_faepa',
             'apf_portal_email_page_id'       => 'apf_render_portal_financeiro_email',
+            'apf_register_page_id'           => 'apf_render_register_page',
         );
 
         foreach ( $map as $option_key => $callback ) {
@@ -3865,6 +4053,7 @@ if ( ! function_exists( 'apf_hide_portal_block_titles' ) ) {
             'apf_portal_financeiro_page_id',
             'apf_portal_coordenador_page_id',
             'apf_portal_faepa_page_id',
+            'apf_register_page_id',
         );
 
         foreach ( $option_keys as $option_key ) {
