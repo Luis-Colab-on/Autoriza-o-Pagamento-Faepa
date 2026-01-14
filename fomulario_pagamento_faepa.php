@@ -461,10 +461,7 @@ if ( ! function_exists( 'apf_get_faepa_payment_default_template' ) ) {
      */
     function apf_get_faepa_payment_default_template() {
         return "Curso: [curso]\n\n"
-            . "A FAEPA aprovou e solicitou o pagamento para:\n\n"
-            . "[lista]\n\n"
-            . "O pagamento deve cair nos proximos dias. Em caso de duvidas, entre em contato com o financeiro.\n\n"
-            . "[observacao]";
+            . "O pagamento deve cair nos proximos dias. Em caso de duvidas, entre em contato com o financeiro.";
     }
 }
 
@@ -479,6 +476,37 @@ if ( ! function_exists( 'apf_get_faepa_payment_template' ) ) {
         $template = is_string( $template ) ? trim( $template ) : '';
         if ( '' === $template ) {
             return apf_get_faepa_payment_default_template();
+        }
+        return $template;
+    }
+}
+
+if ( ! function_exists( 'apf_get_faepa_payment_coordinator_default_template' ) ) {
+    /**
+     * Template padrao do e-mail do coordenador (FAEPA).
+     *
+     * @return string
+     */
+    function apf_get_faepa_payment_coordinator_default_template() {
+        return "Curso: [curso]\n\n"
+            . "A FAEPA aprovou e solicitou o pagamento para:\n\n"
+            . "[lista]\n\n"
+            . "O pagamento deve cair nos proximos dias. Em caso de duvidas, entre em contato com o financeiro.\n\n"
+            . "[observacao]";
+    }
+}
+
+if ( ! function_exists( 'apf_get_faepa_payment_coordinator_template' ) ) {
+    /**
+     * Retorna o template configurado ou o padrao (FAEPA - coordenador).
+     *
+     * @return string
+     */
+    function apf_get_faepa_payment_coordinator_template() {
+        $template = get_option( 'apf_faepa_payment_coordinator_email_template', '' );
+        $template = is_string( $template ) ? trim( $template ) : '';
+        if ( '' === $template ) {
+            return apf_get_faepa_payment_coordinator_default_template();
         }
         return $template;
     }

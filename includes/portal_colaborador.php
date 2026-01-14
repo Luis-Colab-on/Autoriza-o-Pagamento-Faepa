@@ -339,7 +339,11 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
         <?php if ( empty( $calendar_events ) ) : ?>
           <p class="apf-portal-calendar__empty">Nenhum aviso programado até o momento.</p>
         <?php else : ?>
-          <p class="apf-portal-calendar__hint" style="text-align:center">Clique em um dia destacado para ver os avisos completos.</p>
+          <div class="apf-portal-calendar__legend" aria-label="Legenda do calendario">
+            <span><span class="apf-portal-calendar__legend-dot apf-portal-calendar__legend-dot--finance" aria-hidden="true"></span>Avisos do financeiro</span>
+            <span><span class="apf-portal-calendar__legend-dot apf-portal-calendar__legend-dot--coordinator" aria-hidden="true"></span>Avisos do coordenador</span>
+            <span><span class="apf-portal-calendar__legend-dot apf-portal-calendar__legend-dot--faepa" aria-hidden="true"></span>Avisos da FAEPA</span>
+          </div>
         <?php endif; ?>
         <div class="apf-portal-modal" id="apfPortalEventModal" aria-hidden="true">
           <div class="apf-portal-modal__overlay" data-portal-modal-close></div>
@@ -699,8 +703,41 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
       .apf-portal-calendar__day:hover{border-color:var(--apf-primary);box-shadow:0 8px 16px rgba(15,23,42,.1);cursor:pointer}
       .apf-portal-calendar__day--muted{opacity:.35}
       .apf-portal-calendar__day--has-event{border-color:var(--apf-primary);background:rgba(18,87,145,.12)}
+      .apf-portal-calendar__day--finance{border-color:#125791;background:rgba(18,87,145,.12)}
+      .apf-portal-calendar__day--finance:hover,
+      .apf-portal-calendar__day--finance:focus{border-color:#125791}
+      .apf-portal-calendar__day--coordinator{border-color:#d97706;background:rgba(217,119,6,.12)}
+      .apf-portal-calendar__day--coordinator:hover,
+      .apf-portal-calendar__day--coordinator:focus{border-color:#d97706}
+      .apf-portal-calendar__day--faepa{border-color:#007569;background:rgba(0,117,105,.12)}
+      .apf-portal-calendar__day--faepa:hover,
+      .apf-portal-calendar__day--faepa:focus{border-color:#007569}
       .apf-portal-calendar__empty{margin:10px 0 0;font-size:13px;color:var(--apf-muted)}
       .apf-portal-calendar__hint{margin:10px 0 0;font-size:12px;color:var(--apf-muted)}
+      .apf-portal-calendar__legend{
+        display:flex;
+        flex-wrap:wrap;
+        gap:16px;
+        justify-content:center;
+        margin:12px 0 12px;
+        font-size:12px;
+        color:var(--apf-muted);
+      }
+      .apf-portal-calendar__legend span{
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        white-space:nowrap;
+      }
+      .apf-portal-calendar__legend-dot{
+        width:10px;
+        height:10px;
+        border-radius:999px;
+        background:#125791;
+      }
+      .apf-portal-calendar__legend-dot--finance{background:#125791}
+      .apf-portal-calendar__legend-dot--coordinator{background:#d97706}
+      .apf-portal-calendar__legend-dot--faepa{background:#007569}
 
       .apf-portal-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;transition:opacity .18s ease}
       .apf-portal-modal[aria-hidden="false"]{opacity:1;pointer-events:auto}
@@ -712,15 +749,16 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
       .apf-portal-modal__date{margin:0;font-size:13px;color:var(--apf-muted)}
       .apf-portal-modal__close{border:none;background:transparent;font-size:24px;line-height:1;color:var(--apf-muted);cursor:pointer;padding:4px}
       .apf-portal-modal__content{display:flex;flex-direction:column;gap:10px}
+      .apf-portal-modal__content.is-scroll{max-height:min(60vh,360px);overflow:auto;padding-right:6px}
       .apf-portal-modal__event{border:1px solid var(--apf-border);border-radius:12px;padding:12px 14px;background:var(--apf-soft)}
       .apf-portal-modal__event--finance{border-color:var(--apf-primary);background:rgba(18,87,145,.08)}
-      .apf-portal-modal__event--faepa{border-color:var(--apf-accent);background:rgba(18,87,145,.12)}
+      .apf-portal-modal__event--faepa{border-color:#007569;background:rgba(0,117,105,.12)}
       .apf-portal-modal__event--coordinator{border-color:#d97706;background:rgba(217,119,6,.12)}
       .apf-portal-modal__event h5{margin:0 0 4px;font-size:15px;color:var(--apf-ink)}
       .apf-portal-modal__event p{margin:0;font-size:13px;color:var(--apf-muted);white-space:pre-wrap}
       .apf-portal-modal__event-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:4px 8px;border-radius:999px;margin-bottom:6px}
       .apf-portal-modal__event-tag--finance{background:rgba(18,87,145,.14);color:var(--apf-primary)}
-      .apf-portal-modal__event-tag--faepa{background:rgba(18,87,145,.18);color:#0f2e4d}
+      .apf-portal-modal__event-tag--faepa{background:rgba(0,117,105,.18);color:#007569}
       .apf-portal-modal__event-tag--coordinator{background:rgba(217,119,6,.16);color:#b45309}
       .apf-portal-modal__empty{margin:0;font-size:13px;color:var(--apf-muted)}
 
@@ -873,6 +911,8 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
           if(!modal || !modalList){ return; }
           const list = eventsByDate.get(dateIso) || [];
           modalList.innerHTML = '';
+          modalList.classList.toggle('is-scroll', list.length > 3);
+          modalList.scrollTop = 0;
           if (modalDate) {
             modalDate.textContent = formatDateBr(dateIso);
           }
@@ -893,7 +933,7 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
                 const tagClass = type === 'coordinator' ? 'apf-portal-modal__event-tag--coordinator'
                   : (type === 'faepa' ? 'apf-portal-modal__event-tag--faepa' : 'apf-portal-modal__event-tag--finance');
                 tag.className = 'apf-portal-modal__event-tag ' + tagClass;
-                tag.textContent = type === 'coordinator' ? 'Aviso do Coordenador' : (type === 'faepa' ? 'Aviso FAEPA' : 'Aviso Financeiro');
+                tag.textContent = type === 'coordinator' ? 'Enviado por Coordenador' : (type === 'faepa' ? 'Enviado por FAEPA' : 'Enviado por Financeiro');
                 card.appendChild(tag);
               }
               const title = document.createElement('h5');
@@ -997,7 +1037,30 @@ if ( ! function_exists( 'apf_render_portal_colaborador' ) ) {
               div.textContent = String(dayNumber);
               const iso = year + '-' + String(monthIndex + 1).padStart(2, '0') + '-' + String(dayNumber).padStart(2, '0');
               if (eventsByDate.has(iso)) {
+                const dayEvents = eventsByDate.get(iso) || [];
+                let hasFaepa = false;
+                let hasCoordinator = false;
+                let hasFinance = false;
+                dayEvents.forEach(evt => {
+                  const rawType = (evt && evt.type) ? String(evt.type).toLowerCase() : '';
+                  if ('faepa' === rawType) {
+                    hasFaepa = true;
+                  } else if ('coordinator' === rawType) {
+                    hasCoordinator = true;
+                  } else {
+                    hasFinance = true;
+                  }
+                });
+                let dayType = 'finance';
+                if (hasFaepa) {
+                  dayType = 'faepa';
+                } else if (hasCoordinator) {
+                  dayType = 'coordinator';
+                } else if (hasFinance) {
+                  dayType = 'finance';
+                }
                 div.classList.add('apf-portal-calendar__day--has-event');
+                div.classList.add('apf-portal-calendar__day--' + dayType);
                 div.setAttribute('role','button');
                 div.setAttribute('tabindex','0');
                 div.addEventListener('click', () => openModal(iso));

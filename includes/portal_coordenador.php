@@ -1586,6 +1586,7 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
             </div>
             <div class="apf-coord-calendar__legend" aria-label="Legenda do calendário" id="apfCoordLegend">
               <span data-legend="providers-other"><span class="apf-coord-calendar__legend-dot apf-coord-calendar__legend-dot--providers" aria-hidden="true"></span> Avisos do financeiro</span>
+              <span data-legend="providers-faepa"><span class="apf-coord-calendar__legend-dot apf-coord-calendar__legend-dot--faepa" aria-hidden="true"></span> Avisos da FAEPA</span>
               <span data-legend="providers-own"><span class="apf-coord-calendar__legend-dot apf-coord-calendar__legend-dot--providers-own" aria-hidden="true"></span> Avisos que eu enviei</span>
             </div>
           </div>
@@ -2703,6 +2704,7 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
         font-size:12px;
         color:#475467;
         align-items:center;
+        justify-content:flex-start;
       }
       .apf-coord-calendar__legend span{
         white-space:nowrap;
@@ -2725,6 +2727,9 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
       }
       .apf-coord-calendar__legend-dot--providers{
         background:#1f6feb;
+      }
+      .apf-coord-calendar__legend-dot--faepa{
+        background:#007569;
       }
       .apf-coord-calendar__legend-dot--providers-own{
         background:#7c3aed;
@@ -2806,6 +2811,9 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
       .apf-coord-calendar__day--group-providers{
         border-color:#1f6feb;
       }
+      .apf-coord-calendar__day--group-faepa{
+        border-color:#007569;
+      }
       .apf-coord-calendar__day--group-providers-own{
         border-color:#7c3aed;
       }
@@ -2831,6 +2839,9 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
       }
       .apf-coord-calendar__marker--providers{
         background:#1f6feb;
+      }
+      .apf-coord-calendar__marker--faepa{
+        background:#007569;
       }
       .apf-coord-calendar__marker--coordinators{
         background:#f97316;
@@ -2918,6 +2929,11 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
         flex-direction:column;
         gap:12px;
       }
+      .apf-coord-modal__items.is-scroll{
+        max-height:min(60vh,360px);
+        overflow:auto;
+        padding-right:6px;
+      }
       .apf-coord-modal__event{
         border:1px solid #e4e7ec;
         border-radius:14px;
@@ -2926,6 +2942,35 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
         display:flex;
         flex-direction:column;
         gap:8px;
+      }
+      .apf-coord-modal__event--finance{
+        border-color:#1f6feb;
+        background:rgba(31,111,235,.08);
+      }
+      .apf-coord-modal__event--coordinator{
+        border-color:#f97316;
+        background:rgba(249,115,22,.08);
+      }
+      .apf-coord-modal__sender{
+        margin:0;
+        font-size:11px;
+        font-weight:700;
+        text-transform:uppercase;
+        letter-spacing:.06em;
+        color:#64748b;
+      }
+      .apf-coord-modal__sender--finance{
+        color:#1f6feb;
+      }
+      .apf-coord-modal__sender--coordinator{
+        color:#f97316;
+      }
+      .apf-coord-modal__sender--faepa{
+        color:#007569;
+      }
+      .apf-coord-modal__event--faepa{
+        border-color:#007569;
+        background:rgba(0,117,105,.08);
       }
       .apf-coord-modal__event h5{
         margin:0;
@@ -3446,6 +3491,10 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
         border-color:#1f6feb !important;
         border-width:2px;
       }
+      .apf-coord-calendar__day--group-faepa{
+        border-color:#007569 !important;
+        border-width:2px;
+      }
       .apf-coord-calendar__day--group-providers-own{
         border-color:#7c3aed !important;
         border-width:2px;
@@ -3791,7 +3840,7 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
           font-size:10.5px;
         }
       }
-      @media(max-width:425px){
+      @media(max-width:500px){
         .apf-coord-calendar__wrap.has-compose .apf-coord-calendar__weekdays,
         .apf-coord-calendar__wrap.has-compose .apf-coord-calendar__days{
           grid-template-columns:repeat(7,minmax(22px,1fr));
@@ -3805,13 +3854,17 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
           font-size:10px;
         }
         .apf-coord-calendar__legend{
-          flex-wrap:wrap;
-          gap:4px;
+          flex-direction:column;
+          align-items:flex-start;
+          gap:6px;
         }
         .apf-coord-calendar__legend span{
           white-space:normal;
           font-size:9px;
-          text-align:center;
+          text-align:left;
+          display:flex;
+          align-items:center;
+          gap:6px;
         }
       }
     </style>
@@ -4871,6 +4924,20 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
         }
         updateLegend();
 
+        function getSenderType(entry){
+          if(!entry || !entry.id){ return 'finance'; }
+          const id = String(entry.id);
+          if(id.indexOf('faepa_pay_') === 0){ return 'faepa'; }
+          if(id.indexOf('coord_msg_') === 0){ return 'coordinator'; }
+          return 'finance';
+        }
+
+        function getSenderLabel(senderType){
+          if(senderType === 'faepa'){ return 'FAEPA'; }
+          if(senderType === 'coordinator'){ return 'Coordenador'; }
+          return 'Financeiro';
+        }
+
         function renderCoordModal(date, info, groupsFilter){
           if(!coordModalItems || !coordModalEmpty){ return; }
           coordModalDate = date;
@@ -4887,6 +4954,8 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
                 return entryGroups.some(g => visibleGroups.includes(g));
               })
             : [];
+          coordModalItems.classList.toggle('is-scroll', entries.length > 3);
+          coordModalItems.scrollTop = 0;
           if(!entries.length){
             coordModalEmpty.hidden = false;
             return;
@@ -4896,8 +4965,14 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
             if(!entry){ return; }
             const card = document.createElement('article');
             card.className = 'apf-coord-modal__event';
+            const senderType = getSenderType(entry);
+            card.classList.add('apf-coord-modal__event--' + senderType);
+            const sender = document.createElement('p');
+            sender.className = 'apf-coord-modal__sender apf-coord-modal__sender--' + senderType;
+            sender.textContent = 'Enviado por ' + getSenderLabel(senderType);
             const heading = document.createElement('h5');
             heading.textContent = entry.title || 'Aviso';
+            card.appendChild(sender);
             card.appendChild(heading);
 
             const meta = document.createElement('div');
@@ -5072,6 +5147,7 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
               let filteredGroups = [];
               let providerOwn = false;
               let providerOther = false;
+              let providerFaepa = false;
               if(eventsByDate.has(iso)){
                 const info = eventsByDate.get(iso);
                 if(activeFilter === 'providers'){
@@ -5079,17 +5155,21 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
                     if(!evt){ return; }
                     const evtGroups = Array.isArray(evt.groups) ? evt.groups : [];
                     if(!evtGroups.includes('providers')){ return; }
+                    const evtId = evt.id ? String(evt.id) : '';
+                    const isFaepa = evtId.indexOf('faepa_pay_') === 0;
                     const creatorId = evt.created_by ? parseInt(evt.created_by, 10) || 0 : 0;
                     const isOwn = (creatorId === currentUserId)
                       && !!evt.id
                       && String(evt.id).indexOf('coord_msg_') === 0;
                     if(isOwn){
                       providerOwn = true;
+                    }else if(isFaepa){
+                      providerFaepa = true;
                     }else{
                       providerOther = true;
                     }
                   });
-                  if(providerOwn || providerOther){
+                  if(providerOwn || providerOther || providerFaepa){
                     filteredGroups = ['providers'];
                   }
                 }else{
@@ -5103,7 +5183,13 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
                     if(providerOther){
                       const marker = document.createElement('span');
                       marker.className = 'apf-coord-calendar__marker apf-coord-calendar__marker--providers';
-                      marker.title = 'Avisos do financeiro/FAEPA';
+                      marker.title = 'Avisos do financeiro';
+                      markers.appendChild(marker);
+                    }
+                    if(providerFaepa){
+                      const marker = document.createElement('span');
+                      marker.className = 'apf-coord-calendar__marker apf-coord-calendar__marker--faepa';
+                      marker.title = 'Avisos da FAEPA';
                       markers.appendChild(marker);
                     }
                     if(providerOwn){
@@ -5112,10 +5198,12 @@ if ( ! function_exists( 'apf_render_portal_coordenador' ) ) {
                       marker.title = 'Avisos enviados por você';
                       markers.appendChild(marker);
                     }
-                    if(providerOwn && providerOther){
+                    if(providerOwn && (providerOther || providerFaepa)){
                       div.classList.add('apf-coord-calendar__day--group-mixed');
                     }else if(providerOwn){
                       div.classList.add('apf-coord-calendar__day--group-providers-own');
+                    }else if(providerFaepa && !providerOther){
+                      div.classList.add('apf-coord-calendar__day--group-faepa');
                     }else{
                       div.classList.add('apf-coord-calendar__day--group-providers');
                     }
