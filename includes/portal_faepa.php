@@ -108,6 +108,85 @@ if ( ! function_exists( 'apf_faepa_should_autonotify_batch' ) ) {
     }
 }
 
+if ( ! function_exists( 'apf_faepa_xml_escape' ) ) {
+    /**
+     * Escapa valores para uso em XML.
+     *
+     * @param mixed $value
+     * @return string
+     */
+    function apf_faepa_xml_escape( $value ) {
+        $value = is_scalar( $value ) ? (string) $value : '';
+        $value = wp_strip_all_tags( $value );
+        return htmlspecialchars( $value, ENT_XML1 | ENT_COMPAT, 'UTF-8' );
+    }
+}
+
+if ( ! function_exists( 'apf_faepa_build_collab_xms' ) ) {
+    /**
+     * Gera conteudo XML para download por colaborador.
+     *
+     * @param array $entry
+     * @param array $details
+     * @return string
+     */
+    function apf_faepa_build_collab_xms( $entry, $details ) {
+        $entry   = is_array( $entry ) ? $entry : array();
+        $details = is_array( $details ) ? $details : array();
+
+        $payment = isset( $details['payment'] ) && is_array( $details['payment'] ) ? $details['payment'] : array();
+        $service = isset( $details['service'] ) && is_array( $details['service'] ) ? $details['service'] : array();
+        $payout  = isset( $details['payout'] ) && is_array( $details['payout'] ) ? $details['payout'] : array();
+
+        $lines = array(
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<colaborador>',
+        );
+
+        $lines[] = '  <id>' . apf_faepa_xml_escape( $entry['id'] ?? '' ) . '</id>';
+        $lines[] = '  <lote>' . apf_faepa_xml_escape( $entry['batch_id'] ?? '' ) . '</lote>';
+        $lines[] = '  <nome>' . apf_faepa_xml_escape( $entry['provider_name'] ?? '' ) . '</nome>';
+        $lines[] = '  <email>' . apf_faepa_xml_escape( $entry['provider_email'] ?? '' ) . '</email>';
+        $lines[] = '  <valor>' . apf_faepa_xml_escape( $entry['provider_value'] ?? '' ) . '</valor>';
+        $lines[] = '  <status>' . apf_faepa_xml_escape( $entry['status'] ?? '' ) . '</status>';
+        $lines[] = '  <status_label>' . apf_faepa_xml_escape( $entry['status_label'] ?? '' ) . '</status_label>';
+        $lines[] = '  <decisao_em>' . apf_faepa_xml_escape( $entry['decision_at'] ?? '' ) . '</decisao_em>';
+        $lines[] = '  <observacao>' . apf_faepa_xml_escape( $entry['decision_note'] ?? '' ) . '</observacao>';
+        $lines[] = '  <pagamento_confirmado>' . ( ! empty( $entry['faepa_paid'] ) ? '1' : '0' ) . '</pagamento_confirmado>';
+        $lines[] = '  <pagamento_confirmado_em>' . apf_faepa_xml_escape( $entry['faepa_paid_at'] ?? '' ) . '</pagamento_confirmado_em>';
+        $lines[] = '  <pagamento_nota>' . apf_faepa_xml_escape( $entry['faepa_payment_note'] ?? '' ) . '</pagamento_nota>';
+        $lines[] = '  <pagamento_anexo>' . apf_faepa_xml_escape( $entry['faepa_payment_attachment'] ?? '' ) . '</pagamento_anexo>';
+
+        $lines[] = '  <coordenador>';
+        $lines[] = '    <nome>' . apf_faepa_xml_escape( $entry['coordinator_name'] ?? '' ) . '</nome>';
+        $lines[] = '    <email>' . apf_faepa_xml_escape( $entry['coordinator_email'] ?? '' ) . '</email>';
+        $lines[] = '    <curso>' . apf_faepa_xml_escape( $entry['course'] ?? '' ) . '</curso>';
+        $lines[] = '  </coordenador>';
+
+        $lines[] = '  <informacoes_pagamento>';
+        foreach ( $payment as $label => $value ) {
+            $lines[] = '    <campo nome="' . apf_faepa_xml_escape( $label ) . '">' . apf_faepa_xml_escape( $value ) . '</campo>';
+        }
+        $lines[] = '  </informacoes_pagamento>';
+
+        $lines[] = '  <prestacao_servico>';
+        foreach ( $service as $label => $value ) {
+            $lines[] = '    <campo nome="' . apf_faepa_xml_escape( $label ) . '">' . apf_faepa_xml_escape( $value ) . '</campo>';
+        }
+        $lines[] = '  </prestacao_servico>';
+
+        $lines[] = '  <dados_pagamento>';
+        foreach ( $payout as $label => $value ) {
+            $lines[] = '    <campo nome="' . apf_faepa_xml_escape( $label ) . '">' . apf_faepa_xml_escape( $value ) . '</campo>';
+        }
+        $lines[] = '  </dados_pagamento>';
+
+        $lines[] = '</colaborador>';
+
+        return implode( "\n", $lines );
+    }
+}
+
 if ( ! function_exists( 'apf_faepa_send_payment_notifications' ) ) {
     /**
      * Dispara notificacoes de pagamento para um lote.
@@ -164,12 +243,24 @@ if ( ! function_exists( 'apf_faepa_send_payment_notifications' ) ) {
         $finance_email = sanitize_email( get_option( 'admin_email' ) );
         $coordinator_email = '';
         $coordinator_name  = '';
+        $coordinator_user_id = 0;
         $course_label      = '';
         if ( ! empty( $batch_entries[0]['coordinator_email'] ) ) {
             $coordinator_email = sanitize_email( (string) $batch_entries[0]['coordinator_email'] );
         }
         if ( ! empty( $batch_entries[0]['coordinator_name'] ) ) {
             $coordinator_name = sanitize_text_field( (string) $batch_entries[0]['coordinator_name'] );
+        }
+        if ( ! empty( $batch_entries[0]['coordinator_user_id'] ) ) {
+            $coordinator_user_id = (int) $batch_entries[0]['coordinator_user_id'];
+        }
+        if ( function_exists( 'apf_resolve_channel_email' ) ) {
+            $coordinator_email = apf_resolve_channel_email( $coordinator_user_id, 'coordinator', $coordinator_email );
+        } elseif ( '' === $coordinator_email && $coordinator_user_id > 0 ) {
+            $user = get_user_by( 'id', $coordinator_user_id );
+            if ( $user && ! empty( $user->user_email ) ) {
+                $coordinator_email = sanitize_email( $user->user_email );
+            }
         }
         if ( ! empty( $batch_entries[0]['course'] ) ) {
             $course_label = sanitize_text_field( (string) $batch_entries[0]['course'] );
@@ -198,12 +289,23 @@ if ( ! function_exists( 'apf_faepa_send_payment_notifications' ) ) {
 
         $subject = 'FAEPA aprovou e solicitou o pagamento - ' . ( $course_label ?: 'FAEPA' );
         $observacao = $custom_note ? 'Observacao: ' . $custom_note : '';
-        $base_message = apf_replace_placeholders( apf_get_faepa_payment_template(), array(
+        $collab_template = apf_get_faepa_payment_template();
+        $collab_message = apf_replace_placeholders( $collab_template, array(
+            '[lista]'      => '',
+            '[curso]'      => $course_label ?: 'FAEPA',
+            '[observacao]' => '',
+        ) );
+        $collab_message = trim( (string) $collab_message );
+        $coord_template = function_exists( 'apf_get_faepa_payment_coordinator_template' )
+            ? apf_get_faepa_payment_coordinator_template()
+            : $collab_template;
+        $coord_message = apf_replace_placeholders( $coord_template, array(
             '[lista]'      => implode( "\n", $lines ),
             '[curso]'      => $course_label ?: 'FAEPA',
             '[observacao]' => $observacao,
         ) );
-        $base_message = trim( (string) $base_message );
+        $coord_message = trim( (string) $coord_message );
+        $base_message = $collab_message;
 
         $portal_targets = 0;
         $portal_error   = '';
@@ -384,14 +486,14 @@ if ( ! function_exists( 'apf_faepa_send_payment_notifications' ) ) {
             ) );
         }
         if ( $finance_email ) {
-            if ( wp_mail( $finance_email, $subject, $base_message, $headers ) ) {
+            if ( wp_mail( $finance_email, $subject, $coord_message, $headers ) ) {
                 $mail_sent++;
             } else {
                 $mail_errors[] = 'financeiro';
             }
         }
         if ( $coordinator_email ) {
-            $body = $base_message;
+            $body = $coord_message;
             if ( $coordinator_name ) {
                 $body = 'Ola ' . $coordinator_name . ",\n\n" . $body;
             }
@@ -408,7 +510,9 @@ if ( ! function_exists( 'apf_faepa_send_payment_notifications' ) ) {
                 if ( ! empty( $payload['values'] ) ) {
                     $body .= 'Valor(es): ' . implode( ', ', $payload['values'] ) . "\n";
                 }
-                $body .= "\n" . $base_message;
+                if ( '' !== $collab_message ) {
+                    $body .= "\n" . $collab_message;
+                }
                 if ( wp_mail( $email, $subject, $body, $headers ) ) {
                     $mail_sent++;
                 } else {
@@ -498,6 +602,96 @@ if ( ! function_exists( 'apf_faepa_try_autonotify_from_request' ) ) {
             'notice_type' => $notice_type,
             'triggered'   => true,
         );
+    }
+}
+
+if ( ! function_exists( 'apf_faepa_send_coordinator_payment_validation_email' ) ) {
+    /**
+     * Envia e-mail ao coordenador quando a FAEPA valida o pagamento.
+     *
+     * @param string $request_id
+     * @return bool
+     */
+    function apf_faepa_send_coordinator_payment_validation_email( $request_id ) {
+        $request_id = sanitize_text_field( (string) $request_id );
+        if ( '' === $request_id || ! function_exists( 'apf_get_coordinator_requests' ) ) {
+            return false;
+        }
+
+        $requests = apf_get_coordinator_requests();
+        if ( ! is_array( $requests ) ) {
+            return false;
+        }
+
+        $entry_index = null;
+        $entry = null;
+        foreach ( $requests as $idx => $request ) {
+            if ( ! is_array( $request ) || ! isset( $request['id'] ) ) {
+                continue;
+            }
+            $current_id = sanitize_text_field( (string) $request['id'] );
+            if ( '' === $current_id || $current_id !== $request_id ) {
+                continue;
+            }
+            if ( ! empty( $request['faepa_payment_validated_notified'] ) ) {
+                return false;
+            }
+            $entry_index = $idx;
+            $entry = $request;
+            break;
+        }
+
+        if ( null === $entry_index || ! is_array( $entry ) ) {
+            return false;
+        }
+
+        $coordinator_email = isset( $entry['coordinator_email'] ) ? sanitize_email( (string) $entry['coordinator_email'] ) : '';
+        $coordinator_name  = isset( $entry['coordinator_name'] ) ? sanitize_text_field( (string) $entry['coordinator_name'] ) : '';
+        $coordinator_user  = isset( $entry['coordinator_user_id'] ) ? (int) $entry['coordinator_user_id'] : 0;
+        if ( function_exists( 'apf_resolve_channel_email' ) ) {
+            $coordinator_email = apf_resolve_channel_email( $coordinator_user, 'coordinator', $coordinator_email );
+        } elseif ( '' === $coordinator_email && $coordinator_user > 0 ) {
+            $user = get_user_by( 'id', $coordinator_user );
+            if ( $user && ! empty( $user->user_email ) ) {
+                $coordinator_email = sanitize_email( $user->user_email );
+            }
+        }
+
+        if ( '' === $coordinator_email || ! is_email( $coordinator_email ) ) {
+            return false;
+        }
+
+        $course_label = isset( $entry['course'] ) ? sanitize_text_field( (string) $entry['course'] ) : '';
+        $provider_name = isset( $entry['provider_name'] ) ? sanitize_text_field( (string) $entry['provider_name'] ) : '';
+        $provider_value = isset( $entry['provider_value'] ) ? sanitize_text_field( (string) $entry['provider_value'] ) : '';
+        $note = isset( $entry['faepa_payment_note'] ) ? sanitize_textarea_field( (string) $entry['faepa_payment_note'] ) : '';
+        $observacao = $note ? 'Observacao: ' . $note : '';
+
+        $line = '- ' . ( $provider_name ?: 'Colaborador' ) . ( $provider_value ? ' — ' . $provider_value : '' );
+
+        $template = function_exists( 'apf_get_faepa_payment_coordinator_template' )
+            ? apf_get_faepa_payment_coordinator_template()
+            : ( function_exists( 'apf_get_faepa_payment_default_template' ) ? apf_get_faepa_payment_default_template() : '' );
+        $body = apf_replace_placeholders( $template, array(
+            '[lista]'      => $line,
+            '[curso]'      => $course_label ?: 'FAEPA',
+            '[observacao]' => $observacao,
+        ) );
+        $body = trim( (string) $body );
+        if ( $coordinator_name ) {
+            $body = 'Ola ' . $coordinator_name . ",\n\n" . $body;
+        }
+
+        $subject = 'FAEPA validou o pagamento - ' . ( $course_label ?: 'FAEPA' );
+        $headers = array( 'Content-Type: text/plain; charset=UTF-8' );
+        $sent = wp_mail( $coordinator_email, $subject, $body, $headers );
+        if ( $sent ) {
+            $requests[ $entry_index ]['faepa_payment_validated_notified'] = true;
+            $requests[ $entry_index ]['faepa_payment_validated_notified_at'] = time();
+            apf_store_coordinator_requests( $requests );
+        }
+
+        return $sent;
     }
 }
 
@@ -651,6 +845,69 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
     $has_access = false;
     if ( $is_logged && function_exists( 'apf_user_has_faepa_access' ) ) {
         $has_access = apf_user_has_faepa_access( $user_id, $user_login, $user_email );
+    }
+
+    $download_request_id = '';
+    if ( isset( $_GET['apf_faepa_xms'] ) ) {
+        $download_request_id = isset( $_GET['apf_faepa_request'] )
+            ? sanitize_text_field( wp_unslash( $_GET['apf_faepa_request'] ) )
+            : '';
+    }
+    if ( '' !== $download_request_id ) {
+        if ( ! $has_access ) {
+            status_header( 403 );
+            wp_die( 'Acesso restrito.' );
+        }
+        if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( wp_unslash( $_GET['_wpnonce'] ), 'apf_faepa_xms_' . $download_request_id ) ) {
+            status_header( 403 );
+            wp_die( 'Link invalido.' );
+        }
+        if ( ! function_exists( 'apf_get_coordinator_requests' ) ) {
+            status_header( 500 );
+            wp_die( 'Nao foi possivel gerar o arquivo.' );
+        }
+        $requests = apf_get_coordinator_requests();
+        $target_entry = null;
+        if ( is_array( $requests ) ) {
+            foreach ( $requests as $entry ) {
+                if ( ! is_array( $entry ) || empty( $entry['id'] ) ) {
+                    continue;
+                }
+                $entry_id = sanitize_text_field( (string) $entry['id'] );
+                if ( '' !== $entry_id && $entry_id === $download_request_id ) {
+                    $target_entry = $entry;
+                    break;
+                }
+            }
+        }
+        if ( ! $target_entry ) {
+            status_header( 404 );
+            wp_die( 'Colaborador nao encontrado.' );
+        }
+        $status = isset( $target_entry['status'] ) ? sanitize_key( $target_entry['status'] ) : '';
+        if ( 'approved' !== $status || empty( $target_entry['faepa_forwarded'] ) ) {
+            status_header( 403 );
+            wp_die( 'Colaborador indisponivel para download.' );
+        }
+        $details = function_exists( 'apf_coord_build_request_details' )
+            ? apf_coord_build_request_details( $target_entry )
+            : array();
+        $payload = array_merge( $target_entry, array(
+            'status_label'  => ( 'approved' === $status ) ? 'Aprovado' : $status,
+            'decision_at'   => isset( $target_entry['decision_at'] ) ? (int) $target_entry['decision_at'] : 0,
+            'decision_note' => isset( $target_entry['decision_note'] ) ? sanitize_textarea_field( $target_entry['decision_note'] ) : '',
+        ) );
+        $xml = apf_faepa_build_collab_xms( $payload, $details );
+        $filename_name = isset( $target_entry['provider_name'] ) ? sanitize_text_field( (string) $target_entry['provider_name'] ) : '';
+        if ( '' === $filename_name ) {
+            $filename_name = 'colaborador';
+        }
+        $filename = sanitize_file_name( 'faepa-' . $filename_name . '-' . $download_request_id . '.xms' );
+        nocache_headers();
+        header( 'Content-Type: application/xml; charset=UTF-8' );
+        header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+        echo $xml;
+        exit;
     }
 
     if ( ! $has_access ) {
@@ -905,6 +1162,9 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                 if ( $approved ) {
                     $faepa_notice      = 'Pagamento aprovado.';
                     $faepa_notice_type = 'success';
+                    if ( function_exists( 'apf_faepa_send_coordinator_payment_validation_email' ) ) {
+                        apf_faepa_send_coordinator_payment_validation_email( $request_id );
+                    }
                     $auto_result = apf_faepa_try_autonotify_from_request( $request_id, $faepa_notice, $faepa_notice_type );
                     $faepa_notice = $auto_result['notice'];
                     $faepa_notice_type = $auto_result['notice_type'];
@@ -979,6 +1239,9 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                 if ( $updated ) {
                     $faepa_notice      = 'Solicitação marcada como aprovada.';
                     $faepa_notice_type = 'success';
+                    if ( function_exists( 'apf_faepa_send_coordinator_payment_validation_email' ) ) {
+                        apf_faepa_send_coordinator_payment_validation_email( $request_id );
+                    }
                     $auto_result = apf_faepa_try_autonotify_from_request( $request_id, $faepa_notice, $faepa_notice_type );
                     $faepa_notice = $auto_result['notice'];
                     $faepa_notice_type = $auto_result['notice_type'];
@@ -1353,6 +1616,15 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
         } );
     }
 
+    $download_base = '';
+    if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+        $download_base = home_url( wp_unslash( $_SERVER['REQUEST_URI'] ) );
+    }
+    if ( '' === $download_base ) {
+        $download_base = home_url( '/' );
+    }
+    $download_base = remove_query_arg( array( 'apf_faepa_xms', 'apf_faepa_request', '_wpnonce' ), $download_base );
+
     ob_start();
     ?>
     <div class="apf-faepa" id="apfFaepaPortal">
@@ -1499,7 +1771,7 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                       <article class="apf-faepa-entry" data-faepa-approved="<?php echo ! empty( $item['faepa_paid'] ) ? '1' : '0'; ?>">
                         <details>
                           <summary class="apf-faepa-entry__head">
-                            <div>
+                            <div class="apf-faepa-entry__main">
                               <div class="apf-faepa-entry__title-line">
                                 <strong class="apf-faepa-entry__name"><?php echo esc_html( $item['name'] ?: 'Colaborador' ); ?></strong>
                                 <?php if ( $value_label ) : ?>
@@ -1510,11 +1782,25 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                             <?php if ( $company_label && $company_label !== ( $item['name'] ?? '' ) ) : ?>
                                 <div class="apf-faepa-entry__company"><?php echo esc_html( $company_label ); ?></div>
                               <?php endif; ?>
+                              <?php if ( ! empty( $item['id'] ) ) : ?>
+                                <?php
+                                  $download_url = add_query_arg( array(
+                                      'apf_faepa_xms'     => 1,
+                                      'apf_faepa_request' => $item['id'],
+                                  ), $download_base );
+                                  $download_url = wp_nonce_url( $download_url, 'apf_faepa_xms_' . $item['id'] );
+                                ?>
+                                <div class="apf-faepa-entry__download">
+                                  <a class="apf-faepa-entry__download-link" href="<?php echo esc_url( $download_url ); ?>">Baixar XMS</a>
+                                </div>
+                              <?php endif; ?>
                             </div>
-                            <?php if ( ! empty( $item['faepa_paid'] ) ) : ?>
-                              <span class="apf-faepa-pill apf-faepa-pill--<?php echo esc_attr( $item['status'] ); ?>">
-                                <?php echo esc_html( $item['status_label'] ); ?>
-                              </span>
+                            <?php if ( ! empty( $item['status_label'] ) ) : ?>
+                              <div class="apf-faepa-entry__status">
+                                <span class="apf-faepa-pill apf-faepa-pill--<?php echo esc_attr( $item['status'] ); ?>">
+                                  <?php echo esc_html( $item['status_label'] ); ?>
+                                </span>
+                              </div>
                             <?php endif; ?>
                           </summary>
                           <div class="apf-faepa-entry__body">
@@ -1547,7 +1833,6 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                                   <p class="apf-faepa-approve__hint">Marque como aprovado para liberar a notificação.</p>
                                 </form>
                               <?php endif; ?>
-                              <p class="apf-faepa-approve__status<?php echo ! empty( $item['faepa_paid'] ) ? ' is-visible' : ''; ?>">Aprovado</p>
                             </div>
 
                             <?php if ( ! empty( $item['faepa_payment_note'] ) || ! empty( $item['faepa_payment_attachment'] ) ) : ?>
@@ -2032,19 +2317,25 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
       .apf-faepa-entry details summary{cursor:pointer;list-style:none;outline:none}
       .apf-faepa-entry details summary:focus-visible{box-shadow:0 0 0 2px rgba(14,165,233,.35)}
       .apf-faepa-entry details summary::-webkit-details-marker{display:none}
-      .apf-faepa-entry__head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px}
-      .apf-faepa-entry__title-line{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+      .apf-faepa-entry__head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:nowrap;font-size:13px}
+      .apf-faepa-entry__main{flex:1 1 auto;min-width:0}
+      .apf-faepa-entry__status{flex:0 0 auto;margin-left:12px;align-self:flex-start}
+      .apf-faepa-entry__title-line{display:flex;align-items:center;gap:2px;flex-wrap:nowrap}
+      .apf-faepa-entry__name{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .apf-faepa-entry__head strong{font-size:13px}
       .apf-faepa-entry__value{color:#0f172a;font-weight:600}
       .apf-faepa-entry__company{font-size:12px;color:#475467;margin-top:2px}
-      .apf-faepa-entry__separator{margin:0 6px;font-weight:600;color:#0ea5e9;font-size:12px}
-      .apf-faepa-entry__value{font-weight:600;color:#0ea5e9;font-size:12px}
-      .apf-faepa-pill{padding:4px 8px;border-radius:10px;font-size:12px;font-weight:700;background:#e5e7eb;color:#0f172a}
+      .apf-faepa-entry__separator{margin:0 4px;font-weight:600;color:#0ea5e9;font-size:12px}
+      .apf-faepa-entry__value{font-weight:600;color:#0ea5e9;font-size:12px;white-space:nowrap}
+      .apf-faepa-pill{padding:4px 8px;border-radius:10px;font-size:12px;font-weight:700;background:#e5e7eb;color:#0f172a;white-space:nowrap}
       .apf-faepa-pill--approved{background:rgba(16,185,129,.18);color:#047857}
       .apf-faepa-pill--rejected{background:rgba(248,113,113,.22);color:#991b1b}
       .apf-faepa-pill--pending{background:rgba(251,191,36,.22);color:#92400e}
       .apf-faepa-entry__meta{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#475467}
       .apf-faepa-entry__note{margin:6px 0 0;font-size:13px;color:#0f172a;background:#ecfeff;border:1px dashed #7dd3fc;border-radius:10px;padding:10px 12px}
+      .apf-faepa-entry__download{margin:6px 0 0}
+      .apf-faepa-entry__download-link{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#0f172a;text-decoration:none;border:1px solid #cbd5f5;border-radius:999px;padding:6px 12px;background:#fff}
+      .apf-faepa-entry__download-link:hover{border-color:#007569;color:#007569}
       .apf-faepa-entry__block{border-top:1px dashed #e4e7ec;padding-top:8px;margin-top:4px}
       .apf-faepa-entry__block--emphasis{border-top:1px solid #0f172a;padding-top:10px;margin-top:8px}
       .apf-faepa-entry__block--payment{border-top:1px solid var(--apf-border)}
@@ -2062,6 +2353,7 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
       .apf-faepa-approve__status{display:none;font-size:12px;font-weight:700;color:#166534;background:#ecfdf3;border:1px solid #bbf7d0;border-radius:999px;padding:4px 10px;margin:4px 0 0}
       .apf-faepa-approve__status.is-visible{display:inline-block}
       .apf-faepa-entry--approved .apf-faepa-entry__head strong{color:#166534}
+      .apf-faepa-entry[data-faepa-approved="0"] .apf-faepa-entry__status{display:none}
       .apf-faepa-payment-inline.is-hidden{display:none}
       .apf-faepa-notify{display:grid;gap:8px;margin:10px 0}
       .apf-faepa-notify__btn{border:none;border-radius:10px;background:#15803d;color:#fff;font-weight:700;padding:10px 14px;font-size:13px;cursor:pointer;box-shadow:0 10px 18px rgba(21,128,61,.22);transition:background .15s ease, box-shadow .15s ease}
@@ -2149,14 +2441,17 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
         .apf-faepa-return__row-details{padding:12px;background:#f8fafc}
         .apf-faepa-entry__head{flex-direction:column;align-items:center;text-align:center;gap:6px}
         .apf-faepa-return__list .apf-faepa-entry__head{justify-content:center;align-items:center}
-        .apf-faepa-return__list .apf-faepa-entry__head > div{display:flex;flex-direction:column;align-items:center}
+        .apf-faepa-return__list .apf-faepa-entry__main{display:flex;flex-direction:column;align-items:center}
         .apf-faepa-return__list .apf-faepa-entry__title-line{justify-content:center}
-        .apf-faepa-return__list .apf-faepa-pill{margin:0 auto}
+        .apf-faepa-return__list .apf-faepa-pill{margin:0}
         .apf-faepa-entry__body{text-align:center}
-        .apf-faepa-entry__title-line{flex-direction:column;align-items:center;gap:2px;text-align:center}
+        .apf-faepa-entry__title-line{flex-direction:row;align-items:center;flex-wrap:wrap;gap:6px;justify-content:center;text-align:center}
+        .apf-faepa-entry__name{flex:0 1 auto;white-space:normal;overflow:visible;text-overflow:clip}
+        .apf-faepa-entry__status{margin-left:0;align-self:center}
         .apf-faepa-entry__separator{display:none}
         .apf-faepa-entry__meta{flex-direction:column;align-items:center;gap:6px;text-align:center}
         .apf-faepa-entry__note,
+        .apf-faepa-entry__download,
         .apf-faepa-pay__note{text-align:center}
         .apf-faepa-entry__block{text-align:center}
         .apf-faepa-entry__block dl{grid-template-columns:1fr;gap:4px}
