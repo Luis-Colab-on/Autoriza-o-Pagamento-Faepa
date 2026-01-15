@@ -169,6 +169,42 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
         exit;
     }
 
+    if ( isset( $_POST['apf_fin_mail_faepa_reject_template_action'] ) ) {
+        if ( ! isset( $_POST['apf_fin_mail_faepa_reject_template_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_faepa_reject_template_nonce'] ), 'apf_fin_mail_faepa_reject_template' ) ) {
+            $notice      = 'Não foi possível salvar a mensagem de recusa. Recarregue a página e tente novamente.';
+            $notice_type = 'error';
+        } else {
+            $template_raw = isset( $_POST['apf_fin_mail_faepa_reject_template'] ) ? wp_unslash( $_POST['apf_fin_mail_faepa_reject_template'] ) : '';
+            $template_raw = is_string( $template_raw ) ? $template_raw : '';
+            $template     = sanitize_textarea_field( $template_raw );
+            $template     = trim( $template );
+
+            if ( '' === $template ) {
+                delete_option( 'apf_faepa_payment_reject_email_template' );
+                $notice = 'Mensagem padrão de recusa restaurada.';
+            } else {
+                update_option( 'apf_faepa_payment_reject_email_template', $template, false );
+                $notice = 'Mensagem de recusa atualizada.';
+            }
+        }
+
+        $target = '';
+        if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+            $target = wp_unslash( $_SERVER['REQUEST_URI'] );
+        }
+        if ( '' === $target ) {
+            $target = home_url( '/' );
+        }
+        $target = remove_query_arg( array( 'apf_fin_mail_notice', 'apf_fin_mail_status' ), $target );
+        $target = add_query_arg( array(
+            'apf_fin_mail_notice' => $notice,
+            'apf_fin_mail_status' => ( 'success' === $notice_type ) ? 'success' : 'error',
+        ), $target );
+
+        wp_safe_redirect( esc_url_raw( $target ) );
+        exit;
+    }
+
     if ( isset( $_POST['apf_fin_mail_faepa_coord_template_action'] ) ) {
         if ( ! isset( $_POST['apf_fin_mail_faepa_coord_template_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['apf_fin_mail_faepa_coord_template_nonce'] ), 'apf_fin_mail_faepa_coord_template' ) ) {
             $notice      = 'Não foi possível salvar a mensagem do coordenador. Recarregue a página e tente novamente.';
@@ -569,6 +605,12 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
     $faepa_template_saved = get_option( 'apf_faepa_payment_email_template', '' );
     $faepa_template_saved = is_string( $faepa_template_saved ) ? $faepa_template_saved : '';
     $faepa_template_value = trim( $faepa_template_saved ) !== '' ? $faepa_template_saved : $faepa_template_default;
+    $faepa_reject_template_default = function_exists( 'apf_get_faepa_payment_reject_default_template' )
+        ? apf_get_faepa_payment_reject_default_template()
+        : '';
+    $faepa_reject_template_saved = get_option( 'apf_faepa_payment_reject_email_template', '' );
+    $faepa_reject_template_saved = is_string( $faepa_reject_template_saved ) ? $faepa_reject_template_saved : '';
+    $faepa_reject_template_value = trim( $faepa_reject_template_saved ) !== '' ? $faepa_reject_template_saved : $faepa_reject_template_default;
     $faepa_coord_template_default = function_exists( 'apf_get_faepa_payment_coordinator_default_template' )
         ? apf_get_faepa_payment_coordinator_default_template()
         : '';
@@ -818,6 +860,18 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
               <li><code>[origem]</code> Financeiro da Colab-on ou Coordenador</li>
               <li><code>[titulo]</code> Título do aviso</li>
               <li><code>[data]</code> Data do aviso</li>
+            </ul>
+          </div>
+
+          <div class="apf-fin-mail__glossary-group">
+            <h3>Placeholders para Recusa de pagamento (FAEPA)</h3>
+            <ul>
+              <li><code>[nome]</code> Nome do colaborador</li>
+              <li><code>[colaborador]</code> Nome do colaborador</li>
+              <li><code>[curso]</code> Curso informado</li>
+              <li><code>[lista]</code> Lista de colaboradores e valores</li>
+              <li><code>[motivo]</code> Motivo(s) da recusa</li>
+              <li><code>[portal_url]</code> Link do Portal do Colaborador</li>
             </ul>
           </div>
 
@@ -1162,6 +1216,26 @@ if ( ! function_exists( 'apf_render_portal_financeiro_email' ) ) {
 
           <p style="margin:8px 0 12px;color:#475467;font-size:12px;">Placeholders: <code>[curso]</code></p>
           <button type="submit" class="apf-fin-mail__btn">Salvar mensagem FAEPA</button>
+        </form>
+      </div>
+
+      <div class="apf-fin-mail__card apf-fin-mail__card--template">
+        <h2>Recusa de pagamento (FAEPA)</h2>
+        <p>Texto usado no e-mail enviado ao colaborador quando o pagamento for recusado pela FAEPA.</p>
+        <form method="post" class="apf-fin-mail__form">
+          <?php wp_nonce_field( 'apf_fin_mail_faepa_reject_template', 'apf_fin_mail_faepa_reject_template_nonce' ); ?>
+          <input type="hidden" name="apf_fin_mail_faepa_reject_template_action" value="1">
+
+          <label class="apf-fin-mail__label" for="apf-fin-mail-faepa-reject-template">Texto da mensagem (recusa)</label>
+          <textarea
+            class="apf-fin-mail__textarea"
+            id="apf-fin-mail-faepa-reject-template"
+            name="apf_fin_mail_faepa_reject_template"
+            rows="8"
+          ><?php echo esc_textarea( $faepa_reject_template_value ); ?></textarea>
+
+          <p style="margin:8px 0 12px;color:#475467;font-size:12px;">Placeholders: <code>[nome]</code>, <code>[curso]</code>, <code>[lista]</code>, <code>[motivo]</code>, <code>[portal_url]</code></p>
+          <button type="submit" class="apf-fin-mail__btn">Salvar mensagem de recusa</button>
         </form>
       </div>
 

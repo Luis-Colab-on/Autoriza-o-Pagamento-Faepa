@@ -512,6 +512,63 @@ if ( ! function_exists( 'apf_get_faepa_payment_coordinator_template' ) ) {
     }
 }
 
+if ( ! function_exists( 'apf_get_faepa_payment_reject_default_template' ) ) {
+    /**
+     * Template padrao do e-mail de recusa de pagamento (FAEPA).
+     *
+     * @return string
+     */
+    function apf_get_faepa_payment_reject_default_template() {
+        return "Olá [nome],\n\n"
+            . "Curso: [curso]\n\n"
+            . "A FAEPA recusou a(s) solicitação(ões) de pagamento abaixo:\n\n"
+            . "[lista]\n\n"
+            . "Motivo(s):\n"
+            . "[motivo]\n\n"
+            . "Acesse o Portal do Colaborador para corrigir os dados e enviar novamente:\n"
+            . "[portal_url]";
+    }
+}
+
+if ( ! function_exists( 'apf_get_faepa_payment_reject_template' ) ) {
+    /**
+     * Retorna o template configurado ou o padrao (FAEPA - recusa).
+     *
+     * @return string
+     */
+    function apf_get_faepa_payment_reject_template() {
+        $template = get_option( 'apf_faepa_payment_reject_email_template', '' );
+        $template = is_string( $template ) ? trim( $template ) : '';
+        if ( '' === $template ) {
+            return apf_get_faepa_payment_reject_default_template();
+        }
+        return $template;
+    }
+}
+
+if ( ! function_exists( 'apf_replace_faepa_payment_reject_placeholders' ) ) {
+    /**
+     * Substitui placeholders no template de recusa de pagamento (FAEPA).
+     *
+     * @param string $template
+     * @param array $map
+     * @return string
+     */
+    function apf_replace_faepa_payment_reject_placeholders( $template, $map ) {
+        if ( ! is_string( $template ) ) {
+            $template = '';
+        }
+        if ( ! is_array( $map ) ) {
+            $map = array();
+        }
+        $map = apply_filters( 'apf_faepa_payment_reject_placeholders', $map );
+        if ( empty( $map ) ) {
+            return $template;
+        }
+        return str_replace( array_keys( $map ), array_values( $map ), $template );
+    }
+}
+
 if ( ! function_exists( 'apf_get_portal_access_default_template' ) ) {
     /**
      * Template padrao do e-mail de aprovacao/recusa de acesso ao portal.

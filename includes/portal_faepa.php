@@ -230,36 +230,42 @@ if ( ! function_exists( 'apf_faepa_send_payment_notifications' ) ) {
             return $result;
         }
 
-        $payable_entries = array_filter( $batch_entries, function( $entry ) {
+        $approved_entries = array_filter( $batch_entries, function( $entry ) {
             return empty( $entry['faepa_payment_rejected'] );
         } );
-        if ( empty( $payable_entries ) ) {
+        $rejected_entries = array_filter( $batch_entries, function( $entry ) {
+            return ! empty( $entry['faepa_payment_rejected'] );
+        } );
+        if ( empty( $approved_entries ) && empty( $rejected_entries ) ) {
             $result['notice'] = 'Nenhum colaborador disponivel para notificar neste lote.';
             return $result;
         }
 
-        $unpaid = array_filter( $payable_entries, function( $entry ) {
-            return empty( $entry['faepa_paid'] );
-        } );
-        if ( ! empty( $unpaid ) ) {
-            $result['notice'] = 'Confirme todos os pagamentos antes de enviar as notificacoes.';
-            return $result;
+        if ( ! empty( $approved_entries ) ) {
+            $unpaid = array_filter( $approved_entries, function( $entry ) {
+                return empty( $entry['faepa_paid'] );
+            } );
+            if ( ! empty( $unpaid ) ) {
+                $result['notice'] = 'Confirme todos os pagamentos antes de enviar as notificacoes.';
+                return $result;
+            }
         }
-        $batch_entries = $payable_entries;
+
+        $base_entry = $batch_entries[0];
 
         $finance_email = sanitize_email( get_option( 'admin_email' ) );
         $coordinator_email = '';
         $coordinator_name  = '';
         $coordinator_user_id = 0;
         $course_label      = '';
-        if ( ! empty( $batch_entries[0]['coordinator_email'] ) ) {
-            $coordinator_email = sanitize_email( (string) $batch_entries[0]['coordinator_email'] );
+        if ( ! empty( $base_entry['coordinator_email'] ) ) {
+            $coordinator_email = sanitize_email( (string) $base_entry['coordinator_email'] );
         }
-        if ( ! empty( $batch_entries[0]['coordinator_name'] ) ) {
-            $coordinator_name = sanitize_text_field( (string) $batch_entries[0]['coordinator_name'] );
+        if ( ! empty( $base_entry['coordinator_name'] ) ) {
+            $coordinator_name = sanitize_text_field( (string) $base_entry['coordinator_name'] );
         }
-        if ( ! empty( $batch_entries[0]['coordinator_user_id'] ) ) {
-            $coordinator_user_id = (int) $batch_entries[0]['coordinator_user_id'];
+        if ( ! empty( $base_entry['coordinator_user_id'] ) ) {
+            $coordinator_user_id = (int) $base_entry['coordinator_user_id'];
         }
         if ( function_exists( 'apf_resolve_channel_email' ) ) {
             $coordinator_email = apf_resolve_channel_email( $coordinator_user_id, 'coordinator', $coordinator_email );
@@ -269,50 +275,134 @@ if ( ! function_exists( 'apf_faepa_send_payment_notifications' ) ) {
                 $coordinator_email = sanitize_email( $user->user_email );
             }
         }
-        if ( ! empty( $batch_entries[0]['course'] ) ) {
-            $course_label = sanitize_text_field( (string) $batch_entries[0]['course'] );
+        if ( ! empty( $base_entry['course'] ) ) {
+            $course_label = sanitize_text_field( (string) $base_entry['course'] );
         }
 
         $lines = array();
         $providers_payload = array();
-        foreach ( $batch_entries as $entry ) {
-            $name  = isset( $entry['provider_name'] ) ? sanitize_text_field( (string) $entry['provider_name'] ) : '';
-            $value = isset( $entry['provider_value'] ) ? sanitize_text_field( (string) $entry['provider_value'] ) : '';
-            $lines[] = '- ' . ( $name ?: 'Colaborador' ) . ( $value ? ' — ' . $value : '' );
+        if ( ! empty( $approved_entries ) ) {
+            foreach ( $approved_entries as $entry ) {
+                $name  = isset( $entry['provider_name'] ) ? sanitize_text_field( (string) $entry['provider_name'] ) : '';
+                $value = isset( $entry['provider_value'] ) ? sanitize_text_field( (string) $entry['provider_value'] ) : '';
+                $lines[] = '- ' . ( $name ?: 'Colaborador' ) . ( $value ? ' — ' . $value : '' );
 
-            $email = isset( $entry['provider_email'] ) ? sanitize_email( (string) $entry['provider_email'] ) : '';
-            if ( $email ) {
-                if ( ! isset( $providers_payload[ $email ] ) ) {
-                    $providers_payload[ $email ] = array(
-                        'name'   => $name ?: $email,
-                        'values' => array(),
-                    );
-                }
-                if ( $value ) {
-                    $providers_payload[ $email ]['values'][] = $value;
+                $email = isset( $entry['provider_email'] ) ? sanitize_email( (string) $entry['provider_email'] ) : '';
+                if ( $email ) {
+                    if ( ! isset( $providers_payload[ $email ] ) ) {
+                        $providers_payload[ $email ] = array(
+                            'name'   => $name ?: $email,
+                            'values' => array(),
+                        );
+                    }
+                    if ( $value ) {
+                        $providers_payload[ $email ]['values'][] = $value;
+                    }
                 }
             }
         }
 
-        $subject = 'FAEPA aprovou e solicitou o pagamento - ' . ( $course_label ?: 'FAEPA' );
-        $observacao = $custom_note ? 'Observacao: ' . $custom_note : '';
-        $collab_template = apf_get_faepa_payment_template();
-        $collab_message = apf_replace_placeholders( $collab_template, array(
-            '[lista]'      => '',
-            '[curso]'      => $course_label ?: 'FAEPA',
-            '[observacao]' => '',
-        ) );
-        $collab_message = trim( (string) $collab_message );
-        $coord_template = function_exists( 'apf_get_faepa_payment_coordinator_template' )
-            ? apf_get_faepa_payment_coordinator_template()
-            : $collab_template;
-        $coord_message = apf_replace_placeholders( $coord_template, array(
-            '[lista]'      => implode( "\n", $lines ),
-            '[curso]'      => $course_label ?: 'FAEPA',
-            '[observacao]' => $observacao,
-        ) );
-        $coord_message = trim( (string) $coord_message );
-        $base_message = $collab_message;
+        $rejected_payload = array();
+        if ( ! empty( $rejected_entries ) ) {
+            foreach ( $rejected_entries as $entry ) {
+                $email = isset( $entry['provider_email'] ) ? sanitize_email( (string) $entry['provider_email'] ) : '';
+                if ( '' === $email ) {
+                    continue;
+                }
+                $email_key = strtolower( $email );
+                $name  = isset( $entry['provider_name'] ) ? sanitize_text_field( (string) $entry['provider_name'] ) : '';
+                $value = isset( $entry['provider_value'] ) ? sanitize_text_field( (string) $entry['provider_value'] ) : '';
+                $note  = isset( $entry['faepa_payment_reject_note'] ) ? sanitize_textarea_field( (string) $entry['faepa_payment_reject_note'] ) : '';
+                $note_line = trim( preg_replace( '/\s+/', ' ', $note ) );
+                if ( '' === $note_line ) {
+                    $note_line = '—';
+                }
+                if ( ! isset( $rejected_payload[ $email_key ] ) ) {
+                    $rejected_payload[ $email_key ] = array(
+                        'name'    => $name ?: $email,
+                        'email'   => $email,
+                        'list'    => array(),
+                        'reasons' => array(),
+                        'message' => '',
+                    );
+                } elseif ( '' !== $name && ( $rejected_payload[ $email_key ]['name'] ?? '' ) === $email ) {
+                    $rejected_payload[ $email_key ]['name'] = $name;
+                }
+                $rejected_payload[ $email_key ]['list'][] = '- ' . ( $name ?: 'Colaborador' ) . ( $value ? ' — ' . $value : '' );
+                $rejected_payload[ $email_key ]['reasons'][] = '- ' . ( $name ?: 'Colaborador' ) . ': ' . $note_line;
+            }
+        }
+
+        $subject = '';
+        $collab_message = '';
+        $coord_message = '';
+        $base_message = '';
+        if ( ! empty( $approved_entries ) ) {
+            $subject = 'FAEPA aprovou e solicitou o pagamento - ' . ( $course_label ?: 'FAEPA' );
+            $observacao = $custom_note ? 'Observacao: ' . $custom_note : '';
+            $collab_template = apf_get_faepa_payment_template();
+            $collab_message = apf_replace_placeholders( $collab_template, array(
+                '[lista]'      => '',
+                '[curso]'      => $course_label ?: 'FAEPA',
+                '[observacao]' => '',
+            ) );
+            $collab_message = trim( (string) $collab_message );
+            $coord_template = function_exists( 'apf_get_faepa_payment_coordinator_template' )
+                ? apf_get_faepa_payment_coordinator_template()
+                : $collab_template;
+            $coord_message = apf_replace_placeholders( $coord_template, array(
+                '[lista]'      => implode( "\n", $lines ),
+                '[curso]'      => $course_label ?: 'FAEPA',
+                '[observacao]' => $observacao,
+            ) );
+            $coord_message = trim( (string) $coord_message );
+            $base_message = $collab_message;
+        }
+
+        $reject_subject = '';
+        if ( ! empty( $rejected_payload ) ) {
+            $reject_subject = 'FAEPA recusou a solicitacao de pagamento - ' . ( $course_label ?: 'FAEPA' );
+            $reject_template = function_exists( 'apf_get_faepa_payment_reject_template' )
+                ? apf_get_faepa_payment_reject_template()
+                : '';
+            $reject_default_template = function_exists( 'apf_get_faepa_payment_reject_default_template' )
+                ? apf_get_faepa_payment_reject_default_template()
+                : '';
+            $portal_page_id = (int) get_option( 'apf_portal_colaborador_page_id' );
+            $portal_url = '';
+            if ( $portal_page_id > 0 && function_exists( 'get_permalink' ) ) {
+                $portal_url = get_permalink( $portal_page_id );
+            }
+            if ( '' === $portal_url ) {
+                $portal_url = home_url( '/' );
+            }
+
+            foreach ( $rejected_payload as $email_key => $payload ) {
+                $placeholders = array(
+                    '[nome]'        => $payload['name'] ?: $payload['email'],
+                    '[colaborador]' => $payload['name'] ?: $payload['email'],
+                    '[curso]'       => $course_label ?: 'FAEPA',
+                    '[lista]'       => implode( "\n", $payload['list'] ),
+                    '[motivo]'      => implode( "\n", $payload['reasons'] ),
+                    '[portal_url]'  => $portal_url,
+                );
+                $message = function_exists( 'apf_replace_faepa_payment_reject_placeholders' )
+                    ? apf_replace_faepa_payment_reject_placeholders( $reject_template, $placeholders )
+                    : $reject_template;
+                $message = trim( (string) $message );
+                if ( '' === $message && '' !== $reject_default_template && function_exists( 'apf_replace_faepa_payment_reject_placeholders' ) ) {
+                    $message = apf_replace_faepa_payment_reject_placeholders( $reject_default_template, $placeholders );
+                    $message = trim( (string) $message );
+                }
+                if ( '' === $message ) {
+                    $message = 'A FAEPA recusou sua solicitacao de pagamento.';
+                    if ( ! empty( $payload['reasons'] ) ) {
+                        $message .= "\n\nMotivo(s):\n" . implode( "\n", $payload['reasons'] );
+                    }
+                }
+                $rejected_payload[ $email_key ]['message'] = $message;
+            }
+        }
 
         $portal_targets = 0;
         $portal_error   = '';
@@ -322,9 +412,9 @@ if ( ! function_exists( 'apf_faepa_send_payment_notifications' ) ) {
         if ( function_exists( 'apf_inbox_build_director_key' ) ) {
             $director_key = apf_inbox_build_director_key( $coordinator_name, $course_label );
         }
-        if ( $coordinator_email ) {
+        if ( $coordinator_email && ! empty( $approved_entries ) ) {
             $portal_recipients[] = array(
-                'user_id'      => isset( $batch_entries[0]['coordinator_user_id'] ) ? (int) $batch_entries[0]['coordinator_user_id'] : 0,
+                'user_id'      => isset( $base_entry['coordinator_user_id'] ) ? (int) $base_entry['coordinator_user_id'] : 0,
                 'name'         => $coordinator_name ?: $coordinator_email,
                 'email'        => $coordinator_email,
                 'group'        => 'coordinators',
@@ -346,181 +436,287 @@ if ( ! function_exists( 'apf_faepa_send_payment_notifications' ) ) {
                 );
             }
         }
-        if ( ! empty( $portal_recipients ) && function_exists( 'apf_scheduler_get_events' ) && function_exists( 'apf_scheduler_store_events' ) ) {
+        $has_portal_targets = ! empty( $portal_recipients ) || ! empty( $rejected_payload );
+        if ( $has_portal_targets && function_exists( 'apf_scheduler_get_events' ) && function_exists( 'apf_scheduler_store_events' ) ) {
             $existing_events = apf_scheduler_get_events();
-            $event_id = 'faepa_pay_' . preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', $batch_id );
-            if ( '' === $event_id ) {
-                $event_id = 'faepa_pay_' . uniqid();
-            }
             $event_date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : date_i18n( 'Y-m-d' );
-            $event_recipients = array();
-            $existing_index   = null;
+            $events_changed = false;
 
-            foreach ( $existing_events as $idx => $evt ) {
-                $current_id = isset( $evt['id'] ) ? sanitize_text_field( (string) $evt['id'] ) : '';
-                if ( '' !== $current_id && $current_id === $event_id ) {
-                    $existing_index = $idx;
-                    if ( ! empty( $evt['recipients'] ) && is_array( $evt['recipients'] ) ) {
-                        $event_recipients = $evt['recipients'];
+            if ( ! empty( $portal_recipients ) ) {
+                $event_id = 'faepa_pay_' . preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', $batch_id );
+                if ( '' === $event_id ) {
+                    $event_id = 'faepa_pay_' . uniqid();
+                }
+                $event_recipients = array();
+                $existing_index   = null;
+
+                foreach ( $existing_events as $idx => $evt ) {
+                    $current_id = isset( $evt['id'] ) ? sanitize_text_field( (string) $evt['id'] ) : '';
+                    if ( '' !== $current_id && $current_id === $event_id ) {
+                        $existing_index = $idx;
+                        if ( ! empty( $evt['recipients'] ) && is_array( $evt['recipients'] ) ) {
+                            $event_recipients = $evt['recipients'];
+                        }
+                        break;
                     }
-                    break;
-                }
-            }
-
-            foreach ( $portal_recipients as $recipient ) {
-                if ( ! is_array( $recipient ) ) {
-                    continue;
-                }
-                $group   = isset( $recipient['group'] ) ? sanitize_key( $recipient['group'] ) : 'providers';
-                if ( ! in_array( $group, array( 'providers', 'coordinators' ), true ) ) {
-                    $group = 'providers';
-                }
-                $email   = isset( $recipient['email'] ) ? sanitize_email( $recipient['email'] ) : '';
-                $user_id = isset( $recipient['user_id'] ) ? (int) $recipient['user_id'] : 0;
-                if ( '' === $email && $user_id <= 0 ) {
-                    continue;
-                }
-                $name     = isset( $recipient['name'] ) ? sanitize_text_field( $recipient['name'] ) : '';
-                $dir_key  = isset( $recipient['director_key'] ) ? sanitize_text_field( $recipient['director_key'] ) : '';
-                $dir_name = isset( $recipient['director_name'] ) ? sanitize_text_field( $recipient['director_name'] ) : '';
-                $course   = isset( $recipient['course'] ) ? sanitize_text_field( $recipient['course'] ) : '';
-
-                $key = '';
-                if ( function_exists( 'apf_scheduler_make_recipient_key' ) ) {
-                    $key = apf_scheduler_make_recipient_key( $user_id, $email, $group );
-                }
-                if ( '' === $key ) {
-                    $key = $email
-                        ? 'email_' . strtolower( $email ) . ( 'coordinators' === $group ? '_coordinators' : '_providers' )
-                        : 'user_' . $user_id;
                 }
 
-                $event_recipients[] = array(
-                    'key'          => $key,
-                    'user_id'      => $user_id,
-                    'name'         => $name ?: ( $email ?: $key ),
-                    'email'        => $email,
-                    'group'        => $group,
-                    'director_key' => $dir_key,
-                    'director_name'=> $dir_name,
-                    'course'       => $course,
-                );
-            }
-
-            if ( ! empty( $event_recipients ) ) {
-                $unique = array();
-                $seen   = array();
-                foreach ( $event_recipients as $recipient ) {
+                foreach ( $portal_recipients as $recipient ) {
                     if ( ! is_array( $recipient ) ) {
                         continue;
                     }
-                    $rec_key = isset( $recipient['key'] ) ? (string) $recipient['key'] : '';
-                    if ( '' === $rec_key ) {
+                    $group   = isset( $recipient['group'] ) ? sanitize_key( $recipient['group'] ) : 'providers';
+                    if ( ! in_array( $group, array( 'providers', 'coordinators' ), true ) ) {
+                        $group = 'providers';
+                    }
+                    $email   = isset( $recipient['email'] ) ? sanitize_email( $recipient['email'] ) : '';
+                    $user_id = isset( $recipient['user_id'] ) ? (int) $recipient['user_id'] : 0;
+                    if ( '' === $email && $user_id <= 0 ) {
                         continue;
                     }
-                    $rec_key = strtolower( $rec_key );
-                    if ( isset( $seen[ $rec_key ] ) ) {
-                        continue;
+                    $name     = isset( $recipient['name'] ) ? sanitize_text_field( $recipient['name'] ) : '';
+                    $dir_key  = isset( $recipient['director_key'] ) ? sanitize_text_field( $recipient['director_key'] ) : '';
+                    $dir_name = isset( $recipient['director_name'] ) ? sanitize_text_field( $recipient['director_name'] ) : '';
+                    $course   = isset( $recipient['course'] ) ? sanitize_text_field( $recipient['course'] ) : '';
+
+                    $key = '';
+                    if ( function_exists( 'apf_scheduler_make_recipient_key' ) ) {
+                        $key = apf_scheduler_make_recipient_key( $user_id, $email, $group );
                     }
-                    $seen[ $rec_key ] = true;
-                    $unique[] = $recipient;
+                    if ( '' === $key ) {
+                        $key = $email
+                            ? 'email_' . strtolower( $email ) . ( 'coordinators' === $group ? '_coordinators' : '_providers' )
+                            : 'user_' . $user_id;
+                    }
+
+                    $event_recipients[] = array(
+                        'key'          => $key,
+                        'user_id'      => $user_id,
+                        'name'         => $name ?: ( $email ?: $key ),
+                        'email'        => $email,
+                        'group'        => $group,
+                        'director_key' => $dir_key,
+                        'director_name'=> $dir_name,
+                        'course'       => $course,
+                    );
                 }
 
-                $entry = array(
-                    'id'         => $event_id,
-                    'date'       => $event_date,
-                    'title'      => $subject,
-                    'message'    => $base_message,
-                    'recipients' => $unique,
-                    'created_by' => get_current_user_id(),
-                    'created_at' => time(),
-                );
+                if ( ! empty( $event_recipients ) ) {
+                    $unique = array();
+                    $seen   = array();
+                    foreach ( $event_recipients as $recipient ) {
+                        if ( ! is_array( $recipient ) ) {
+                            continue;
+                        }
+                        $rec_key = isset( $recipient['key'] ) ? (string) $recipient['key'] : '';
+                        if ( '' === $rec_key ) {
+                            continue;
+                        }
+                        $rec_key = strtolower( $rec_key );
+                        if ( isset( $seen[ $rec_key ] ) ) {
+                            continue;
+                        }
+                        $seen[ $rec_key ] = true;
+                        $unique[] = $recipient;
+                    }
 
-                if ( null !== $existing_index ) {
-                    $preserved = $existing_events[ $existing_index ];
-                    if ( isset( $preserved['created_at'] ) ) {
-                        $entry['created_at'] = (int) $preserved['created_at'];
+                    $entry = array(
+                        'id'         => $event_id,
+                        'date'       => $event_date,
+                        'title'      => $subject,
+                        'message'    => $base_message,
+                        'recipients' => $unique,
+                        'created_by' => get_current_user_id(),
+                        'created_at' => time(),
+                    );
+
+                    if ( null !== $existing_index ) {
+                        $preserved = $existing_events[ $existing_index ];
+                        if ( isset( $preserved['created_at'] ) ) {
+                            $entry['created_at'] = (int) $preserved['created_at'];
+                        }
+                        if ( isset( $preserved['created_by'] ) ) {
+                            $entry['created_by'] = (int) $preserved['created_by'];
+                        }
+                        $existing_events[ $existing_index ] = array_merge( $preserved, $entry );
+                    } else {
+                        $existing_events[] = $entry;
                     }
-                    if ( isset( $preserved['created_by'] ) ) {
-                        $entry['created_by'] = (int) $preserved['created_by'];
-                    }
-                    $existing_events[ $existing_index ] = array_merge( $preserved, $entry );
+
+                    $portal_targets += count( $unique );
+                    $events_changed = true;
                 } else {
-                    $existing_events[] = $entry;
+                    $portal_error = 'Nenhum destinatario valido para registrar no portal.';
                 }
+            }
 
+            if ( ! empty( $rejected_payload ) ) {
+                foreach ( $rejected_payload as $payload ) {
+                    $payload_email = isset( $payload['email'] ) ? sanitize_email( (string) $payload['email'] ) : '';
+                    if ( '' === $payload_email ) {
+                        continue;
+                    }
+                    $payload_name = isset( $payload['name'] ) ? sanitize_text_field( (string) $payload['name'] ) : '';
+                    $event_id = 'faepa_pay_reject_' . md5( $batch_id . '|' . strtolower( $payload_email ) );
+                    $event_title = 'Pagamento recusado - ' . ( $course_label ?: 'FAEPA' );
+                    $event_message = isset( $payload['message'] ) ? (string) $payload['message'] : '';
+                    $event_recipients = array();
+
+                    $recipient_key = '';
+                    if ( function_exists( 'apf_scheduler_make_recipient_key' ) ) {
+                        $recipient_key = apf_scheduler_make_recipient_key( 0, $payload_email, 'providers' );
+                    }
+                    if ( '' === $recipient_key ) {
+                        $recipient_key = 'email_' . strtolower( $payload_email ) . '_providers';
+                    }
+
+                    $event_recipients[] = array(
+                        'key'          => $recipient_key,
+                        'user_id'      => 0,
+                        'name'         => $payload_name ?: ( $payload_email ?: $recipient_key ),
+                        'email'        => $payload_email,
+                        'group'        => 'providers',
+                        'director_key' => $director_key,
+                        'director_name'=> $coordinator_name,
+                        'course'       => $course_label,
+                    );
+
+                    $existing_index = null;
+                    foreach ( $existing_events as $idx => $evt ) {
+                        $current_id = isset( $evt['id'] ) ? sanitize_text_field( (string) $evt['id'] ) : '';
+                        if ( '' !== $current_id && $current_id === $event_id ) {
+                            $existing_index = $idx;
+                            break;
+                        }
+                    }
+
+                    $entry = array(
+                        'id'         => $event_id,
+                        'date'       => $event_date,
+                        'title'      => $event_title,
+                        'message'    => $event_message,
+                        'recipients' => $event_recipients,
+                        'created_by' => get_current_user_id(),
+                        'created_at' => time(),
+                    );
+
+                    if ( null !== $existing_index ) {
+                        $preserved = $existing_events[ $existing_index ];
+                        if ( isset( $preserved['created_at'] ) ) {
+                            $entry['created_at'] = (int) $preserved['created_at'];
+                        }
+                        if ( isset( $preserved['created_by'] ) ) {
+                            $entry['created_by'] = (int) $preserved['created_by'];
+                        }
+                        $existing_events[ $existing_index ] = array_merge( $preserved, $entry );
+                    } else {
+                        $existing_events[] = $entry;
+                    }
+
+                    $portal_targets += count( $event_recipients );
+                    $events_changed = true;
+                }
+            }
+
+            if ( $events_changed ) {
                 apf_scheduler_store_events( $existing_events );
-                $portal_targets = count( $unique );
-            } else {
+            }
+            if ( 0 === $portal_targets ) {
                 $portal_error = 'Nenhum destinatario valido para registrar no portal.';
             }
-        } elseif ( empty( $portal_recipients ) ) {
+        } elseif ( $has_portal_targets ) {
+            $portal_error = 'Nenhum destinatario disponivel para registrar no portal.';
+        } else {
             $portal_error = 'Nenhum destinatario disponivel para registrar no portal.';
         }
 
         $mail_errors = array();
         $mail_sent   = 0;
         $headers = array( 'Content-Type: text/plain; charset=UTF-8' );
-        $capture_enabled = function_exists( 'apf_mail_capture_enabled' ) ? apf_mail_capture_enabled() : false;
-        if ( ! $capture_enabled ) {
-            $capture_enabled = ! empty( get_option( 'apf_mail_capture_faepa_force', '' ) );
-        }
-        if ( $capture_enabled && function_exists( 'apf_store_mail_capture_faepa' ) ) {
-            $capture_recipients = array();
+
+        if ( ! empty( $approved_entries ) ) {
+            $capture_enabled = function_exists( 'apf_mail_capture_enabled' ) ? apf_mail_capture_enabled() : false;
+            if ( ! $capture_enabled ) {
+                $capture_enabled = ! empty( get_option( 'apf_mail_capture_faepa_force', '' ) );
+            }
+            if ( $capture_enabled && function_exists( 'apf_store_mail_capture_faepa' ) ) {
+                $capture_recipients = array();
+                if ( $finance_email ) {
+                    $capture_recipients[] = $finance_email;
+                }
+                if ( $coordinator_email ) {
+                    $capture_recipients[] = $coordinator_email;
+                }
+                if ( ! empty( $providers_payload ) ) {
+                    $capture_recipients = array_merge( $capture_recipients, array_keys( $providers_payload ) );
+                }
+                $capture_recipients = array_unique( array_filter( array_map( 'sanitize_email', $capture_recipients ) ) );
+                $from_email = function_exists( 'apf_get_mail_sender_email' ) ? apf_get_mail_sender_email() : '';
+                if ( '' === $from_email ) {
+                    $from_email = sanitize_email( get_option( 'admin_email' ) );
+                }
+                $from_name = function_exists( 'apf_get_mail_sender_name' ) ? apf_get_mail_sender_name() : '';
+                apf_store_mail_capture_faepa( array(
+                    'time'       => current_time( 'Y-m-d H:i:s' ),
+                    'to'         => implode( ', ', $capture_recipients ),
+                    'subject'    => $subject,
+                    'message'    => $base_message,
+                    'headers'    => implode( "\n", $headers ),
+                    'from_email' => $from_email,
+                    'from_name'  => $from_name,
+                ) );
+            }
             if ( $finance_email ) {
-                $capture_recipients[] = $finance_email;
+                if ( wp_mail( $finance_email, $subject, $coord_message, $headers ) ) {
+                    $mail_sent++;
+                } else {
+                    $mail_errors[] = 'financeiro';
+                }
             }
             if ( $coordinator_email ) {
-                $capture_recipients[] = $coordinator_email;
+                $body = $coord_message;
+                if ( $coordinator_name ) {
+                    $body = 'Ola ' . $coordinator_name . ",\n\n" . $body;
+                }
+                if ( wp_mail( $coordinator_email, $subject, $body, $headers ) ) {
+                    $mail_sent++;
+                } else {
+                    $mail_errors[] = 'coordenador';
+                }
             }
             if ( ! empty( $providers_payload ) ) {
-                $capture_recipients = array_merge( $capture_recipients, array_keys( $providers_payload ) );
-            }
-            $capture_recipients = array_unique( array_filter( array_map( 'sanitize_email', $capture_recipients ) ) );
-            $from_email = function_exists( 'apf_get_mail_sender_email' ) ? apf_get_mail_sender_email() : '';
-            if ( '' === $from_email ) {
-                $from_email = sanitize_email( get_option( 'admin_email' ) );
-            }
-            $from_name = function_exists( 'apf_get_mail_sender_name' ) ? apf_get_mail_sender_name() : '';
-            apf_store_mail_capture_faepa( array(
-                'time'       => current_time( 'Y-m-d H:i:s' ),
-                'to'         => implode( ', ', $capture_recipients ),
-                'subject'    => $subject,
-                'message'    => $base_message,
-                'headers'    => implode( "\n", $headers ),
-                'from_email' => $from_email,
-                'from_name'  => $from_name,
-            ) );
-        }
-        if ( $finance_email ) {
-            if ( wp_mail( $finance_email, $subject, $coord_message, $headers ) ) {
-                $mail_sent++;
-            } else {
-                $mail_errors[] = 'financeiro';
-            }
-        }
-        if ( $coordinator_email ) {
-            $body = $coord_message;
-            if ( $coordinator_name ) {
-                $body = 'Ola ' . $coordinator_name . ",\n\n" . $body;
-            }
-            if ( wp_mail( $coordinator_email, $subject, $body, $headers ) ) {
-                $mail_sent++;
-            } else {
-                $mail_errors[] = 'coordenador';
-            }
-        }
-        if ( ! empty( $providers_payload ) ) {
-            foreach ( $providers_payload as $email => $payload ) {
-                $body = 'Ola ' . ( $payload['name'] ?: $email ) . ",\n\n";
-                $body .= "A FAEPA aprovou e solicitou seu pagamento; ele deve cair nos proximos dias.\n";
-                if ( ! empty( $payload['values'] ) ) {
-                    $body .= 'Valor(es): ' . implode( ', ', $payload['values'] ) . "\n";
+                foreach ( $providers_payload as $email => $payload ) {
+                    $body = 'Ola ' . ( $payload['name'] ?: $email ) . ",\n\n";
+                    $body .= "A FAEPA aprovou e solicitou seu pagamento; ele deve cair nos proximos dias.\n";
+                    if ( ! empty( $payload['values'] ) ) {
+                        $body .= 'Valor(es): ' . implode( ', ', $payload['values'] ) . "\n";
+                    }
+                    if ( '' !== $collab_message ) {
+                        $body .= "\n" . $collab_message;
+                    }
+                    if ( wp_mail( $email, $subject, $body, $headers ) ) {
+                        $mail_sent++;
+                    } else {
+                        $mail_errors[] = 'colaborador ' . $email;
+                    }
                 }
-                if ( '' !== $collab_message ) {
-                    $body .= "\n" . $collab_message;
+            }
+        }
+
+        if ( ! empty( $rejected_payload ) ) {
+            if ( '' === $reject_subject ) {
+                $reject_subject = 'FAEPA recusou a solicitacao de pagamento';
+            }
+            foreach ( $rejected_payload as $payload ) {
+                $email = isset( $payload['email'] ) ? sanitize_email( (string) $payload['email'] ) : '';
+                $body  = isset( $payload['message'] ) ? (string) $payload['message'] : '';
+                if ( '' === $email ) {
+                    continue;
                 }
-                if ( wp_mail( $email, $subject, $body, $headers ) ) {
+                if ( '' === $body ) {
+                    $body = 'A FAEPA recusou sua solicitacao de pagamento.';
+                }
+                if ( wp_mail( $email, $reject_subject, $body, $headers ) ) {
                     $mail_sent++;
                 } else {
                     $mail_errors[] = 'colaborador ' . $email;
@@ -1979,8 +2175,8 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                   <div class="apf-faepa-return__notify">
                     <?php
                       $notified_count = isset( $return['counts']['notified'] ) ? (int) $return['counts']['notified'] : 0;
-                      $paid_count = isset( $return['counts']['paid'] ) ? (int) $return['counts']['paid'] : 0;
-                      $all_notified   = ( $paid_count > 0 && $notified_count >= $paid_count );
+                      $decided_count  = isset( $return['counts']['decided'] ) ? (int) $return['counts']['decided'] : 0;
+                      $all_notified   = ( $decided_count > 0 && $notified_count >= $decided_count );
                     ?>
                     <?php if ( $all_notified ) : ?>
                       <p class="apf-faepa-return__note">Notificações enviadas para colaboradores, financeiro e coordenadores.</p>
