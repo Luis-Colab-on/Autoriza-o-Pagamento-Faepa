@@ -63,6 +63,8 @@ if ( ! function_exists( 'apf_faepa_get_batch_counts' ) ) {
         $counts = array(
             'approved' => 0,
             'paid'     => 0,
+            'rejected' => 0,
+            'decided'  => 0,
             'notified' => 0,
         );
         if ( '' === $batch_id || ! function_exists( 'apf_get_coordinator_requests' ) ) {
@@ -86,6 +88,10 @@ if ( ! function_exists( 'apf_faepa_get_batch_counts' ) ) {
             $counts['approved']++;
             if ( ! empty( $request['faepa_paid'] ) ) {
                 $counts['paid']++;
+                $counts['decided']++;
+            } elseif ( ! empty( $request['faepa_payment_rejected'] ) ) {
+                $counts['rejected']++;
+                $counts['decided']++;
             }
             if ( ! empty( $request['faepa_payment_notified'] ) ) {
                 $counts['notified']++;
@@ -104,7 +110,8 @@ if ( ! function_exists( 'apf_faepa_should_autonotify_batch' ) ) {
      */
     function apf_faepa_should_autonotify_batch( $batch_id ) {
         $counts = apf_faepa_get_batch_counts( $batch_id );
-        return ( $counts['approved'] > 0 && $counts['paid'] >= $counts['approved'] && $counts['notified'] < $counts['approved'] );
+        $decided = isset( $counts['decided'] ) ? (int) $counts['decided'] : (int) $counts['paid'];
+        return ( $counts['approved'] > 0 && $decided >= $counts['approved'] && $counts['notified'] < $counts['paid'] );
     }
 }
 
@@ -215,13 +222,30 @@ if ( ! function_exists( 'apf_faepa_send_payment_notifications' ) ) {
             $result['notice'] = 'Nenhum colaborador disponivel para notificar neste lote.';
             return $result;
         }
-        $unpaid = array_filter( $batch_entries, function( $entry ) {
+        $pending = array_filter( $batch_entries, function( $entry ) {
+            return empty( $entry['faepa_paid'] ) && empty( $entry['faepa_payment_rejected'] );
+        } );
+        if ( ! empty( $pending ) ) {
+            $result['notice'] = 'Aprove ou recuse todos os pagamentos antes de enviar as notificacoes.';
+            return $result;
+        }
+
+        $payable_entries = array_filter( $batch_entries, function( $entry ) {
+            return empty( $entry['faepa_payment_rejected'] );
+        } );
+        if ( empty( $payable_entries ) ) {
+            $result['notice'] = 'Nenhum colaborador disponivel para notificar neste lote.';
+            return $result;
+        }
+
+        $unpaid = array_filter( $payable_entries, function( $entry ) {
             return empty( $entry['faepa_paid'] );
         } );
         if ( ! empty( $unpaid ) ) {
             $result['notice'] = 'Confirme todos os pagamentos antes de enviar as notificacoes.';
             return $result;
         }
+        $batch_entries = $payable_entries;
 
         $finance_email = sanitize_email( get_option( 'admin_email' ) );
         $coordinator_email = '';
@@ -1133,9 +1157,46 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
             $faepa_notice_type = 'error';
         } else {
             $request_id = isset( $_POST['apf_faepa_request_id'] ) ? sanitize_text_field( wp_unslash( $_POST['apf_faepa_request_id'] ) ) : '';
+            $decision = isset( $_POST['apf_faepa_decision'] ) ? sanitize_key( wp_unslash( $_POST['apf_faepa_decision'] ) ) : 'approve';
+            if ( ! in_array( $decision, array( 'approve', 'reject', 'revert' ), true ) ) {
+                $decision = 'approve';
+            }
             if ( '' === $request_id ) {
                 $faepa_notice      = 'Seleção inválida. Recarregue a página e tente novamente.';
                 $faepa_notice_type = 'error';
+            } elseif ( 'reject' === $decision ) {
+                $note = isset( $_POST['apf_faepa_reject_note'] ) ? sanitize_textarea_field( wp_unslash( $_POST['apf_faepa_reject_note'] ) ) : '';
+                if ( '' === $note ) {
+                    $faepa_notice      = 'Informe o motivo da recusa antes de continuar.';
+                    $faepa_notice_type = 'error';
+                } else {
+                    $rejected = function_exists( 'apf_mark_coordinator_request_payment_rejected' )
+                        ? apf_mark_coordinator_request_payment_rejected( $request_id, array(
+                            'user_id' => get_current_user_id(),
+                            'note'    => $note,
+                        ) )
+                        : false;
+                    if ( $rejected ) {
+                        $faepa_notice      = '';
+                        $faepa_notice_type = 'success';
+                    } else {
+                        $faepa_notice      = 'Não foi possível recusar este pagamento.';
+                        $faepa_notice_type = 'error';
+                    }
+                }
+            } elseif ( 'revert' === $decision ) {
+                $reverted = function_exists( 'apf_revert_coordinator_request_payment' )
+                    ? apf_revert_coordinator_request_payment( $request_id, array(
+                        'user_id' => get_current_user_id(),
+                    ) )
+                    : false;
+                if ( $reverted ) {
+                    $faepa_notice      = '';
+                    $faepa_notice_type = 'success';
+                } else {
+                    $faepa_notice      = 'Não foi possível editar esta solicitação.';
+                    $faepa_notice_type = 'error';
+                }
             } else {
                 $approved = apf_mark_coordinator_request_paid( $request_id, array(
                     'user_id' => get_current_user_id(),
@@ -1148,9 +1209,7 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                     if ( function_exists( 'apf_faepa_send_coordinator_payment_validation_email' ) ) {
                         apf_faepa_send_coordinator_payment_validation_email( $request_id );
                     }
-                    $auto_result = apf_faepa_try_autonotify_from_request( $request_id, $faepa_notice, $faepa_notice_type );
-                    $faepa_notice = $auto_result['notice'];
-                    $faepa_notice_type = $auto_result['notice_type'];
+                    // Notificacoes somente via botao manual.
                 } else {
                     $faepa_notice      = 'Não foi possível aprovar este pagamento.';
                     $faepa_notice_type = 'error';
@@ -1225,9 +1284,7 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                     if ( function_exists( 'apf_faepa_send_coordinator_payment_validation_email' ) ) {
                         apf_faepa_send_coordinator_payment_validation_email( $request_id );
                     }
-                    $auto_result = apf_faepa_try_autonotify_from_request( $request_id, $faepa_notice, $faepa_notice_type );
-                    $faepa_notice = $auto_result['notice'];
-                    $faepa_notice_type = $auto_result['notice_type'];
+                    // Notificacoes somente via botao manual.
                 } else {
                     $faepa_notice      = 'Não foi possível confirmar este pagamento.';
                     $faepa_notice_type = 'error';
@@ -1518,6 +1575,7 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                             'approved' => 0,
                             'rejected' => 0,
                             'pending'  => 0,
+                            'decided'  => 0,
                             'paid'     => 0,
                             'notified' => 0,
                         ),
@@ -1567,9 +1625,22 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                     'faepa_payment_attachment' => isset( $entry['faepa_payment_attachment'] ) ? esc_url_raw( $entry['faepa_payment_attachment'] ) : '',
                     'faepa_payment_notified' => ! empty( $entry['faepa_payment_notified'] ),
                     'faepa_payment_notified_label' => ( ! empty( $entry['faepa_payment_notified_at'] ) ) ? date_i18n( 'd/m/Y H:i', (int) $entry['faepa_payment_notified_at'] ) : '',
+                    'faepa_payment_rejected' => ! empty( $entry['faepa_payment_rejected'] ),
+                    'faepa_payment_rejected_label' => ( ! empty( $entry['faepa_payment_rejected_at'] ) ) ? date_i18n( 'd/m/Y H:i', (int) $entry['faepa_payment_rejected_at'] ) : '',
+                    'faepa_payment_reject_note' => isset( $entry['faepa_payment_reject_note'] ) ? sanitize_textarea_field( $entry['faepa_payment_reject_note'] ) : '',
                 );
-                if ( ! empty( $entry['faepa_paid'] ) ) {
+                $is_paid     = ! empty( $entry['faepa_paid'] );
+                $is_rejected = ! empty( $entry['faepa_payment_rejected'] );
+                if ( $is_paid ) {
                     $faepa_returns[ $batch_id ]['counts']['paid']++;
+                }
+                if ( $is_rejected ) {
+                    $faepa_returns[ $batch_id ]['counts']['rejected']++;
+                }
+                if ( $is_paid || $is_rejected ) {
+                    $faepa_returns[ $batch_id ]['counts']['decided']++;
+                } else {
+                    $faepa_returns[ $batch_id ]['counts']['pending']++;
                 }
                 if ( ! empty( $entry['faepa_payment_notified'] ) ) {
                     $faepa_returns[ $batch_id ]['counts']['notified']++;
@@ -1710,7 +1781,7 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                   </span>
                 </summary>
 
-                <div class="apf-faepa-return__row-details" data-faepa-batch="<?php echo esc_attr( $return['id'] ); ?>" data-faepa-total="<?php echo esc_attr( isset( $counts['total'] ) ? (int) $counts['total'] : 0 ); ?>" data-faepa-approved="<?php echo esc_attr( isset( $counts['paid'] ) ? (int) $counts['paid'] : 0 ); ?>">
+                <div class="apf-faepa-return__row-details" data-faepa-batch="<?php echo esc_attr( $return['id'] ); ?>" data-faepa-total="<?php echo esc_attr( isset( $counts['total'] ) ? (int) $counts['total'] : 0 ); ?>" data-faepa-approved="<?php echo esc_attr( isset( $counts['paid'] ) ? (int) $counts['paid'] : 0 ); ?>" data-faepa-decided="<?php echo esc_attr( $decided_total ); ?>">
                   <?php if ( $forwarded_label ) : ?>
                     <p class="apf-faepa-return__meta"><strong>Enviado pelo financeiro:</strong> <?php echo esc_html( $forwarded_label ); ?></p>
                   <?php endif; ?>
@@ -1729,7 +1800,8 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                     <p class="apf-faepa-return__note"><?php echo esc_html( $return['faepa_note'] ); ?></p>
                   <?php endif; ?>
                   <?php
-                    $all_paid = ( isset( $counts['approved'], $counts['paid'] ) && $counts['approved'] > 0 && $counts['paid'] >= $counts['approved'] );
+                    $decided_total = isset( $counts['decided'] ) ? (int) $counts['decided'] : ( (int) ( $counts['paid'] ?? 0 ) + (int) ( $counts['rejected'] ?? 0 ) );
+                    $all_decided = ( isset( $counts['approved'] ) && $counts['approved'] > 0 && $decided_total >= $counts['approved'] );
                   ?>
                   <h5 class="apf-faepa-return__section-title">Colaboradores (<?php echo esc_html( $counts['total'] ); ?>)</h5>
                   <div class="apf-faepa-return__list">
@@ -1757,7 +1829,12 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                             }
                         }
                     ?>
-                      <article class="apf-faepa-entry" data-faepa-approved="<?php echo ! empty( $item['faepa_paid'] ) ? '1' : '0'; ?>">
+                      <?php
+                        $entry_approved = ! empty( $item['faepa_paid'] );
+                        $entry_rejected = ! empty( $item['faepa_payment_rejected'] );
+                        $entry_decided  = $entry_approved || $entry_rejected;
+                      ?>
+                      <article class="apf-faepa-entry" data-faepa-approved="<?php echo $entry_approved ? '1' : '0'; ?>" data-faepa-rejected="<?php echo $entry_rejected ? '1' : '0'; ?>" data-faepa-decided="<?php echo $entry_decided ? '1' : '0'; ?>">
                         <details>
                           <summary class="apf-faepa-entry__head">
                             <div class="apf-faepa-entry__main">
@@ -1811,18 +1888,38 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
 
                             <?php if ( ! empty( $item['faepa_payment_notified'] ) ) : ?>
                               <p class="apf-faepa-entry__note">Notificação enviada<?php echo $item['faepa_payment_notified_label'] ? ' em ' . esc_html( $item['faepa_payment_notified_label'] ) : ''; ?>.</p>
+                            <?php elseif ( ! empty( $item['faepa_paid'] ) || ! empty( $item['faepa_payment_rejected'] ) ) : ?>
+                              <div class="apf-faepa-approve__actions">
+                                <?php if ( ! empty( $item['id'] ) ) : ?>
+                                  <form method="post" class="apf-faepa-edit__form">
+                                    <?php wp_nonce_field( 'apf_faepa_approve', 'apf_faepa_approve_nonce' ); ?>
+                                    <input type="hidden" name="apf_faepa_approve_action" value="1">
+                                    <input type="hidden" name="apf_faepa_decision" value="revert">
+                                    <input type="hidden" name="apf_faepa_reject_note" value="">
+                                    <input type="hidden" name="apf_faepa_request_id" value="<?php echo esc_attr( $item['id'] ); ?>">
+                                    <button type="submit" class="apf-faepa-approve__btn is-hidden" data-faepa-approve>Aprovar</button>
+                                    <button type="button" class="apf-faepa-approve__btn apf-faepa-approve__btn--danger is-hidden" data-faepa-reject>Recusar</button>
+                                    <p class="apf-faepa-approve__hint is-hidden">Marque como aprovado para liberar a notificação.</p>
+                                    <button type="submit" class="apf-faepa-edit__btn" data-faepa-edit>Reabrir</button>
+                                  </form>
+                                <?php endif; ?>
+                              </div>
                             <?php else : ?>
-                            <div class="apf-faepa-approve__actions">
-                              <?php if ( empty( $item['faepa_paid'] ) && ! empty( $item['id'] ) ) : ?>
-                                <form method="post">
-                                  <?php wp_nonce_field( 'apf_faepa_approve', 'apf_faepa_approve_nonce' ); ?>
-                                  <input type="hidden" name="apf_faepa_approve_action" value="1">
-                                  <input type="hidden" name="apf_faepa_request_id" value="<?php echo esc_attr( $item['id'] ); ?>">
-                                  <button type="submit" class="apf-faepa-approve__btn" data-faepa-approve data-faepa-batch="<?php echo esc_attr( $return['id'] ); ?>">Aprovar pagamento</button>
-                                  <p class="apf-faepa-approve__hint">Marque como aprovado para liberar a notificação.</p>
-                                </form>
-                              <?php endif; ?>
-                            </div>
+                              <div class="apf-faepa-approve__actions">
+                                <?php if ( ! empty( $item['id'] ) ) : ?>
+                                  <form method="post">
+                                    <?php wp_nonce_field( 'apf_faepa_approve', 'apf_faepa_approve_nonce' ); ?>
+                                    <input type="hidden" name="apf_faepa_approve_action" value="1">
+                                    <input type="hidden" name="apf_faepa_decision" value="approve">
+                                    <input type="hidden" name="apf_faepa_reject_note" value="">
+                                    <input type="hidden" name="apf_faepa_request_id" value="<?php echo esc_attr( $item['id'] ); ?>">
+                                    <button type="submit" class="apf-faepa-approve__btn" data-faepa-approve data-faepa-batch="<?php echo esc_attr( $return['id'] ); ?>">Aprovar</button>
+                                    <button type="button" class="apf-faepa-approve__btn apf-faepa-approve__btn--danger" data-faepa-reject>Recusar</button>
+                                    <p class="apf-faepa-approve__hint">Marque como aprovado para liberar a notificação.</p>
+                                  </form>
+                                <?php endif; ?>
+                              </div>
+                            <?php endif; ?>
 
                             <?php if ( ! empty( $item['faepa_payment_note'] ) || ! empty( $item['faepa_payment_attachment'] ) ) : ?>
                               <div class="apf-faepa-entry__block">
@@ -1873,7 +1970,6 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                                 </dl>
                               </div>
                             <?php endif; ?>
-                            <?php endif; // fim notificado ?>
                           </div>
                         </details>
                       </article>
@@ -1883,8 +1979,8 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                   <div class="apf-faepa-return__notify">
                     <?php
                       $notified_count = isset( $return['counts']['notified'] ) ? (int) $return['counts']['notified'] : 0;
-                      $approved_count = isset( $return['counts']['approved'] ) ? (int) $return['counts']['approved'] : 0;
-                      $all_notified   = ( $approved_count > 0 && $notified_count >= $approved_count );
+                      $paid_count = isset( $return['counts']['paid'] ) ? (int) $return['counts']['paid'] : 0;
+                      $all_notified   = ( $paid_count > 0 && $notified_count >= $paid_count );
                     ?>
                     <?php if ( $all_notified ) : ?>
                       <p class="apf-faepa-return__note">Notificações enviadas para colaboradores, financeiro e coordenadores.</p>
@@ -1893,9 +1989,9 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                         <?php wp_nonce_field( 'apf_faepa_notify', 'apf_faepa_notify_nonce' ); ?>
                         <input type="hidden" name="apf_faepa_notify_action" value="1">
                         <input type="hidden" name="apf_faepa_batch_id" value="<?php echo esc_attr( $return['id'] ); ?>">
-                        <button type="submit" class="apf-faepa-notify__btn<?php echo $all_paid ? '' : ' is-disabled'; ?>" data-faepa-notify-btn <?php echo $all_paid ? '' : 'disabled'; ?>>Enviar notificações de pagamento</button>
+                        <button type="submit" class="apf-faepa-notify__btn<?php echo $all_decided ? '' : ' is-disabled'; ?>" data-faepa-notify-btn <?php echo $all_decided ? '' : 'disabled'; ?>>Enviar notificações de pagamento</button>
                       </form>
-                      <p class="apf-faepa-return__note apf-faepa-return__note--muted" data-faepa-notify-hint><?php echo $all_paid ? 'Todos aprovados. Pode enviar a notificação.' : 'Aprove todos os pagamentos para liberar a notificação.'; ?></p>
+                      <p class="apf-faepa-return__note apf-faepa-return__note--muted" data-faepa-notify-hint><?php echo $all_decided ? 'Todos decididos. Pode enviar a notificação.' : 'Aprove ou recuse todos os pagamentos para liberar a notificação.'; ?></p>
                     <?php endif; ?>
                   </div>
                 </div>
@@ -1924,6 +2020,20 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
   </div>
   </div>
 
+  <div class="apf-faepa-reject" id="apfFaepaRejectOverlay" aria-hidden="true">
+    <div class="apf-faepa-reject__box" role="dialog" aria-modal="true" aria-labelledby="apfFaepaRejectTitle">
+      <div class="apf-faepa-reject__header">
+        <h5 id="apfFaepaRejectTitle">Informe o motivo da recusa</h5>
+        <p class="apf-faepa-reject__subtitle">Explique rapidamente ao financeiro por que este pagamento será recusado.</p>
+      </div>
+      <textarea id="apfFaepaRejectMessage" rows="4" placeholder="Descreva o motivo da recusa"></textarea>
+      <div class="apf-faepa-reject__actions">
+        <button type="button" class="apf-faepa-btn apf-faepa-btn--ghost-danger" data-faepa-reject-cancel>Cancelar</button>
+        <button type="button" class="apf-faepa-btn apf-faepa-btn--danger" data-faepa-reject-confirm>Confirmar recusa</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function(){
       var approveAlreadyInit = !!window.apfFaepaApproveInit;
@@ -1939,14 +2049,18 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
 
       function updateNotifyForBatch(batchEl){
         if(!batchEl){ return; }
-        var entries = Array.prototype.slice.call(batchEl.querySelectorAll('.apf-faepa-entry[data-faepa-approved]'));
+        var entries = Array.prototype.slice.call(batchEl.querySelectorAll('.apf-faepa-entry[data-faepa-decided]'));
         var total = entries.length;
         var approved = entries.filter(function(entry){
           return entry.getAttribute('data-faepa-approved') === '1';
         }).length;
+        var decided = entries.filter(function(entry){
+          return entry.getAttribute('data-faepa-decided') === '1';
+        }).length;
         batchEl.setAttribute('data-faepa-total', total);
         batchEl.setAttribute('data-faepa-approved', approved);
-        var canNotify = total > 0 && approved >= total;
+        batchEl.setAttribute('data-faepa-decided', decided);
+        var canNotify = total > 0 && decided >= total;
         var notifyBtn = batchEl.querySelector('[data-faepa-notify-btn]');
         var notifyHint = batchEl.querySelector('[data-faepa-notify-hint]');
         var notifyCount = batchEl.querySelector('[data-faepa-notify-count]');
@@ -1966,12 +2080,85 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
         }
         if(notifyHint){
           notifyHint.textContent = canNotify
-            ? 'Todos aprovados. Pode enviar a notificação.'
-            : 'Aprove todos os pagamentos para liberar a notificação.';
+            ? 'Todos decididos. Pode enviar a notificação.'
+            : 'Aprove ou recuse todos os pagamentos para liberar a notificação.';
         }
         if(notifyCount){
           notifyCount.textContent = approved + ' pagos';
         }
+      }
+
+      var rejectOverlay = document.getElementById('apfFaepaRejectOverlay');
+      var rejectTextarea = document.getElementById('apfFaepaRejectMessage');
+      var rejectConfirm = rejectOverlay ? rejectOverlay.querySelector('[data-faepa-reject-confirm]') : null;
+      var rejectCancel = rejectOverlay ? rejectOverlay.querySelector('[data-faepa-reject-cancel]') : null;
+      var rejectForm = null;
+      var rejectNoteInput = null;
+      var rejectDecisionInput = null;
+
+      if(rejectOverlay && rejectOverlay.parentElement !== document.body){
+        document.body.appendChild(rejectOverlay);
+      }
+
+      function openRejectOverlay(form){
+        if(!rejectOverlay || !rejectTextarea || !form){ return; }
+        rejectForm = form;
+        rejectNoteInput = form.querySelector('input[name="apf_faepa_reject_note"]');
+        rejectDecisionInput = form.querySelector('input[name="apf_faepa_decision"]');
+        rejectTextarea.value = rejectNoteInput ? (rejectNoteInput.value || '') : '';
+        rejectOverlay.setAttribute('aria-hidden','false');
+        setTimeout(function(){ rejectTextarea.focus(); }, 30);
+      }
+
+      function closeRejectOverlay(resetDecision){
+        if(!rejectOverlay || !rejectTextarea){ return; }
+        rejectOverlay.setAttribute('aria-hidden','true');
+        rejectTextarea.value = '';
+        if(resetDecision && rejectDecisionInput){
+          rejectDecisionInput.value = 'approve';
+        }
+        if(resetDecision && rejectNoteInput){
+          rejectNoteInput.value = '';
+        }
+        rejectForm = null;
+        rejectNoteInput = null;
+        rejectDecisionInput = null;
+      }
+
+      if(rejectCancel){
+        rejectCancel.addEventListener('click', function(){
+          closeRejectOverlay(true);
+        });
+      }
+      if(rejectOverlay){
+        rejectOverlay.addEventListener('click', function(e){
+          if(e.target === rejectOverlay){
+            closeRejectOverlay(true);
+          }
+        });
+      }
+      if(rejectConfirm){
+        rejectConfirm.addEventListener('click', function(){
+          if(!rejectForm || !rejectNoteInput){ closeRejectOverlay(true); return; }
+          var formToSubmit = rejectForm;
+          var message = rejectTextarea.value ? rejectTextarea.value.trim() : '';
+          if(!message){
+            rejectTextarea.focus();
+            alert('Informe o motivo da recusa antes de continuar.');
+            return;
+          }
+          rejectNoteInput.value = message;
+          if(rejectDecisionInput){
+            rejectDecisionInput.value = 'reject';
+          }
+          closeRejectOverlay(false);
+          if(!formToSubmit){ return; }
+          if(typeof formToSubmit.requestSubmit === 'function'){
+            formToSubmit.requestSubmit();
+          } else {
+            formToSubmit.submit();
+          }
+        });
       }
 
       function initReturnPager(){
@@ -2104,14 +2291,29 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
         var status = article.querySelector('.apf-faepa-approve__status');
         var paidLabel = article.querySelector('[data-faepa-paid-label]');
         var paidLine = paidLabel ? paidLabel.closest('.apf-faepa-payment-inline') : null;
+        var form = article.querySelector('.apf-faepa-approve__actions form');
+        var approveBtn = form ? form.querySelector('[data-faepa-approve]') : null;
+        var rejectBtn = form ? form.querySelector('[data-faepa-reject]') : null;
+        var editBtn = form ? form.querySelector('[data-faepa-edit]') : null;
+        var hint = form ? form.querySelector('.apf-faepa-approve__hint') : null;
+        var decisionInput = form ? form.querySelector('input[name=\"apf_faepa_decision\"]') : null;
+        var noteInput = form ? form.querySelector('input[name=\"apf_faepa_reject_note\"]') : null;
         return {
           approvedAttr: article.getAttribute('data-faepa-approved') || '0',
+          decidedAttr: article.getAttribute('data-faepa-decided') || '0',
+          rejectedAttr: article.getAttribute('data-faepa-rejected') || '0',
           entryApproved: article.classList.contains('apf-faepa-entry--approved'),
           statusVisible: status ? status.classList.contains('is-visible') : false,
           btnDisabled: btn ? btn.disabled : false,
           btnHidden: btn ? btn.classList.contains('is-hidden') : false,
           paidText: paidLabel ? paidLabel.textContent : '',
-          paidVisible: paidLine ? !paidLine.classList.contains('is-hidden') : false
+          paidVisible: paidLine ? !paidLine.classList.contains('is-hidden') : false,
+          approveHidden: approveBtn ? approveBtn.classList.contains('is-hidden') : false,
+          rejectHidden: rejectBtn ? rejectBtn.classList.contains('is-hidden') : false,
+          hintHidden: hint ? hint.classList.contains('is-hidden') : false,
+          hasEdit: !!editBtn,
+          decisionValue: decisionInput ? decisionInput.value : '',
+          noteValue: noteInput ? noteInput.value : ''
         };
       }
 
@@ -2123,6 +2325,8 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
           btn.classList.add('is-hidden');
         }
         article.setAttribute('data-faepa-approved','1');
+        article.setAttribute('data-faepa-decided','1');
+        article.setAttribute('data-faepa-rejected','0');
         article.classList.add('apf-faepa-entry--approved');
         var status = article.querySelector('.apf-faepa-approve__status');
         if(status){ status.classList.add('is-visible'); }
@@ -2132,6 +2336,119 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
           paidLabel.textContent = now.toLocaleString('pt-BR');
           var li = paidLabel.closest('.apf-faepa-payment-inline');
           if(li){ li.classList.remove('is-hidden'); }
+        }
+
+        var form = article.querySelector('.apf-faepa-approve__actions form');
+        if(form){
+          var decisionInput = form.querySelector('input[name=\"apf_faepa_decision\"]');
+          var noteInput = form.querySelector('input[name=\"apf_faepa_reject_note\"]');
+          var approveBtn = form.querySelector('[data-faepa-approve]');
+          var rejectBtn = form.querySelector('[data-faepa-reject]');
+          var hint = form.querySelector('.apf-faepa-approve__hint');
+          if(approveBtn){ approveBtn.classList.add('is-hidden'); }
+          if(rejectBtn){ rejectBtn.classList.add('is-hidden'); }
+          if(hint){ hint.classList.add('is-hidden'); }
+          if(decisionInput){ decisionInput.value = 'revert'; }
+          if(noteInput){ noteInput.value = ''; }
+          var editBtn = form.querySelector('[data-faepa-edit]');
+          if(!editBtn){
+            editBtn = document.createElement('button');
+            editBtn.type = 'submit';
+            editBtn.className = 'apf-faepa-edit__btn';
+            editBtn.setAttribute('data-faepa-edit','');
+            editBtn.textContent = 'Reabrir';
+            form.appendChild(editBtn);
+          }
+          if(editBtn && !editBtn.dataset.faepaEditBound){
+            editBtn.dataset.faepaEditBound = '1';
+            editBtn.addEventListener('click', function(){
+              if(decisionInput){ decisionInput.value = 'revert'; }
+              if(noteInput){ noteInput.value = ''; }
+            });
+          }
+        }
+      }
+
+      function applyRejectedState(article){
+        if(!article){ return; }
+        var btn = article.querySelector('[data-faepa-approve]');
+        if(btn){
+          btn.disabled = true;
+          btn.classList.add('is-hidden');
+        }
+        article.setAttribute('data-faepa-approved','0');
+        article.setAttribute('data-faepa-decided','1');
+        article.setAttribute('data-faepa-rejected','1');
+        article.classList.remove('apf-faepa-entry--approved');
+        var status = article.querySelector('.apf-faepa-approve__status');
+        if(status){ status.classList.remove('is-visible'); }
+        var paidLabel = article.querySelector('[data-faepa-paid-label]');
+        var paidLine = paidLabel ? paidLabel.closest('.apf-faepa-payment-inline') : null;
+        if(paidLabel){ paidLabel.textContent = ''; }
+        if(paidLine){ paidLine.classList.add('is-hidden'); }
+
+        var form = article.querySelector('.apf-faepa-approve__actions form');
+        if(form){
+          var decisionInput = form.querySelector('input[name=\"apf_faepa_decision\"]');
+          var noteInput = form.querySelector('input[name=\"apf_faepa_reject_note\"]');
+          var approveBtn = form.querySelector('[data-faepa-approve]');
+          var rejectBtn = form.querySelector('[data-faepa-reject]');
+          var hint = form.querySelector('.apf-faepa-approve__hint');
+          if(approveBtn){ approveBtn.classList.add('is-hidden'); }
+          if(rejectBtn){ rejectBtn.classList.add('is-hidden'); }
+          if(hint){ hint.classList.add('is-hidden'); }
+          if(decisionInput){ decisionInput.value = 'revert'; }
+          var editBtn = form.querySelector('[data-faepa-edit]');
+          if(!editBtn){
+            editBtn = document.createElement('button');
+            editBtn.type = 'submit';
+            editBtn.className = 'apf-faepa-edit__btn';
+            editBtn.setAttribute('data-faepa-edit','');
+            editBtn.textContent = 'Reabrir';
+            form.appendChild(editBtn);
+          }
+          if(editBtn && !editBtn.dataset.faepaEditBound){
+            editBtn.dataset.faepaEditBound = '1';
+            editBtn.addEventListener('click', function(){
+              if(decisionInput){ decisionInput.value = 'revert'; }
+              if(noteInput){ noteInput.value = ''; }
+            });
+          }
+        }
+      }
+
+      function applyRevertedState(article){
+        if(!article){ return; }
+        var btn = article.querySelector('[data-faepa-approve]');
+        if(btn){
+          btn.disabled = false;
+          btn.classList.remove('is-hidden');
+        }
+        article.setAttribute('data-faepa-approved','0');
+        article.setAttribute('data-faepa-decided','0');
+        article.setAttribute('data-faepa-rejected','0');
+        article.classList.remove('apf-faepa-entry--approved');
+        var status = article.querySelector('.apf-faepa-approve__status');
+        if(status){ status.classList.remove('is-visible'); }
+        var paidLabel = article.querySelector('[data-faepa-paid-label]');
+        var paidLine = paidLabel ? paidLabel.closest('.apf-faepa-payment-inline') : null;
+        if(paidLabel){ paidLabel.textContent = ''; }
+        if(paidLine){ paidLine.classList.add('is-hidden'); }
+
+        var form = article.querySelector('.apf-faepa-approve__actions form');
+        if(form){
+          var approveBtn = form.querySelector('[data-faepa-approve]');
+          var rejectBtn = form.querySelector('[data-faepa-reject]');
+          var editBtn = form.querySelector('[data-faepa-edit]');
+          var hint = form.querySelector('.apf-faepa-approve__hint');
+          var decisionInput = form.querySelector('input[name=\"apf_faepa_decision\"]');
+          var noteInput = form.querySelector('input[name=\"apf_faepa_reject_note\"]');
+          if(approveBtn){ approveBtn.classList.remove('is-hidden'); }
+          if(rejectBtn){ rejectBtn.classList.remove('is-hidden'); }
+          if(hint){ hint.classList.remove('is-hidden'); }
+          if(editBtn){ editBtn.remove(); }
+          if(decisionInput){ decisionInput.value = 'approve'; }
+          if(noteInput){ noteInput.value = ''; }
         }
       }
 
@@ -2143,6 +2460,8 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
           btn.classList.toggle('is-hidden', !!previous.btnHidden);
         }
         article.setAttribute('data-faepa-approved', previous.approvedAttr || '0');
+        article.setAttribute('data-faepa-decided', previous.decidedAttr || '0');
+        article.setAttribute('data-faepa-rejected', previous.rejectedAttr || '0');
         if(previous.entryApproved){
           article.classList.add('apf-faepa-entry--approved');
         } else {
@@ -2160,21 +2479,89 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
         if(paidLine){
           paidLine.classList.toggle('is-hidden', !previous.paidVisible);
         }
+
+        var form = article.querySelector('.apf-faepa-approve__actions form');
+        if(form){
+          var approveBtn = form.querySelector('[data-faepa-approve]');
+          var rejectBtn = form.querySelector('[data-faepa-reject]');
+          var editBtn = form.querySelector('[data-faepa-edit]');
+          var hint = form.querySelector('.apf-faepa-approve__hint');
+          var decisionInput = form.querySelector('input[name=\"apf_faepa_decision\"]');
+          var noteInput = form.querySelector('input[name=\"apf_faepa_reject_note\"]');
+          if(approveBtn){ approveBtn.classList.toggle('is-hidden', !!previous.approveHidden); }
+          if(rejectBtn){ rejectBtn.classList.toggle('is-hidden', !!previous.rejectHidden); }
+          if(hint){ hint.classList.toggle('is-hidden', !!previous.hintHidden); }
+          if(previous.hasEdit && !editBtn){
+            editBtn = document.createElement('button');
+            editBtn.type = 'submit';
+            editBtn.className = 'apf-faepa-edit__btn';
+            editBtn.setAttribute('data-faepa-edit','');
+            editBtn.textContent = 'Reabrir';
+            form.appendChild(editBtn);
+          } else if(!previous.hasEdit && editBtn){
+            editBtn.remove();
+            editBtn = null;
+          }
+          if(editBtn && !editBtn.dataset.faepaEditBound){
+            editBtn.dataset.faepaEditBound = '1';
+            editBtn.addEventListener('click', function(){
+              if(decisionInput){ decisionInput.value = 'revert'; }
+              if(noteInput){ noteInput.value = ''; }
+            });
+          }
+          if(decisionInput){ decisionInput.value = previous.decisionValue || 'approve'; }
+          if(noteInput){ noteInput.value = previous.noteValue || ''; }
+        }
       }
 
       function initFaepaApprove(){
         document.querySelectorAll('.apf-faepa-approve__actions form').forEach(function(form){
+          if(form.dataset.apfFaepaApproveBound === '1'){ return; }
+          form.dataset.apfFaepaApproveBound = '1';
+
+          var decisionInput = form.querySelector('input[name="apf_faepa_decision"]');
+          var noteInput = form.querySelector('input[name="apf_faepa_reject_note"]');
+          var approveBtn = form.querySelector('[data-faepa-approve]');
+          var rejectBtn = form.querySelector('[data-faepa-reject]');
+
+          if(approveBtn){
+            approveBtn.addEventListener('click', function(){
+              if(decisionInput){ decisionInput.value = 'approve'; }
+              if(noteInput){ noteInput.value = ''; }
+            });
+          }
+          if(rejectBtn){
+            rejectBtn.addEventListener('click', function(){
+              openRejectOverlay(form);
+            });
+          }
+
           form.addEventListener('submit', function(ev){
+            var decision = decisionInput ? decisionInput.value : 'approve';
+            if(decision !== 'approve' && decision !== 'reject' && decision !== 'revert'){
+              decision = 'approve';
+            }
             ev.preventDefault();
-            var btn = form.querySelector('[data-faepa-approve]');
-            var article = btn ? btn.closest('.apf-faepa-entry') : null;
+            var article = form.closest('.apf-faepa-entry');
             var batchEl = form.closest('[data-faepa-batch]');
             var previous = captureEntryState(article);
 
-            if(article){ applyApprovedState(article); }
+            if(article){
+              if(decision === 'approve'){
+                applyApprovedState(article);
+              } else if(decision === 'reject'){
+                applyRejectedState(article);
+              } else {
+                applyRevertedState(article);
+              }
+            }
             if(batchEl){ updateNotifyForBatch(batchEl); }
 
             var fd = new FormData(form);
+            fd.set('apf_faepa_decision', decision);
+            if(decision !== 'reject'){
+              fd.set('apf_faepa_reject_note', '');
+            }
             fd.append('apf_faepa_approve_ajax', '1');
             var action = form.getAttribute('action') || window.location.href;
             fetch(action, {
@@ -2189,13 +2576,16 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
               if(!(payload && payload.success)){
                 if(article){ restoreEntryState(article, previous); }
                 if(batchEl){ updateNotifyForBatch(batchEl); }
-                var msg = (payload && payload.data && payload.data.message) ? payload.data.message : 'Não foi possível aprovar este pagamento.';
+                var fallbackMsg = decision === 'reject'
+                  ? 'Não foi possível recusar este pagamento.'
+                  : (decision === 'revert' ? 'Não foi possível editar esta solicitação.' : 'Não foi possível aprovar este pagamento.');
+                var msg = (payload && payload.data && payload.data.message) ? payload.data.message : fallbackMsg;
                 alert(msg);
               }
             }).catch(function(){
               if(article){ restoreEntryState(article, previous); }
               if(batchEl){ updateNotifyForBatch(batchEl); }
-              alert('Erro ao aprovar. Tente novamente.');
+              alert('Erro ao atualizar. Tente novamente.');
             });
           });
         });
@@ -2322,6 +2712,7 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
       .apf-faepa-pill--pending{background:rgba(251,191,36,.22);color:#92400e}
       .apf-faepa-entry__meta{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#475467}
       .apf-faepa-entry__note{margin:6px 0 0;font-size:13px;color:#0f172a;background:#ecfeff;border:1px dashed #7dd3fc;border-radius:10px;padding:10px 12px}
+      .apf-faepa-entry__note--danger{background:#fef2f2;border-color:#fecaca;color:#991b1b}
       .apf-faepa-entry__download{margin:6px 0 0}
       .apf-faepa-entry__download-link{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#0f172a;text-decoration:none;border:1px solid #cbd5f5;border-radius:999px;padding:6px 12px;background:#fff}
       .apf-faepa-entry__download-link:hover{border-color:#007569;color:#007569}
@@ -2335,10 +2726,15 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
       .apf-faepa-entry__block dl > dd:last-of-type{border-bottom:none;padding-bottom:0}
       .apf-faepa-pay__note{margin:4px 0 0;font-size:13px;color:#0f172a}
       .apf-faepa-approve__actions{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:10px 0}
-      .apf-faepa-approve__btn{border:none;border-radius:10px;background:#22c55e;color:#0f172a;font-weight:700;font-size:13px;padding:10px 14px;cursor:pointer;box-shadow:0 8px 18px rgba(34,197,94,.25);transition:background .15s ease, box-shadow .15s ease}
-      .apf-faepa-approve__btn:hover{background:#16a34a;box-shadow:0 10px 22px rgba(22,163,74,.25)}
+      .apf-faepa-approve__btn{border:1px solid #15803d;border-radius:10px;background:#15803d;color:#ffffff;font-weight:700;font-size:13px;padding:10px 14px;cursor:pointer;box-shadow:0 8px 18px rgba(21,128,61,.25);transition:background .15s ease, box-shadow .15s ease}
+      .apf-faepa-approve__btn:hover{background:#166534;box-shadow:0 10px 22px rgba(22,101,52,.25)}
+      .apf-faepa-approve__btn--danger{border-color:#b91c1c;background:#b91c1c;box-shadow:0 8px 18px rgba(185,28,28,.24)}
+      .apf-faepa-approve__btn--danger:hover{background:#991b1b;box-shadow:0 10px 22px rgba(153,27,27,.24)}
+      .apf-faepa-edit__btn{border:1px solid #94a3b8;border-radius:999px;background:transparent;color:#1f2937;font-weight:700;font-size:12px;padding:8px 12px;cursor:pointer;transition:color .15s ease,border-color .15s ease}
+      .apf-faepa-edit__btn:hover{border-color:#0f172a;color:#0f172a}
       .apf-faepa-approve__btn.is-hidden{display:none}
       .apf-faepa-approve__hint{margin:0;font-size:12px;color:#475467}
+      .apf-faepa-approve__hint.is-hidden{display:none}
       .apf-faepa-approve__status{display:none;font-size:12px;font-weight:700;color:#166534;background:#ecfdf3;border:1px solid #bbf7d0;border-radius:999px;padding:4px 10px;margin:4px 0 0}
       .apf-faepa-approve__status.is-visible{display:inline-block}
       .apf-faepa-entry--approved .apf-faepa-entry__head strong{color:#166534}
@@ -2374,6 +2770,23 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
       .apf-faepa-modal__content{max-height:70vh;overflow:auto;padding-right:6px}
       .apf-faepa-modal__empty{margin:8px 0 0;color:#475467;font-size:14px}
       .apf-faepa-modal__list{display:flex;flex-direction:column;gap:10px}
+      .apf-faepa-reject{position:fixed;inset:0;left:0;top:0;width:100vw;height:100vh;background:rgba(15,23,42,0.45);display:flex;align-items:center;justify-content:center;padding:20px;transition:opacity .2s ease;opacity:0;pointer-events:none;z-index:2100}
+      .apf-faepa-reject[aria-hidden="false"]{opacity:1;pointer-events:auto}
+      .apf-faepa-reject__box{width:min(480px, calc(100vw - 32px));max-height:90vh;background:#fff;border-radius:20px;padding:28px;box-shadow:0 28px 60px rgba(15,23,42,0.55);display:flex;flex-direction:column;gap:18px;border:1px solid #e4e7ec}
+      .apf-faepa-reject__header{display:flex;flex-direction:column;gap:6px}
+      .apf-faepa-reject__box h5{margin:0;font-size:20px;color:#0f172a}
+      .apf-faepa-reject__subtitle{margin:0;font-size:14px;line-height:1.5;color:#475467}
+      .apf-faepa-reject__box textarea{width:90%;min-height:130px;padding:12px 14px;border:1px solid #cbd5f5;border-radius:12px;font-size:14px;font-family:inherit;resize:vertical;line-height:1.5}
+      .apf-faepa-reject__box textarea:focus{border-color:#6366f1;outline:none;box-shadow:0 0 0 3px rgba(99,102,241,0.2)}
+      .apf-faepa-reject__actions{display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+      .apf-faepa-btn{border:none;border-radius:12px;background:#1f6feb;color:#fff;font-weight:600;padding:12px 16px;cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease,transform .15s ease}
+      .apf-faepa-btn:hover{background:#154cba}
+      .apf-faepa-reject__actions .apf-faepa-btn{margin:0}
+      .apf-faepa-btn--ghost-danger{background:transparent !important;color:#b91c1c !important;border:1px solid #b91c1c !important}
+      .apf-faepa-btn--ghost-danger:hover,
+      .apf-faepa-btn--ghost-danger:focus{background:linear-gradient(120deg,#ef4444,#b91c1c) padding-box,linear-gradient(120deg,#ef4444,#b91c1c) border-box !important;color:#fff !important;border:1px solid transparent !important;border-radius:12px !important;background-clip:padding-box,border-box}
+      .apf-faepa-btn--danger{background:linear-gradient(120deg,#ef4444,#b91c1c) padding-box,linear-gradient(120deg,#ef4444,#b91c1c) border-box !important;border:1px solid transparent !important;border-radius:12px !important;color:#fff !important}
+      .apf-faepa-btn--danger:hover{background:#fff !important;color:#b91c1c !important;border-color:#b91c1c !important}
       .apf-faepa-accordion{border:1px solid #e4e7ec;border-radius:14px;overflow:hidden;background:#f8fafc}
       .apf-faepa-accordion__toggle{width:100%;text-align:left;border:none;background:linear-gradient(120deg,#e0f2fe,#f8fafc);padding:12px 14px;font-size:15px;font-weight:700;color:#0f172a;display:flex;justify-content:space-between;align-items:center;gap:12px;cursor:pointer}
       .apf-faepa-accordion__chips{display:flex;gap:8px;flex-wrap:wrap;font-size:12px}

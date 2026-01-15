@@ -2282,9 +2282,19 @@ if ( ! function_exists( 'apf_mark_coordinator_request_paid' ) ) {
                 // Apenas aprovados podem ser marcados como pagos.
                 return false;
             }
+            if ( ! empty( $request['faepa_payment_notified'] ) ) {
+                // Não permitir ajustes após envio das notificações.
+                return false;
+            }
             $requests[ $index ]['faepa_paid']     = true;
             $requests[ $index ]['faepa_paid_at']  = $timestamp;
             $requests[ $index ]['faepa_paid_by']  = $user_id;
+            $requests[ $index ]['faepa_payment_rejected'] = false;
+            $requests[ $index ]['faepa_payment_rejected_at'] = 0;
+            $requests[ $index ]['faepa_payment_rejected_by'] = 0;
+            $requests[ $index ]['faepa_payment_reject_note'] = '';
+            $requests[ $index ]['faepa_payment_validated_notified'] = false;
+            $requests[ $index ]['faepa_payment_validated_notified_at'] = 0;
             if ( '' !== $note ) {
                 $requests[ $index ]['faepa_payment_note'] = $note;
             }
@@ -2294,6 +2304,123 @@ if ( ! function_exists( 'apf_mark_coordinator_request_paid' ) ) {
                     $requests[ $index ]['faepa_payment_attachment'] = $attachment_url;
                 }
             }
+            $updated = true;
+            break;
+        }
+
+        if ( $updated ) {
+            apf_store_coordinator_requests( $requests );
+        }
+
+        return $updated;
+    }
+}
+
+if ( ! function_exists( 'apf_mark_coordinator_request_payment_rejected' ) ) {
+    /**
+     * Marca uma solicitação como pagamento recusado pela FAEPA.
+     *
+     * @param string $request_id
+     * @param array  $args { user_id?:int, timestamp?:int, note?:string }
+     * @return bool
+     */
+    function apf_mark_coordinator_request_payment_rejected( $request_id, $args = array() ) {
+        $request_id = sanitize_text_field( (string) $request_id );
+        if ( '' === $request_id ) {
+            return false;
+        }
+
+        $note = isset( $args['note'] ) ? sanitize_textarea_field( $args['note'] ) : '';
+        if ( '' === $note ) {
+            return false;
+        }
+
+        $requests  = apf_get_coordinator_requests();
+        $timestamp = isset( $args['timestamp'] ) ? (int) $args['timestamp'] : time();
+        $user_id   = isset( $args['user_id'] ) ? (int) $args['user_id'] : get_current_user_id();
+        $updated   = false;
+
+        foreach ( $requests as $index => $request ) {
+            if ( ! is_array( $request ) || ! isset( $request['id'] ) ) {
+                continue;
+            }
+            $current_id = sanitize_text_field( (string) $request['id'] );
+            if ( '' === $current_id || $current_id !== $request_id ) {
+                continue;
+            }
+            $status = isset( $request['status'] ) ? sanitize_key( $request['status'] ) : 'pending';
+            if ( 'approved' !== $status ) {
+                return false;
+            }
+            if ( ! empty( $request['faepa_paid'] ) || ! empty( $request['faepa_payment_notified'] ) ) {
+                return false;
+            }
+
+            $requests[ $index ]['faepa_payment_rejected']     = true;
+            $requests[ $index ]['faepa_payment_rejected_at']  = $timestamp;
+            $requests[ $index ]['faepa_payment_rejected_by']  = $user_id;
+            $requests[ $index ]['faepa_payment_reject_note']  = $note;
+            $requests[ $index ]['faepa_paid']                 = false;
+            $requests[ $index ]['faepa_paid_at']              = 0;
+            $requests[ $index ]['faepa_paid_by']              = 0;
+            $updated = true;
+            break;
+        }
+
+        if ( $updated ) {
+            apf_store_coordinator_requests( $requests );
+        }
+
+        return $updated;
+    }
+}
+
+if ( ! function_exists( 'apf_revert_coordinator_request_payment' ) ) {
+    /**
+     * Reabre uma solicitação para edição (remove decisão de pagamento).
+     *
+     * @param string $request_id
+     * @param array  $args { user_id?:int, timestamp?:int }
+     * @return bool
+     */
+    function apf_revert_coordinator_request_payment( $request_id, $args = array() ) {
+        $request_id = sanitize_text_field( (string) $request_id );
+        if ( '' === $request_id ) {
+            return false;
+        }
+
+        $requests  = apf_get_coordinator_requests();
+        $timestamp = isset( $args['timestamp'] ) ? (int) $args['timestamp'] : time();
+        $user_id   = isset( $args['user_id'] ) ? (int) $args['user_id'] : get_current_user_id();
+        $updated   = false;
+
+        foreach ( $requests as $index => $request ) {
+            if ( ! is_array( $request ) || ! isset( $request['id'] ) ) {
+                continue;
+            }
+            $current_id = sanitize_text_field( (string) $request['id'] );
+            if ( '' === $current_id || $current_id !== $request_id ) {
+                continue;
+            }
+            $status = isset( $request['status'] ) ? sanitize_key( $request['status'] ) : 'pending';
+            if ( 'approved' !== $status ) {
+                return false;
+            }
+            if ( ! empty( $request['faepa_payment_notified'] ) ) {
+                return false;
+            }
+            $requests[ $index ]['faepa_paid'] = false;
+            $requests[ $index ]['faepa_paid_at'] = 0;
+            $requests[ $index ]['faepa_paid_by'] = 0;
+            $requests[ $index ]['faepa_payment_note'] = '';
+            $requests[ $index ]['faepa_payment_attachment_id'] = 0;
+            $requests[ $index ]['faepa_payment_attachment'] = '';
+            $requests[ $index ]['faepa_payment_rejected'] = false;
+            $requests[ $index ]['faepa_payment_rejected_at'] = 0;
+            $requests[ $index ]['faepa_payment_rejected_by'] = 0;
+            $requests[ $index ]['faepa_payment_reject_note'] = '';
+            $requests[ $index ]['faepa_payment_validated_notified'] = false;
+            $requests[ $index ]['faepa_payment_validated_notified_at'] = 0;
             $updated = true;
             break;
         }
