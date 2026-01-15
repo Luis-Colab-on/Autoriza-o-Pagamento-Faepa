@@ -122,7 +122,7 @@ if ( ! function_exists( 'apf_faepa_xml_escape' ) ) {
     }
 }
 
-if ( ! function_exists( 'apf_faepa_build_collab_xms' ) ) {
+if ( ! function_exists( 'apf_faepa_build_collab_xml' ) ) {
     /**
      * Gera conteudo XML para download por colaborador.
      *
@@ -130,38 +130,21 @@ if ( ! function_exists( 'apf_faepa_build_collab_xms' ) ) {
      * @param array $details
      * @return string
      */
-    function apf_faepa_build_collab_xms( $entry, $details ) {
+    function apf_faepa_build_collab_xml( $entry, $details ) {
         $entry   = is_array( $entry ) ? $entry : array();
         $details = is_array( $details ) ? $details : array();
 
         $payment = isset( $details['payment'] ) && is_array( $details['payment'] ) ? $details['payment'] : array();
         $service = isset( $details['service'] ) && is_array( $details['service'] ) ? $details['service'] : array();
         $payout  = isset( $details['payout'] ) && is_array( $details['payout'] ) ? $details['payout'] : array();
-
         $lines = array(
             '<?xml version="1.0" encoding="UTF-8"?>',
             '<colaborador>',
         );
 
-        $lines[] = '  <id>' . apf_faepa_xml_escape( $entry['id'] ?? '' ) . '</id>';
-        $lines[] = '  <lote>' . apf_faepa_xml_escape( $entry['batch_id'] ?? '' ) . '</lote>';
         $lines[] = '  <nome>' . apf_faepa_xml_escape( $entry['provider_name'] ?? '' ) . '</nome>';
         $lines[] = '  <email>' . apf_faepa_xml_escape( $entry['provider_email'] ?? '' ) . '</email>';
         $lines[] = '  <valor>' . apf_faepa_xml_escape( $entry['provider_value'] ?? '' ) . '</valor>';
-        $lines[] = '  <status>' . apf_faepa_xml_escape( $entry['status'] ?? '' ) . '</status>';
-        $lines[] = '  <status_label>' . apf_faepa_xml_escape( $entry['status_label'] ?? '' ) . '</status_label>';
-        $lines[] = '  <decisao_em>' . apf_faepa_xml_escape( $entry['decision_at'] ?? '' ) . '</decisao_em>';
-        $lines[] = '  <observacao>' . apf_faepa_xml_escape( $entry['decision_note'] ?? '' ) . '</observacao>';
-        $lines[] = '  <pagamento_confirmado>' . ( ! empty( $entry['faepa_paid'] ) ? '1' : '0' ) . '</pagamento_confirmado>';
-        $lines[] = '  <pagamento_confirmado_em>' . apf_faepa_xml_escape( $entry['faepa_paid_at'] ?? '' ) . '</pagamento_confirmado_em>';
-        $lines[] = '  <pagamento_nota>' . apf_faepa_xml_escape( $entry['faepa_payment_note'] ?? '' ) . '</pagamento_nota>';
-        $lines[] = '  <pagamento_anexo>' . apf_faepa_xml_escape( $entry['faepa_payment_attachment'] ?? '' ) . '</pagamento_anexo>';
-
-        $lines[] = '  <coordenador>';
-        $lines[] = '    <nome>' . apf_faepa_xml_escape( $entry['coordinator_name'] ?? '' ) . '</nome>';
-        $lines[] = '    <email>' . apf_faepa_xml_escape( $entry['coordinator_email'] ?? '' ) . '</email>';
-        $lines[] = '    <curso>' . apf_faepa_xml_escape( $entry['course'] ?? '' ) . '</curso>';
-        $lines[] = '  </coordenador>';
 
         $lines[] = '  <informacoes_pagamento>';
         foreach ( $payment as $label => $value ) {
@@ -848,7 +831,7 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
     }
 
     $download_request_id = '';
-    if ( isset( $_GET['apf_faepa_xms'] ) ) {
+    if ( isset( $_GET['apf_faepa_xml'] ) ) {
         $download_request_id = isset( $_GET['apf_faepa_request'] )
             ? sanitize_text_field( wp_unslash( $_GET['apf_faepa_request'] ) )
             : '';
@@ -858,7 +841,7 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
             status_header( 403 );
             wp_die( 'Acesso restrito.' );
         }
-        if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( wp_unslash( $_GET['_wpnonce'] ), 'apf_faepa_xms_' . $download_request_id ) ) {
+        if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( wp_unslash( $_GET['_wpnonce'] ), 'apf_faepa_xml_' . $download_request_id ) ) {
             status_header( 403 );
             wp_die( 'Link invalido.' );
         }
@@ -897,12 +880,12 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
             'decision_at'   => isset( $target_entry['decision_at'] ) ? (int) $target_entry['decision_at'] : 0,
             'decision_note' => isset( $target_entry['decision_note'] ) ? sanitize_textarea_field( $target_entry['decision_note'] ) : '',
         ) );
-        $xml = apf_faepa_build_collab_xms( $payload, $details );
+        $xml = apf_faepa_build_collab_xml( $payload, $details );
         $filename_name = isset( $target_entry['provider_name'] ) ? sanitize_text_field( (string) $target_entry['provider_name'] ) : '';
         if ( '' === $filename_name ) {
             $filename_name = 'colaborador';
         }
-        $filename = sanitize_file_name( 'faepa-' . $filename_name . '-' . $download_request_id . '.xms' );
+        $filename = sanitize_file_name( 'faepa-' . $filename_name . '-' . $download_request_id . '.xml' );
         nocache_headers();
         header( 'Content-Type: application/xml; charset=UTF-8' );
         header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
@@ -1617,13 +1600,19 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
     }
 
     $download_base = '';
-    if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
-        $download_base = home_url( wp_unslash( $_SERVER['REQUEST_URI'] ) );
+    if ( function_exists( 'get_permalink' ) ) {
+        $download_base = get_permalink();
+    }
+    if ( '' === $download_base && ! empty( $_SERVER['REQUEST_URI'] ) ) {
+        $download_base = wp_unslash( $_SERVER['REQUEST_URI'] );
+    }
+    if ( '' !== $download_base && 0 !== strpos( $download_base, 'http' ) ) {
+        $download_base = home_url( $download_base );
     }
     if ( '' === $download_base ) {
         $download_base = home_url( '/' );
     }
-    $download_base = remove_query_arg( array( 'apf_faepa_xms', 'apf_faepa_request', '_wpnonce' ), $download_base );
+    $download_base = remove_query_arg( array( 'apf_faepa_xml', 'apf_faepa_request', '_wpnonce' ), $download_base );
 
     ob_start();
     ?>
@@ -1785,13 +1774,13 @@ if ( ! function_exists( 'apf_render_portal_faepa' ) ) {
                               <?php if ( ! empty( $item['id'] ) ) : ?>
                                 <?php
                                   $download_url = add_query_arg( array(
-                                      'apf_faepa_xms'     => 1,
+                                      'apf_faepa_xml'     => 1,
                                       'apf_faepa_request' => $item['id'],
                                   ), $download_base );
-                                  $download_url = wp_nonce_url( $download_url, 'apf_faepa_xms_' . $item['id'] );
+                                  $download_url = wp_nonce_url( $download_url, 'apf_faepa_xml_' . $item['id'] );
                                 ?>
                                 <div class="apf-faepa-entry__download">
-                                  <a class="apf-faepa-entry__download-link" href="<?php echo esc_url( $download_url ); ?>">Baixar XMS</a>
+                                  <a class="apf-faepa-entry__download-link" href="<?php echo esc_url( $download_url ); ?>">Baixar XML</a>
                                 </div>
                               <?php endif; ?>
                             </div>
